@@ -1,6 +1,6 @@
 // Factory status: a status page for any GitHub repo that runs a Claude Code factory.
 //
-// Reads, live, with the connecting user's GitHub token:
+// Reads, live, through the GitHub App installation:
 //   .claude/skills/*            the skills
 //   .claude/factory.json        roster of monitors and declared routines (optional)
 //   .claude/skills/monitor-meta/roster.json + .claude/skills/cloud-routine.md   (the same, older convention)
@@ -8,11 +8,14 @@
 //   issues, pull requests, checks
 // Receives heartbeats over HTTP: every monitor POSTs one when it finishes (/api/heartbeat).
 //
-// node server.mjs   (PORT, DATA_DIR, SECRET)
+// Access goes through a GitHub App, created once with the manifest flow at /setup?t=SETUP_TOKEN.
+// People sign in with GitHub and install the app on the repos they want; reads use installation tokens.
+//
+// node server.mjs   (PORT, DATA_DIR, SECRET, SETUP_TOKEN)
 
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -32,7 +35,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS heartbeats (id INTEGER PRIMARY KEY, repo TEXT NOT NULL, monitor TEXT NOT NULL, ts TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL);
   CREATE UNIQUE INDEX IF NOT EXISTS hb_unique ON heartbeats(repo, monitor, ts);
   CREATE INDEX IF NOT EXISTS hb_repo_ts ON heartbeats(repo, ts);
+  CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 `);
+try { db.exec("ALTER TABLE repos ADD COLUMN installation_id INTEGER"); } catch {}
 
 const seal = (text) => {
   const iv = randomBytes(12);
@@ -74,6 +79,47 @@ async function gh(token, path, raw = false) {
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`GitHub ${r.status} on ${path.split("?")[0]}`);
   return raw ? r.text() : r.json();
+}
+
+// --- the GitHub App -----------------------------------------------------------------
+const getSetting = (k) => db.prepare("SELECT v FROM settings WHERE k = ?").get(k)?.v;
+const setSetting = (k, v) => db.prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").run(k, v);
+function appConfig() {
+  const raw = getSetting("app");
+  return raw ? JSON.parse(open(raw)) : null;
+}
+function appJwt(app) {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const body = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({ iat: now - 60, exp: now + 540, iss: String(app.id) })}`;
+  return `${body}.${createSign("RSA-SHA256").update(body).sign(app.pem, "base64url")}`;
+}
+const instTokens = new Map();
+async function installationToken(installationId) {
+  const hit = instTokens.get(installationId);
+  if (hit && hit.exp - Date.now() > 5 * 60e3) return hit.token;
+  const r = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${appJwt(appConfig())}`, accept: "application/vnd.github+json", "user-agent": "factory-status" },
+  });
+  if (!r.ok) throw new Error(`GitHub ${r.status} al pedir el token de la instalación`);
+  const j = await r.json();
+  instTokens.set(installationId, { token: j.token, exp: Date.parse(j.expires_at) });
+  return j.token;
+}
+// repos this person can see through their installations of the app
+async function userRepos(user) {
+  return cached(`userrepos:${user.login}`, 3 * 60e3, async () => {
+    const token = open(user.token);
+    const inst = await gh(token, "user/installations?per_page=100");
+    if (!inst) throw new Error("La sesión de GitHub venció");
+    const out = [];
+    for (const i of inst.installations || []) {
+      const r = await gh(token, `user/installations/${i.id}/repositories?per_page=100`);
+      for (const repo of r?.repositories || []) out.push({ full_name: repo.full_name, private: repo.private, installation_id: i.id });
+    }
+    return out;
+  });
 }
 
 const cache = new Map();
@@ -263,8 +309,9 @@ function routineState(r, monitors, merged) {
   return { ...r, last_seen: last, evidence: evidence || "ninguna", next_run: nextRun(r.cron), period_h: cronPeriodHours(r.cron) };
 }
 
-async function snapshot(user, repo) {
-  const token = open(user.token);
+async function snapshot(repoRow) {
+  const repo = repoRow.full_name;
+  const token = await installationToken(repoRow.installation_id);
   const [factory, queue] = await Promise.all([readFactory(token, repo), readQueue(token, repo)]);
   const { monitors, beats } = judge(factory, repo);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged));
@@ -355,7 +402,7 @@ const page = (title, body, { refresh } = {}) =>
 
 const STATE = { alive: ["ok", "Operativo"], warn: ["warn", "Degradado"], degraded: ["bad", "Degradado crónico"], lying: ["bad", "Dijo ok, leyó nada"], dead: ["bad", "Caído"], retired: ["none", "Retirado"] };
 
-function statusPage(s, user, origin) {
+function statusPage(s, user, origin, repoRow) {
   const repoUrl = s.meta.url;
   const banner = s.overall === "ok" ? "Todos los sistemas operativos" : s.overall === "degraded" ? "Rendimiento degradado" : "Hay monitores caídos";
   const monRows = s.monitors.map((m) => {
@@ -399,7 +446,7 @@ function statusPage(s, user, origin) {
     : `<p class="none">No hay issues abiertos.</p>`;
 
   const onRoutine = new Set(s.routines.map((r) => (r.prompt.match(/\/([a-z][a-z0-9-]*)/) || [])[1]).filter(Boolean));
-  const owner = user && db.prepare("SELECT ingest_key, public FROM repos WHERE full_name = ? AND owner_login = ?").get(s.repo, user.login);
+  const owner = repoRow;
 
   return page(`${s.repo} · Factory status`, `
     <header class="top"><a class="logo" href="/">${esc(s.repo)}</a><span class="updated">Actualizado ${ago(s.generated_at)}</span></header>
@@ -443,25 +490,45 @@ function statusPage(s, user, origin) {
   `, { refresh: 120 });
 }
 
-function homePage(user, msg = "") {
+function homePage(user, repos = [], msg = "") {
+  const app = appConfig();
+  if (!app) {
+    return page("Factory status", `<header class="top"><span class="logo">Factory status</span></header>
+      <div class="hero"><h1>Una status page para la factory de tu repo.</h1><p>Falta crear la GitHub App. Lo hace quien administra esta instancia, una sola vez, desde <code>/setup</code>.</p></div>`);
+  }
+  const install = `https://github.com/apps/${app.slug}/installations/new`;
   if (!user) {
     return page("Factory status", `
       <header class="top"><span class="logo">Factory status</span></header>
       <div class="hero"><h1>Una status page para la factory de tu repo.</h1>
-      <p>Conectás un repo de GitHub y ves si tus monitores laten, si tus routines de Claude Code corrieron, y qué hay en la cola. Silencio cuando todo anda.</p></div>
-      <h2>Entrar con un token de GitHub</h2>
-      <form method="post" action="/login"><input name="token" type="password" placeholder="github_pat_…" autocomplete="off" required aria-label="Token de GitHub"><button>Entrar</button></form>
-      <p class="hint">Un <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a> de solo lectura sobre los repos que quieras ver: Contents, Issues, Pull requests, Actions, Checks y Metadata. Se guarda cifrado.</p>
+      <p>Ves si tus monitores laten, si tus routines de Claude Code corrieron y qué hay en la cola. Silencio cuando todo anda.</p>
+      <p style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn" href="/auth/login">Entrar con GitHub</a><a class="btn ghost" href="${install}">Instalar la app en tus repos →</a></p></div>
+      <p class="hint">Permisos de solo lectura: código, issues, PRs, Actions y checks. Elegís en GitHub qué repos ve.</p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}`);
   }
-  const repos = db.prepare("SELECT full_name FROM repos WHERE owner_login = ? ORDER BY created_at").all(user.login);
   return page("Factory status", `
     <header class="top"><span class="logo">Factory status</span><form method="post" action="/logout" style="margin:0"><button class="btn ghost">Salir (${esc(user.login)})</button></form></header>
     <h2>Tus repos</h2>
-    <div class="group">${repos.length ? repos.map((r) => `<div class="line"><a class="name" href="/r/${esc(r.full_name)}">${esc(r.full_name)}</a><span class="meta"><a href="/r/${esc(r.full_name)}">Ver status →</a></span></div>`).join("") : `<div class="line"><span class="hint">Todavía ninguno.</span></div>`}</div>
-    <h2>Conectar un repo</h2>
-    <form method="post" action="/connect"><input name="repo" placeholder="owner/repo" required aria-label="Repo"><button>Conectar</button></form>
+    <div class="group">${repos.length ? repos.map((r) => `<div class="line"><a class="name" href="/r/${esc(r.full_name)}" style="text-decoration:none">${esc(r.full_name)}${r.private ? "<small>privado</small>" : ""}</a><span class="meta"><a href="/r/${esc(r.full_name)}">Ver status →</a></span></div>`).join("") : `<div class="line"><span class="hint">La app todavía no está instalada en ningún repo tuyo.</span></div>`}</div>
+    <p><a class="btn" href="${install}">${repos.length ? "Agregar o quitar repos" : "Instalar en tus repos"}</a></p>
     ${msg ? `<p class="err">${esc(msg)}</p>` : ""}`);
+}
+
+function setupPage(origin, t) {
+  const manifest = {
+    name: `Factory Status ${randomBytes(2).toString("hex")}`,
+    url: origin,
+    hook_attributes: { url: `${origin}/api/github/webhook`, active: false },
+    redirect_url: `${origin}/setup/callback/${encodeURIComponent(t)}`,
+    callback_urls: [`${origin}/auth/callback`],
+    setup_url: `${origin}/`,
+    public: true,
+    default_permissions: { contents: "read", issues: "read", pull_requests: "read", actions: "read", checks: "read", metadata: "read" },
+    default_events: [],
+  };
+  return page("Crear la GitHub App", `<header class="top"><span class="logo">Factory status</span></header>
+    <div class="hero"><h1>Crear la GitHub App</h1><p>Un click: GitHub crea la app con permisos de solo lectura y le devuelve a esta instancia sus credenciales. Se hace una sola vez.</p></div>
+    <form method="post" action="https://github.com/settings/apps/new"><input type="hidden" name="manifest" value="${esc(JSON.stringify(manifest))}"><button>Crear en GitHub</button></form>`);
 }
 
 // --- HTTP ---------------------------------------------------------------------------------
@@ -511,37 +578,67 @@ createServer(async (req, res) => {
 
     const user = sessionUser(req);
 
-    if (url.pathname === "/" && req.method === "GET") return send(res, 200, homePage(user));
+    if (url.pathname === "/" && req.method === "GET") {
+      if (!user) return send(res, 200, homePage(null));
+      const repos = await userRepos(user).catch(() => null);
+      if (!repos) return redirect(res, "/auth/login");
+      return send(res, 200, homePage(user, repos));
+    }
 
-    if (url.pathname === "/login" && req.method === "POST") {
-      const { token } = await form(req);
-      const me = token && (await gh(token.trim(), "user").catch(() => null));
-      if (!me?.login) return send(res, 401, homePage(null, "GitHub no aceptó ese token."));
-      db.prepare("INSERT INTO users (login, token, created_at) VALUES (?, ?, ?) ON CONFLICT(login) DO UPDATE SET token = excluded.token").run(me.login, seal(token.trim()), new Date().toISOString());
-      return redirect(res, "/", { "set-cookie": sessionCookie(me.login) });
+    const SETUP = process.env.SETUP_TOKEN;
+    if (url.pathname === "/setup" && req.method === "GET") {
+      if (!SETUP || url.searchParams.get("t") !== SETUP) return send(res, 404, page("No encontrado", `<p class="none">Esta página no existe.</p>`));
+      if (appConfig()) return redirect(res, "/");
+      return send(res, 200, setupPage(origin, SETUP));
+    }
+    if (url.pathname.startsWith("/setup/callback/") && req.method === "GET") {
+      if (!SETUP || decodeURIComponent(url.pathname.slice(16)) !== SETUP || appConfig()) return redirect(res, "/");
+      const r = await fetch(`https://api.github.com/app-manifests/${encodeURIComponent(url.searchParams.get("code") || "")}/conversions`, { method: "POST", headers: { accept: "application/vnd.github+json", "user-agent": "factory-status" } });
+      if (!r.ok) throw new Error(`GitHub ${r.status} al convertir el manifest`);
+      const a = await r.json();
+      setSetting("app", seal(JSON.stringify({ id: a.id, slug: a.slug, pem: a.pem, client_id: a.client_id, client_secret: a.client_secret, webhook_secret: a.webhook_secret })));
+      return redirect(res, `https://github.com/apps/${a.slug}/installations/new`);
+    }
+
+    if (url.pathname === "/auth/login" && req.method === "GET") {
+      const app = appConfig();
+      if (!app) return redirect(res, "/");
+      const state = randomBytes(16).toString("base64url");
+      return redirect(res, `https://github.com/login/oauth/authorize?client_id=${app.client_id}&redirect_uri=${encodeURIComponent(origin + "/auth/callback")}&state=${state}`, { "set-cookie": `fs_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600` });
+    }
+    if (url.pathname === "/auth/callback" && req.method === "GET") {
+      const app = appConfig();
+      const state = (req.headers.cookie || "").match(/(?:^|;\s*)fs_state=([^;]+)/)?.[1];
+      if (!app || !state || state !== url.searchParams.get("state")) return send(res, 400, homePage(null, [], "El login no se pudo verificar. Probá de nuevo."));
+      const r = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ client_id: app.client_id, client_secret: app.client_secret, code: url.searchParams.get("code"), redirect_uri: origin + "/auth/callback" }),
+      });
+      const tok = await r.json();
+      const me = tok.access_token && (await gh(tok.access_token, "user"));
+      if (!me?.login) return send(res, 401, homePage(null, [], "GitHub no completó el login."));
+      db.prepare("INSERT INTO users (login, token, created_at) VALUES (?, ?, ?) ON CONFLICT(login) DO UPDATE SET token = excluded.token").run(me.login, seal(tok.access_token), new Date().toISOString());
+      cache.delete(`userrepos:${me.login}`);
+      return redirect(res, "/", { "set-cookie": [sessionCookie(me.login), "fs_state=; Path=/; Max-Age=0"] });
     }
 
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    if (url.pathname === "/connect" && req.method === "POST") {
-      if (!user) return redirect(res, "/");
-      const repo = String((await form(req)).repo || "").trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
-      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return send(res, 400, homePage(user, "Escribilo como owner/repo."));
-      const meta = await gh(open(user.token), `repos/${repo}`).catch(() => null);
-      if (!meta) return send(res, 404, homePage(user, `Tu token no ve ${repo}.`));
-      const exists = db.prepare("SELECT owner_login FROM repos WHERE full_name = ?").get(meta.full_name);
-      if (exists && exists.owner_login !== user.login) return send(res, 409, homePage(user, `${meta.full_name} ya lo conectó otra cuenta.`));
-      if (!exists) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at) VALUES (?, ?, ?, ?)").run(meta.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString());
-      return redirect(res, `/r/${meta.full_name}`);
-    }
-
     const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json)?$/);
     if (m && req.method === "GET") {
-      const repo = db.prepare("SELECT full_name, owner_login FROM repos WHERE full_name = ?").get(m[1]);
-      if (!repo || !user || user.login !== repo.owner_login) return send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Factory status</a></header><p class="none">No hay un repo conectado con ese nombre en tu cuenta.</p>`));
-      const s = await snapshot(user, repo.full_name);
+      if (!user) return redirect(res, "/auth/login");
+      const repos = await userRepos(user).catch(() => null);
+      if (!repos) return redirect(res, "/auth/login");
+      const seen = repos.find((r) => r.full_name.toLowerCase() === m[1].toLowerCase());
+      if (!seen) return send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Factory status</a></header><p class="none">La app no está instalada en ese repo, o tu cuenta no lo ve.</p>`));
+      let row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
+      if (!row) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at, installation_id) VALUES (?, ?, ?, ?, ?)").run(seen.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString(), seen.installation_id);
+      else if (row.installation_id !== seen.installation_id) db.prepare("UPDATE repos SET installation_id = ? WHERE full_name = ?").run(seen.installation_id, seen.full_name);
+      row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
+      const s = await snapshot(row);
       if (m[2]) return json(res, 200, s);
-      return send(res, 200, statusPage(s, user, origin));
+      return send(res, 200, statusPage(s, user, origin, row));
     }
 
     send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Factory status</a></header><p class="none">Esta página no existe.</p>`));

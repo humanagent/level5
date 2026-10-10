@@ -22,74 +22,57 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark }) {
     </div>`,
   ).join("");
 
+  const cta = () => `<div class="cta">
+    <a class="btn gh" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>
+    <a class="btn ghost" href="/auth/login">Already installed? Sign in →</a>
+  </div>`;
+
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>hush</title>
 <meta name="description" content="A status page for your software factory: monitors, Claude Code routines, CI and the queue, on one page.">
 ${icon}${fonts}
 <style>${css}
-/* Landing: the night-to-dawn hero from the hush brand, the example status page rising out of it, then a quiet white page. */
-.hero-band{background:linear-gradient(180deg,var(--night) 0%,var(--dusk) 36%,#5a2f4a 64%,#7a3a42 80%,var(--dawn) 92%,var(--glow) 100%);color:#f4f1ee;position:relative;overflow:hidden;padding-bottom:220px}
-.hero-band::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1px 1px at 12% 18%,rgba(255,255,255,.55),transparent 60%),radial-gradient(1px 1px at 78% 12%,rgba(255,255,255,.45),transparent 60%),radial-gradient(1px 1px at 62% 28%,rgba(255,255,255,.35),transparent 60%),radial-gradient(1px 1px at 30% 8%,rgba(255,255,255,.4),transparent 60%),radial-gradient(1px 1px at 90% 34%,rgba(255,255,255,.3),transparent 60%),radial-gradient(1px 1px at 45% 15%,rgba(255,255,255,.3),transparent 60%)}
-.hero-band ::selection{background:rgba(255,255,255,.25);color:#fff}
-.in{max-width:1040px;margin:0 auto;padding-inline:20px;position:relative;z-index:1}
-.nav{display:flex;justify-content:space-between;align-items:center;padding-block:28px}
-.nav .logo{color:#fff}
-.nav a.signin{color:rgba(244,241,238,.7);text-decoration:none;font-size:16px}.nav a.signin:hover{color:#fff}
-.headline{padding-top:96px}
-.headline h1{margin:0;font-weight:500;font-size:clamp(38px,6.6vw,80px);line-height:1.03;letter-spacing:-.04em}
-.headline h1 span{display:block;color:rgba(244,241,238,.46)}
-.headline h1 span.now{color:#f6f2ee}
-.headline p{font-size:19px;line-height:1.5;color:rgba(244,241,238,.72);max-width:44ch;margin:28px 0 36px}
-.cta{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.btn.solid{display:inline-flex;align-items:center;gap:10px;padding:15px 24px;font-size:16px;background:#fff;color:var(--night);box-shadow:0 10px 30px -10px rgba(0,0,0,.5);transition:transform .15s ease}
-.btn.solid:hover{transform:translateY(-1px)}
-.btn.glass{padding:15px 22px;font-size:16px;font-weight:500;background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(6px)}
-.btn.glass:hover{background:rgba(255,255,255,.22)}
-.fine{font-size:14px;color:rgba(244,241,238,.6);margin:16px 0 0}
-.shot{max-width:800px;margin:-170px auto 0;position:relative;z-index:2;background:#fff;border-radius:22px;padding:28px 28px 8px;box-shadow:0 40px 80px -40px rgba(7,11,28,.55),0 2px 8px rgba(7,11,28,.06)}
+/* Landing: one white column. Headline, install button, an example status page, three steps, what it reads, the button again. */
+.land{max-width:1040px}
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:80px}
+.nav a.signin{color:var(--muted);text-decoration:none;font-size:15px}.nav a.signin:hover{color:var(--ink)}
+.h{max-width:760px;margin:0 auto;text-align:center}
+.h h1{font-size:clamp(36px,6vw,60px);line-height:1.04;letter-spacing:-.04em;font-weight:600;margin:0 0 20px;text-wrap:balance}
+.h h1 span{color:var(--faint)}
+.h p.lede{font-size:18px;line-height:1.55;color:var(--muted);margin:0 auto 32px;max-width:54ch;text-wrap:pretty}
+.cta{display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap}
+.btn.gh{display:inline-flex;align-items:center;gap:10px;padding:14px 22px;font-size:16px;box-shadow:0 8px 24px -10px rgba(0,0,0,.4);transition:transform .15s ease}
+.btn.gh:hover{transform:translateY(-1px)}
+.fine{font-size:13px;color:var(--faint);text-align:center;margin:14px 0 0}
+.shot{max-width:760px;margin:64px auto 0;border:1px solid var(--line);border-radius:16px;padding:28px 28px 8px;box-shadow:0 30px 60px -30px rgba(20,24,30,.25)}
 .shot .chrome{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font-size:13px;color:var(--muted)}
-.shot .chrome b{color:var(--ink);font-weight:600;font-family:var(--mono);font-size:13px}
-.example{display:block;text-align:center;font-size:12px;color:var(--faint);margin:12px 0 0}
-.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px;max-width:960px;margin:120px auto 0;padding-inline:20px}
+.shot .chrome b{color:var(--ink);font:500 13px var(--mono)}
+.example{display:block;text-align:center;font-size:12px;color:var(--faint);margin:10px 0 0}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px;max-width:960px;margin:112px auto 0}
 .step .n{font:500 13px var(--mono);color:var(--faint)}
-.step h3{font-size:20px;letter-spacing:-.02em;margin:8px 0 8px;font-weight:600}
+.step h3{font-size:18px;letter-spacing:-.01em;margin:8px 0;font-weight:600}
 .step p{color:var(--muted);margin:0}
 .step code,.reads code{font:12.5px var(--mono);color:var(--ink);background:#f4f5f6;border-radius:4px;padding:1px 5px}
-.reads{max-width:800px;margin:120px auto 0;padding-inline:20px}
-.reads h2,.end h2{font-size:clamp(26px,3.6vw,34px);letter-spacing:-.03em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600;text-wrap:balance}
+.reads{max-width:760px;margin:112px auto 0}
+.reads h2,.end h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600;text-wrap:balance}
 .reads>p{color:var(--muted);text-align:center;margin:0 0 28px}
 .reads .group .line .meta{white-space:normal;text-align:right;max-width:55%}
-.end{max-width:1040px;margin:120px auto 0;padding:72px 24px;border-radius:28px;text-align:center;color:#f4f1ee;background:linear-gradient(180deg,var(--night) 0%,var(--dusk) 55%,#5a2f4a 100%)}
-.end h2{color:#f6f2ee}
-.end p{color:rgba(244,241,238,.7);margin:0 0 30px;font-size:17px}
-.end .cta{justify-content:center}
-.foot{max-width:1040px;margin:48px auto 0;padding:24px 20px 56px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;color:var(--faint);font-size:13px}
-.foot .logo{font-size:16px}.foot a{color:var(--muted)}
+.end{text-align:center;margin:112px auto 0;padding:56px 24px;border:1px solid var(--line);border-radius:16px;max-width:760px}
+.end p{color:var(--muted);margin:0 0 28px}
 @media (prefers-reduced-motion:no-preference){.shot .bars i:last-child{animation:beat 2.4s ease-in-out infinite}}
 @keyframes beat{50%{opacity:.45}}
-@media(max-width:760px){.headline{padding-top:48px}.hero-band{padding-bottom:160px}.shot{margin:-120px 12px 0;padding:18px 14px 4px;border-radius:16px}.steps{grid-template-columns:minmax(0,1fr);gap:28px;margin-top:80px}.reads,.end{margin-top:80px}.end{margin-inline:12px;padding:48px 20px}.reads .group .line{flex-direction:column;gap:2px}.reads .group .line .meta{text-align:left;max-width:none}}
-</style></head><body>
+@media(max-width:760px){.nav{margin-bottom:48px}.steps{grid-template-columns:minmax(0,1fr);gap:28px;margin-top:80px}.shot{padding:18px 14px 4px;margin-top:44px}.reads,.end{margin-top:80px}.reads .group .line{flex-direction:column;gap:2px}.reads .group .line .meta{text-align:left;max-width:none}}
+</style></head><body><div class="wrap land">
 
-<header class="hero-band">
-  <div class="in">
-    <nav class="nav"><a class="logo" href="/">${mark("#fff")}<span>hush</span></a><a class="signin" href="/auth/login">Sign in</a></nav>
-    <div class="headline">
-      <h1>
-        <span>Your agents run the factory.</span>
-        <span>Monitors stay quiet.</span>
-        <span>Routines run while you sleep.</span>
-        <span class="now">Hush tells you when one dies.</span>
-      </h1>
-      <p>One status page for every repo you pick: are your monitors beating, did your Claude Code routines run, and what is left in the queue.</p>
-      <div class="cta">
-        <a class="btn solid" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>
-        <a class="btn glass" href="/auth/login">Sign in</a>
-      </div>
-      <p class="fine">Free. Read-only. Pick one repo, a few, or all of them.</p>
-      ${msg ? `<p class="err" style="color:#ffb4a8">${esc(msg)}</p>` : ""}
-    </div>
-  </div>
-</header>
+<nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><a class="signin" href="/auth/login">Sign in</a></nav>
+
+<section class="h">
+  <h1>A status page for your software factory. <span>Quiet when it’s fine.</span></h1>
+  <p class="lede">Install the app on your repos and see on one page whether your monitors are beating, whether your Claude Code routines ran, and what is left in the queue.</p>
+  ${cta()}
+  <p class="fine">Free. Read-only. Pick one repo, a few, or all of them.</p>
+  ${msg ? `<p class="err" style="text-align:center">${esc(msg)}</p>` : ""}
+</section>
 
 <section class="shot" aria-label="Example status page">
   <div class="chrome"><b>acme/api</b><span>updated 2 min ago</span></div>
@@ -120,12 +103,10 @@ ${icon}${fonts}
 <section class="end">
   <h2>A dead monitor and a healthy system look the same.</h2>
   <p>Both are silent. Hush tells you which one you have.</p>
-  <div class="cta">
-    <a class="btn solid" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>
-    <a class="btn glass" href="/auth/login">Sign in</a>
-  </div>
+  ${cta()}
 </section>
 
-<footer class="foot"><a class="logo" href="/">${mark()}<span>hush</span></a><span>Read-only GitHub App · <a href="/auth/login">Sign in</a></span></footer>
+<footer><span>hush · a read-only GitHub App</span><span><a href="/auth/login">Sign in</a></span></footer>
+</div>
 </body></html>`;
 }

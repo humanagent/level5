@@ -103,7 +103,7 @@ async function installationToken(installationId) {
     method: "POST",
     headers: { authorization: `Bearer ${appJwt(appConfig())}`, accept: "application/vnd.github+json", "user-agent": "factory-status" },
   });
-  if (!r.ok) throw new Error(`GitHub ${r.status} al pedir el token de la instalación`);
+  if (!r.ok) throw new Error(`GitHub ${r.status} fetching the installation token`);
   const j = await r.json();
   instTokens.set(installationId, { token: j.token, exp: Date.parse(j.expires_at) });
   return j.token;
@@ -113,7 +113,7 @@ async function userRepos(user) {
   return cached(`userrepos:${user.login}`, 3 * 60e3, async () => {
     const token = open(user.token);
     const inst = await gh(token, "user/installations?per_page=100");
-    if (!inst) throw new Error("La sesión de GitHub venció");
+    if (!inst) throw new Error("The GitHub session expired");
     const out = [];
     for (const i of inst.installations || []) {
       const r = await gh(token, `user/installations/${i.id}/repositories?per_page=100`);
@@ -195,7 +195,7 @@ async function readFactory(token, repo) {
       try {
         config = JSON.parse(factoryJson);
       } catch {
-        notes.push(".claude/factory.json no es JSON válido");
+        notes.push(".claude/factory.json is not valid JSON");
       }
     }
     let monitors = config.monitors || [];
@@ -273,13 +273,13 @@ function judge(factory, repo) {
     const badShare = recent.length ? recent.filter((b) => b.status !== "ok").length / recent.length : 0;
     const h = last ? (Date.now() - new Date(last.ts)) / 36e5 : null;
     let state = "alive", why = "";
-    if (!last) [state, why] = ["dead", `sin latidos en ${WINDOW} días`];
-    else if (h > silence) [state, why] = ["dead", `último latido hace ${Math.round(h)} h, tolera ${silence} h`];
-    else if (last.status === "ok" && vol(last) === 0 && !m.zero_ok) [state, why] = ["lying", `latió ok con ${m.volume_key} = 0`];
-    else if (recent.length >= 4 && badShare > 0.3) [state, why] = ["degraded", `${Math.round(badShare * 100)}% de las corridas de 14 días no fueron ok`];
-    else if (mine[1] && last.status !== "ok" && mine[1].status !== "ok") [state, why] = ["degraded", "dos corridas seguidas no ok"];
-    else if (last.status !== "ok") [state, why] = ["warn", last.note || `última corrida ${last.status}`];
-    if (m.unlisted && state === "dead") [state, why] = ["retired", "dejó de latir y no está en el roster"];
+    if (!last) [state, why] = ["dead", `no heartbeat in ${WINDOW} days`];
+    else if (h > silence) [state, why] = ["dead", `last heartbeat ${Math.round(h)} h ago, tolerates ${silence} h`];
+    else if (last.status === "ok" && vol(last) === 0 && !m.zero_ok) [state, why] = ["lying", `reported ok with ${m.volume_key} = 0`];
+    else if (recent.length >= 4 && badShare > 0.3) [state, why] = ["degraded", `${Math.round(badShare * 100)}% of runs in 14 days were not ok`];
+    else if (mine[1] && last.status !== "ok" && mine[1].status !== "ok") [state, why] = ["degraded", "two runs in a row not ok"];
+    else if (last.status !== "ok") [state, why] = ["warn", last.note || `last run ${last.status}`];
+    if (m.unlisted && state === "dead") [state, why] = ["retired", "stopped beating and is not in the roster"];
     const byDay = {};
     for (const b of mine) {
       const d = b.ts.slice(0, 10);
@@ -293,21 +293,21 @@ function judge(factory, repo) {
 function routineState(r, monitors, merged) {
   const fed = monitors.filter((m) => m.routine && m.routine === r.name && m.last);
   let last = fed.map((m) => m.last.ts).sort().pop() || null;
-  let evidence = fed.length ? "latido" : "";
+  let evidence = fed.length ? "heartbeat" : "";
   if (!last && r.source === "Claude Code") {
     const skill = (r.prompt.match(/\/[a-z][a-z0-9-]*/) || [""])[0].slice(1);
     const m = monitors.find((x) => x.id === skill && x.last);
-    if (m) [last, evidence] = [m.last.ts, "latido"];
+    if (m) [last, evidence] = [m.last.ts, "heartbeat"];
   }
   if (!last && /review/i.test(r.name)) {
     const p = merged.find((x) => /pr-sweep|review/.test(x.branch));
-    if (p) [last, evidence] = [p.merged_at, "PR mergeado"];
+    if (p) [last, evidence] = [p.merged_at, "merged PR"];
   }
   if (!last && /audit/i.test(r.name)) {
     const p = merged.find((x) => /audit/.test(x.branch));
-    if (p) [last, evidence] = [p.merged_at, "PR mergeado"];
+    if (p) [last, evidence] = [p.merged_at, "merged PR"];
   }
-  return { ...r, last_seen: last, evidence: evidence || "ninguna", next_run: nextRun(r.cron), period_h: cronPeriodHours(r.cron) };
+  return { ...r, last_seen: last, evidence: evidence || "none", next_run: nextRun(r.cron), period_h: cronPeriodHours(r.cron) };
 }
 
 async function snapshot(repoRow) {
@@ -317,7 +317,7 @@ async function snapshot(repoRow) {
   const { monitors, beats } = judge(factory, repo);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged));
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
-  for (const r of routines) if (r.source === "GitHub Actions" && runsByName[r.name]) [r.last_seen, r.evidence] = [runsByName[r.name].at, "corrida de Actions"];
+  for (const r of routines) if (r.source === "GitHub Actions" && runsByName[r.name]) [r.last_seen, r.evidence] = [runsByName[r.name].at, "Actions run"];
   const bad = monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state));
   const warn = monitors.filter((m) => m.state === "warn");
   const lateRoutines = routines.filter((r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2);
@@ -342,38 +342,48 @@ async function snapshot(repoRow) {
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function ago(ts) {
-  if (!ts) return "nunca";
+  if (!ts) return "never";
   const s = (Date.now() - new Date(ts)) / 1000;
-  if (s < 90) return "recién";
-  if (s < 3600) return `hace ${Math.round(s / 60)} min`;
-  if (s < 172800) return `hace ${Math.round(s / 3600)} h`;
-  return `hace ${Math.round(s / 86400)} días`;
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 172800) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} days ago`;
 }
 function until(ts) {
-  if (!ts) return "sin fecha";
+  if (!ts) return "not scheduled";
   const s = (new Date(ts) - Date.now()) / 1000;
-  if (s <= 60) return "ahora";
-  if (s < 3600) return `en ${Math.round(s / 60)} min`;
-  if (s < 172800) return `en ${Math.round(s / 3600)} h`;
-  return `en ${Math.round(s / 86400)} días`;
+  if (s <= 60) return "now";
+  if (s < 3600) return `in ${Math.round(s / 60)} min`;
+  if (s < 172800) return `in ${Math.round(s / 3600)} h`;
+  return `in ${Math.round(s / 86400)} days`;
 }
 
+const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">`;
+const MARK = (color = "currentColor") => `<svg viewBox="0 0 40 40" width="22" height="22" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="${color}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const LOGO = `<a class="logo" href="/">${MARK()}<span>hush</span></a>`;
+
 const CSS = `
-:root{--bg:#fff;--ink:#1a1a1a;--muted:#6b6f76;--faint:#9a9ea5;--line:#ebecef;--ok:#2fb36b;--warn:#f0a92c;--bad:#e5484d;--empty:#e9eaed;--f:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:light}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--f);-webkit-font-smoothing:antialiased}
+:root{--bg:#fff;--ink:#14161c;--muted:#666a73;--faint:#9a9ea5;--line:#ebecef;--ok:#2fb36b;--warn:#f0a92c;--bad:#e5484d;--empty:#e9eaed;
+--night:#070b1c;--dusk:#1b2350;--dawn:#c4532a;--glow:#f0a35e;
+--f:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:light}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f);-webkit-font-smoothing:antialiased}
+::selection{background:var(--dusk);color:#fff}
 a{color:var(--ink)}a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
-.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:40px 72px}
+code{font-family:var(--mono);font-size:.86em}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:32px 72px}
 header.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:36px}
-.logo{font-weight:600;font-size:17px;letter-spacing:-.01em;margin:0;text-decoration:none}
+.logo{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:18px;letter-spacing:-.02em;margin:0;text-decoration:none;color:var(--ink)}
+.crumb{color:var(--faint);font-weight:400;margin-left:2px}.crumb b{color:var(--ink);font-weight:500}
 .updated{color:var(--muted);font-size:13px}
-.banner{display:flex;align-items:center;gap:12px;padding:18px 20px;border-radius:8px;color:#fff;background:var(--ok);font-size:17px;font-weight:600;margin-bottom:8px}
+.banner{display:flex;align-items:center;gap:12px;padding:18px 20px;border-radius:10px;color:#fff;background:var(--ok);font-size:17px;font-weight:600;margin-bottom:8px}
 .banner[data-s=degraded]{background:var(--warn)}.banner[data-s=down]{background:var(--bad)}
 .banner-sub{color:var(--muted);font-size:13px;margin:0 0 40px;padding-inline:2px}
-h2{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 10px}
-.group{border:1px solid var(--line);border-radius:8px;margin-bottom:32px}
+h2{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 10px;letter-spacing:.01em}
+.group{border:1px solid var(--line);border-radius:10px;margin-bottom:32px}
 .row{padding:16px 20px;border-top:1px solid var(--line)}.row:first-child{border-top:0}
 .row-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
 .name{font-weight:500;min-width:0;overflow-wrap:anywhere}.name small{color:var(--faint);font-weight:400;font-size:12px;margin-left:6px}
+.mon-id{font-family:var(--mono);font-size:13.5px}
 .state{font-size:13px;color:var(--ok);white-space:nowrap}.state[data-s=warn]{color:var(--warn)}.state[data-s=bad]{color:var(--bad)}.state[data-s=none]{color:var(--faint)}
 .bars{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;height:30px;margin-top:10px}
 .bars i{border-radius:2px;background:var(--empty)}.bars i[data-s=ok]{background:var(--ok)}.bars i[data-s=degraded]{background:var(--warn)}.bars i[data-s=skipped]{background:var(--bad)}.bars i:hover{opacity:.7}
@@ -387,99 +397,103 @@ details.row>summary{list-style:none;cursor:pointer}details.row>summary::-webkit-
 .incident p{margin:4px 0 0;font-size:13px;color:var(--muted)}.tag{font-size:12px;font-weight:600;margin-right:6px;color:var(--muted)}.tag.risky{color:var(--bad)}
 .incidents{margin-bottom:40px}.none{color:var(--muted)}
 .fold summary{cursor:pointer;color:var(--muted);font-size:13px}.fold p{font:12px/1.8 var(--mono);color:var(--muted);margin:10px 0 0}.fold p b{color:var(--ink);font-weight:500}
-pre{font:12px/1.6 var(--mono);background:#f6f7f8;border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;margin:8px 0 16px;white-space:pre}
+.fold .say{font:13px/1.5 var(--f)}
+pre{font:12px/1.6 var(--mono);background:#f6f7f8;border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;margin:8px 0 16px;white-space:pre}
 footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:var(--faint);font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
-form{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 8px}input{flex:1;min-width:0;font:14px var(--f);padding:10px 12px;border:1px solid #d6d8dc;border-radius:6px}
-button,.btn{font:600 14px var(--f);padding:10px 16px;border-radius:6px;border:0;background:var(--ink);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
-.btn.ghost{background:none;color:var(--muted);padding-inline:0;font-weight:400}
+footer a{color:var(--muted)}
+form{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 8px}
+button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:0;background:var(--ink);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.ghost{background:none;color:var(--muted);padding-inline:0;font-weight:500}
 .hero h1{font-size:28px;letter-spacing:-.02em;margin:0 0 8px;text-wrap:balance}.hero p{color:var(--muted);margin:0 0 24px;max-width:56ch}
 .err{color:var(--bad);font-size:13px}.hint{color:var(--muted);font-size:13px}
 @media(max-width:520px){.wrap{padding-block:24px 56px}.row,.line{padding-inline:14px}.name small{display:block;margin-left:0}.bars{gap:1px}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ALERT = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg>`;
+const ICON = `<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23070b1c'/><path d='M5 22h8l3-8 5 16 3-8h11' fill='none' stroke='%23f0a35e' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/></svg>">`;
 const page = (title, body, { refresh } = {}) =>
-  `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}<title>${esc(title)}</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%232fb36b'/></svg>"><style>${CSS}</style></head><body><div class="wrap">${body}</div></body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}<title>${esc(title)}</title>${ICON}${FONTS}<style>${CSS}</style></head><body><div class="wrap">${body}</div></body></html>`;
 
-const STATE = { alive: ["ok", "Operativo"], warn: ["warn", "Degradado"], degraded: ["bad", "Degradado crónico"], lying: ["bad", "Dijo ok, leyó nada"], dead: ["bad", "Caído"], retired: ["none", "Retirado"] };
+const STATE = { alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degraded: ["bad", "Chronically degraded"], lying: ["bad", "Said ok, read nothing"], dead: ["bad", "Down"], retired: ["none", "Retired"] };
 
 function statusPage(s, user, origin, repoRow) {
   const repoUrl = s.meta.url;
-  const banner = s.overall === "ok" ? "Todos los sistemas operativos" : s.overall === "degraded" ? "Rendimiento degradado" : "Hay monitores caídos";
+  const banner = s.overall === "ok" ? "All systems operational" : s.overall === "degraded" ? "Degraded performance" : "Monitors need attention";
   const monRows = s.monitors.map((m) => {
     const [ps, label] = STATE[m.state] || ["none", m.state];
     const ran = m.days.filter(Boolean).length;
     const pct = ran ? Math.round((m.days.filter((d) => d === "ok").length / ran) * 1000) / 10 : 0;
-    const bars = m.days.map((d, i) => `<i data-s="${d}" title="${new Date(Date.now() - (m.days.length - 1 - i) * 864e5).toLocaleDateString("es-AR", { day: "numeric", month: "short", timeZone: "UTC" })} · ${d || "sin corrida"}"></i>`).join("");
+    const bars = m.days.map((d, i) => `<i data-s="${d}" title="${new Date(Date.now() - (m.days.length - 1 - i) * 864e5).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })} · ${d || "no run"}"></i>`).join("");
     const swept = m.last?.swept ? Object.entries(m.last.swept).map(([k, v]) => `${esc(k)} <code>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</code>`).join(" · ") : "";
     const filed = m.filed.map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ");
     return `<details class="row"><summary>
-      <div class="row-head"><span class="name">${esc(m.id)}<small>${m.cadence === "weekly" ? "semanal" : "diario"}${m.unlisted ? " · fuera del roster" : ""}</small></span><span class="state" data-s="${ps}">${label}</span></div>
+      <div class="row-head"><span class="name"><span class="mon-id">${esc(m.id)}</span><small>${m.cadence === "weekly" ? "weekly" : "daily"}${m.unlisted ? " · not in roster" : ""}</small></span><span class="state" data-s="${ps}">${label}</span></div>
       <div class="bars">${bars}</div>
-      <div class="axis"><span>hace ${WINDOW} días</span><span class="rule"></span><span>${pct}% ok</span><span class="rule"></span><span>hoy</span></div>
-    </summary><div class="detail">${m.why ? `<div>${esc(m.why)}</div>` : ""}<div>Último latido ${ago(m.last?.ts)}${swept ? ` · ${swept}` : ""}</div>${m.last?.note ? `<div>${esc(m.last.note)}</div>` : ""}<div>${filed ? `Filó ${filed}` : `No filó nada en ${WINDOW} días`}</div></div></details>`;
+      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>${pct}% ok</span><span class="rule"></span><span>today</span></div>
+    </summary><div class="detail">${m.why ? `<div>${esc(m.why)}</div>` : ""}<div>Last heartbeat ${ago(m.last?.ts)}${swept ? ` · ${swept}` : ""}</div>${m.last?.note ? `<div>${esc(m.last.note)}</div>` : ""}<div>${filed ? `Filed ${filed}` : `Filed nothing in ${WINDOW} days`}</div></div></details>`;
   }).join("");
 
-  const DOW = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
+  const DOW = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
   const when = (r) => {
     if (!r.next_run) return r.cron;
     const t = new Date(r.next_run);
-    const hh = t.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
-    if (r.period_h <= 1.01) return `cada ${Math.round(r.period_h * 60)} min`;
-    if (r.period_h < 24) return `cada ${Math.round(r.period_h)} h`;
-    if (r.period_h === 24) return `todos los días ${hh}`;
-    return `${DOW[new Date(t.getTime() - 3 * 36e5).getUTCDay()]} ${hh}`;
+    const hh = t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
+    if (r.period_h <= 1.01) return `every ${Math.round(r.period_h * 60)} min`;
+    if (r.period_h < 24) return `every ${Math.round(r.period_h)} h`;
+    if (r.period_h === 24) return `daily ${hh}`;
+    return `${DOW[t.getUTCDay()]} ${hh}`;
   };
   const routineRows = s.routines.map((r) => {
     const late = r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
-    const [st, label] = !r.last_seen ? ["none", "Sin evidencia"] : late ? ["bad", "Atrasado"] : ["ok", `Corrió ${ago(r.last_seen)}`];
-    return `<div class="line"><span class="name">${esc(r.name.replace(/^App: /, ""))}<span class="sub">${esc(r.source)} · ${esc(r.prompt)} · ${esc(when(r))}${r.model ? " · " + esc(r.model) : ""}</span></span><span class="meta"><span class="state" data-s="${st}">${label}</span><span class="sub">próxima ${until(r.next_run)}</span></span></div>`;
+    const [st, label] = !r.last_seen ? ["none", "No evidence"] : late ? ["bad", "Late"] : ["ok", `Ran ${ago(r.last_seen)}`];
+    return `<div class="line"><span class="name">${esc(r.name.replace(/^App: /, ""))}<span class="sub">${esc(r.source)} · ${esc(r.prompt)} · ${esc(when(r))}${r.model ? " · " + esc(r.model) : ""}</span></span><span class="meta"><span class="state" data-s="${st}">${label}</span><span class="sub">next ${until(r.next_run)}</span></span></div>`;
   }).join("");
 
   const ci = s.queue.runs.map((w) => {
-    const st = w.conclusion === "success" ? ["ok", "Verde"] : w.conclusion === "failure" ? ["bad", "Rojo"] : w.status !== "completed" ? ["warn", "Corriendo"] : ["none", w.conclusion || w.status];
+    const st = w.conclusion === "success" ? ["ok", "Passing"] : w.conclusion === "failure" ? ["bad", "Failing"] : w.status !== "completed" ? ["warn", "Running"] : ["none", w.conclusion || w.status];
     return `<div class="line"><span class="name"><a href="${esc(w.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(w.name)}</a></span><span class="meta"><span class="state" data-s="${st[0]}">${esc(st[1])}</span><span class="sub">${ago(w.at)}</span></span></div>`;
   }).join("");
 
-  const prs = s.queue.prs.map((p) => `<div class="line"><span class="name"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(p.title)}</a><span class="sub">#${p.number} · ${esc(p.branch)}</span></span><span class="meta"><span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}">${{ green: "Verde", red: "Rojo", running: "Corriendo", none: "Sin CI" }[p.ci]}</span></span></div>`).join("");
+  const prs = s.queue.prs.map((p) => `<div class="line"><span class="name"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(p.title)}</a><span class="sub">#${p.number} · ${esc(p.branch)}</span></span><span class="meta"><span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}">${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span></span></div>`).join("");
   const incidents = s.queue.issues.length
-    ? s.queue.issues.map((i) => `<div class="incident"><h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3><p>${i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("")}#${i.number} · abierto ${ago(i.created_at)}</p></div>`).join("")
-    : `<p class="none">No hay issues abiertos.</p>`;
+    ? s.queue.issues.map((i) => `<div class="incident"><h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3><p>${i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("")}#${i.number} · opened ${ago(i.created_at)}</p></div>`).join("")
+    : `<p class="none">No open issues.</p>`;
 
   const onRoutine = new Set(s.routines.map((r) => (r.prompt.match(/\/([a-z][a-z0-9-]*)/) || [])[1]).filter(Boolean));
   const owner = repoRow;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-  return page(`${s.repo} · Hush`, `
-    <header class="top"><a class="logo" href="/">${esc(s.repo)}</a><span class="updated">Actualizado ${ago(s.generated_at)}</span></header>
+  return page(`${s.repo} · hush`, `
+    <header class="top">${LOGO}<span class="updated">${esc(s.repo)} · updated ${ago(s.generated_at)}</span></header>
     <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
-    <p class="banner-sub">${s.affected.length ? `Afectado: ${esc(s.affected.join(", "))}. ` : ""}${s.counts.merged_24h} PRs mergeados en 24 h, ${s.counts.agent_merged_24h} por agentes. ${s.queue.prs.length ? `${s.queue.prs.length} PRs abiertos.` : "Ningún PR abierto."}</p>
+    <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
 
-    <h2>Monitores</h2>
-    ${s.monitors.length ? `<div class="group">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">Todavía no llegó ningún latido. Abajo está el curl que cada monitor tiene que correr al terminar.</span></div></div>`}
+    <h2>Monitors</h2>
+    ${s.monitors.length ? `<div class="group">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. The curl every monitor runs when it finishes is at the bottom of this page.</span></div></div>`}
 
     <h2>Routines</h2>
-    ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No encontré routines. Declaralas en <code>.claude/factory.json</code> (ver abajo).</span></div></div>`}
+    ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code> (see below).</span></div></div>`}
 
     ${ci ? `<h2>CI · GitHub Actions</h2><div class="group">${ci}</div>` : ""}
-    ${prs ? `<h2>PRs abiertos</h2><div class="group">${prs}</div>` : ""}
+    ${prs ? `<h2>Open pull requests</h2><div class="group">${prs}</div>` : ""}
 
-    <h2>Issues abiertos</h2>
+    <h2>Open issues</h2>
     <div class="incidents">${incidents}</div>
 
-    <details class="fold"><summary>${s.skills.length} skills en .claude/skills</summary>
-      <p>${s.skills.map((k) => onRoutine.has(k.name) ? `<b title="${esc(k.description)}">${esc(k.name)}</b>` : `<span title="${esc(k.description)}">${esc(k.name)}</span>`).join(" · ") || "Ninguna."}</p>
+    <details class="fold"><summary>${plural(s.skills.length, "skill")} in .claude/skills</summary>
+      <p>${s.skills.map((k) => onRoutine.has(k.name) ? `<b title="${esc(k.description)}">${esc(k.name)}</b>` : `<span title="${esc(k.description)}">${esc(k.name)}</span>`).join(" · ") || "None."}</p>
     </details>
 
-    ${owner ? `<details class="fold" style="margin-top:16px"><summary>Conectar monitores y routines</summary>
-      <p style="font-family:var(--f);font-size:13px">Cada monitor deja un latido al terminar, corra limpio o no:</p>
+    ${owner ? `<details class="fold" style="margin-top:16px"><summary>Connect monitors and routines</summary>
+      <p class="say">Every monitor leaves a heartbeat when it finishes, clean run or not:</p>
 <pre>curl -sS -X POST ${esc(origin)}/api/heartbeat \\
   -H "authorization: Bearer ${esc(owner.ingest_key)}" \\
   -H "content-type: application/json" \\
-  -d '{"monitor":"monitor-infra","status":"ok","swept":{"log_events":41233},"filed":[2634],"note":""}'</pre>
-      <p style="font-family:var(--f);font-size:13px"><code>status</code> es ok, degraded o skipped. Declará el roster y las routines de Claude Code en <code>.claude/factory.json</code>:</p>
+  -d '{"monitor":"errors","status":"ok","swept":{"events":41233},"filed":[2634],"note":""}'</pre>
+      <p class="say"><code>status</code> is ok, degraded or skipped. Declare the roster and your Claude Code routines in <code>.claude/factory.json</code>:</p>
 <pre>{
   "monitors": [
-    { "id": "monitor-infra", "cadence": "daily", "max_silence_hours": 50, "volume_key": "log_events", "routine": "Monitors" }
+    { "id": "errors", "cadence": "daily", "max_silence_hours": 50, "volume_key": "events", "routine": "Monitors" }
   ],
   "routines": [
     { "name": "Monitors", "cron": "0 13 * * *", "prompt": "/monitor", "model": "sonnet" }
@@ -487,23 +501,23 @@ function statusPage(s, user, origin, repoRow) {
 }</pre>
     </details>` : ""}
 
-    <footer><span><a href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a> · ${s.counts.heartbeats} latidos en ${WINDOW} días${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span>${user ? `<a href="/">Mis repos</a>` : ""}</span></footer>
+    <footer><span><a href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a> · ${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span>${user ? `<a href="/">Your repos</a>` : ""}</span></footer>
   `, { refresh: 120 });
 }
 
 function homePage(user, repos = [], msg = "") {
   const app = appConfig();
   if (!app) {
-    return page("Hush", `<header class="top"><span class="logo">Factory status</span></header>
-      <div class="hero"><h1>Una status page para la factory de tu repo.</h1><p>Falta crear la GitHub App. Lo hace quien administra esta instancia, una sola vez, desde <code>/setup</code>.</p></div>`);
+    return page("hush", `<header class="top">${LOGO}</header>
+      <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) return landingPage({ install, msg, esc, css: CSS });
-  return page("Hush", `
-    <header class="top"><a class="logo" href="/" style="text-decoration:none">Hush</a><form method="post" action="/logout" style="margin:0"><button class="btn ghost">Salir (${esc(user.login)})</button></form></header>
-    <h2>Tus repos</h2>
-    <div class="group">${repos.length ? repos.map((r) => `<div class="line"><a class="name" href="/r/${esc(r.full_name)}" style="text-decoration:none">${esc(r.full_name)}${r.private ? "<small>privado</small>" : ""}</a><span class="meta"><a href="/r/${esc(r.full_name)}">Ver status →</a></span></div>`).join("") : `<div class="line"><span class="hint">La app todavía no está instalada en ningún repo tuyo.</span></div>`}</div>
-    <p><a class="btn" href="${install}">${repos.length ? "Agregar o quitar repos" : "Instalar en tus repos"}</a></p>
+  if (!user) return landingPage({ install, msg, esc, css: CSS, fonts: FONTS, icon: ICON, mark: MARK });
+  return page("hush", `
+    <header class="top">${LOGO}<form method="post" action="/logout" style="margin:0"><button class="btn ghost">Sign out (${esc(user.login)})</button></form></header>
+    <h2>Your repos</h2>
+    <div class="group">${repos.length ? repos.map((r) => `<div class="line"><a class="name" href="/r/${esc(r.full_name)}" style="text-decoration:none">${esc(r.full_name)}${r.private ? "<small>private</small>" : ""}</a><span class="meta"><a href="/r/${esc(r.full_name)}">View status →</a></span></div>`).join("") : `<div class="line"><span class="hint">Hush is not installed on any of your repos yet.</span></div>`}</div>
+    <p><a class="btn" href="${install}">${repos.length ? "Add or remove repos" : "Install on your repos"}</a></p>
     ${msg ? `<p class="err">${esc(msg)}</p>` : ""}`);
 }
 
@@ -519,9 +533,9 @@ function setupPage(origin, t) {
     default_permissions: { contents: "read", issues: "read", pull_requests: "read", actions: "read", checks: "read", metadata: "read" },
     default_events: [],
   };
-  return page("Crear la GitHub App", `<header class="top"><span class="logo">Factory status</span></header>
-    <div class="hero"><h1>Crear la GitHub App</h1><p>Un click: GitHub crea la app con permisos de solo lectura y le devuelve a esta instancia sus credenciales. Se hace una sola vez.</p></div>
-    <form method="post" action="https://github.com/settings/apps/new"><input type="hidden" name="manifest" value="${esc(JSON.stringify(manifest))}"><button>Crear en GitHub</button></form>`);
+  return page("Create the GitHub App", `<header class="top">${LOGO}</header>
+    <div class="hero"><h1>Create the GitHub App</h1><p>One click: GitHub creates a read-only app and hands its credentials back to this instance. You do this once.</p></div>
+    <form method="post" action="https://github.com/settings/apps/new"><input type="hidden" name="manifest" value="${esc(JSON.stringify(manifest))}"><button>Create on GitHub</button></form>`);
 }
 
 // --- HTTP ---------------------------------------------------------------------------------
@@ -547,7 +561,7 @@ const redirect = (res, to, headers = {}) => send(res, 303, "", { location: to, .
 
 function insertBeat(repo, b) {
   const status = ["ok", "degraded", "skipped"].includes(b.status) ? b.status : null;
-  if (!b.monitor || !status) throw new Error("monitor y status (ok|degraded|skipped) son obligatorios");
+  if (!b.monitor || !status) throw new Error("monitor and status (ok|degraded|skipped) are required");
   const ts = b.ts && !Number.isNaN(Date.parse(b.ts)) ? new Date(b.ts).toISOString() : new Date().toISOString();
   const body = JSON.stringify({ window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500) });
   db.prepare("INSERT OR IGNORE INTO heartbeats (repo, monitor, ts, status, body) VALUES (?, ?, ?, ?, ?)").run(repo, String(b.monitor).slice(0, 80), ts, status, body);
@@ -562,7 +576,7 @@ createServer(async (req, res) => {
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
       const repo = key && db.prepare("SELECT full_name FROM repos WHERE ingest_key = ?").get(key);
-      if (!repo) return json(res, 401, { error: "ingest key inválida" });
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
       const body = JSON.parse((await readBody(req)) || "{}");
       const list = Array.isArray(body) ? body : [body];
       for (const b of list) insertBeat(repo.full_name, b);
@@ -580,14 +594,14 @@ createServer(async (req, res) => {
 
     const SETUP = process.env.SETUP_TOKEN;
     if (url.pathname === "/setup" && req.method === "GET") {
-      if (!SETUP || url.searchParams.get("t") !== SETUP) return send(res, 404, page("No encontrado", `<p class="none">Esta página no existe.</p>`));
+      if (!SETUP || url.searchParams.get("t") !== SETUP) return send(res, 404, page("Not found", `<p class="none">This page does not exist.</p>`));
       if (appConfig()) return redirect(res, "/");
       return send(res, 200, setupPage(origin, SETUP));
     }
     if (url.pathname.startsWith("/setup/callback/") && req.method === "GET") {
       if (!SETUP || decodeURIComponent(url.pathname.slice(16)) !== SETUP || appConfig()) return redirect(res, "/");
       const r = await fetch(`https://api.github.com/app-manifests/${encodeURIComponent(url.searchParams.get("code") || "")}/conversions`, { method: "POST", headers: { accept: "application/vnd.github+json", "user-agent": "factory-status" } });
-      if (!r.ok) throw new Error(`GitHub ${r.status} al convertir el manifest`);
+      if (!r.ok) throw new Error(`GitHub ${r.status} converting the manifest`);
       const a = await r.json();
       setSetting("app", seal(JSON.stringify({ id: a.id, slug: a.slug, pem: a.pem, client_id: a.client_id, client_secret: a.client_secret, webhook_secret: a.webhook_secret })));
       return redirect(res, `https://github.com/apps/${a.slug}/installations/new`);
@@ -602,7 +616,7 @@ createServer(async (req, res) => {
     if (url.pathname === "/auth/callback" && req.method === "GET") {
       const app = appConfig();
       const state = (req.headers.cookie || "").match(/(?:^|;\s*)fs_state=([^;]+)/)?.[1];
-      if (!app || !state || state !== url.searchParams.get("state")) return send(res, 400, homePage(null, [], "El login no se pudo verificar. Probá de nuevo."));
+      if (!app || !state || state !== url.searchParams.get("state")) return send(res, 400, homePage(null, [], "Sign-in could not be verified. Try again."));
       const r = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/json" },
@@ -610,7 +624,7 @@ createServer(async (req, res) => {
       });
       const tok = await r.json();
       const me = tok.access_token && (await gh(tok.access_token, "user"));
-      if (!me?.login) return send(res, 401, homePage(null, [], "GitHub no completó el login."));
+      if (!me?.login) return send(res, 401, homePage(null, [], "GitHub did not complete the sign-in."));
       db.prepare("INSERT INTO users (login, token, created_at) VALUES (?, ?, ?) ON CONFLICT(login) DO UPDATE SET token = excluded.token").run(me.login, seal(tok.access_token), new Date().toISOString());
       cache.delete(`userrepos:${me.login}`);
       return redirect(res, "/", { "set-cookie": [sessionCookie(me.login), "fs_state=; Path=/; Max-Age=0"] });
@@ -624,7 +638,7 @@ createServer(async (req, res) => {
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
       const seen = repos.find((r) => r.full_name.toLowerCase() === m[1].toLowerCase());
-      if (!seen) return send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Hush</a></header><p class="none">La app no está instalada en ese repo, o tu cuenta no lo ve.</p>`));
+      if (!seen) return send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">Hush is not installed on that repo, or your account cannot see it.</p>`));
       let row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
       if (!row) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at, installation_id) VALUES (?, ?, ?, ?, ?)").run(seen.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString(), seen.installation_id);
       else if (row.installation_id !== seen.installation_id) db.prepare("UPDATE repos SET installation_id = ? WHERE full_name = ?").run(seen.installation_id, seen.full_name);
@@ -634,10 +648,10 @@ createServer(async (req, res) => {
       return send(res, 200, statusPage(s, user, origin, row));
     }
 
-    send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Hush</a></header><p class="none">Esta página no existe.</p>`));
+    send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">This page does not exist.</p>`));
   } catch (e) {
     console.error(e);
     if (url.pathname.startsWith("/api/")) return json(res, 400, { error: e.message });
-    send(res, 500, page("Error", `<header class="top"><a class="logo" href="/">Hush</a></header><p class="err">${esc(e.message)}</p>`));
+    send(res, 500, page("Error", `<header class="top">${LOGO}</header><p class="err">${esc(e.message)}</p>`));
   }
 }).listen(PORT, () => console.log(`factory-status on :${PORT}`));

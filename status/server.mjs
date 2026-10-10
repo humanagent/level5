@@ -18,6 +18,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { landingPage } from "./landing.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const DATA = process.env.DATA_DIR || "./data";
@@ -448,7 +449,7 @@ function statusPage(s, user, origin, repoRow) {
   const onRoutine = new Set(s.routines.map((r) => (r.prompt.match(/\/([a-z][a-z0-9-]*)/) || [])[1]).filter(Boolean));
   const owner = repoRow;
 
-  return page(`${s.repo} · Factory status`, `
+  return page(`${s.repo} · Hush`, `
     <header class="top"><a class="logo" href="/">${esc(s.repo)}</a><span class="updated">Actualizado ${ago(s.generated_at)}</span></header>
     <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
     <p class="banner-sub">${s.affected.length ? `Afectado: ${esc(s.affected.join(", "))}. ` : ""}${s.counts.merged_24h} PRs mergeados en 24 h, ${s.counts.agent_merged_24h} por agentes. ${s.queue.prs.length ? `${s.queue.prs.length} PRs abiertos.` : "Ningún PR abierto."}</p>
@@ -493,21 +494,13 @@ function statusPage(s, user, origin, repoRow) {
 function homePage(user, repos = [], msg = "") {
   const app = appConfig();
   if (!app) {
-    return page("Factory status", `<header class="top"><span class="logo">Factory status</span></header>
+    return page("Hush", `<header class="top"><span class="logo">Factory status</span></header>
       <div class="hero"><h1>Una status page para la factory de tu repo.</h1><p>Falta crear la GitHub App. Lo hace quien administra esta instancia, una sola vez, desde <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) {
-    return page("Factory status", `
-      <header class="top"><span class="logo">Factory status</span></header>
-      <div class="hero"><h1>Una status page para la factory de tu repo.</h1>
-      <p>Ves si tus monitores laten, si tus routines de Claude Code corrieron y qué hay en la cola. Silencio cuando todo anda.</p>
-      <p style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn" href="/auth/login">Entrar con GitHub</a><a class="btn ghost" href="${install}">Instalar la app en tus repos →</a></p></div>
-      <p class="hint">Permisos de solo lectura: código, issues, PRs, Actions y checks. Elegís en GitHub qué repos ve.</p>
-      ${msg ? `<p class="err">${esc(msg)}</p>` : ""}`);
-  }
-  return page("Factory status", `
-    <header class="top"><span class="logo">Factory status</span><form method="post" action="/logout" style="margin:0"><button class="btn ghost">Salir (${esc(user.login)})</button></form></header>
+  if (!user) return landingPage({ install, msg, esc, css: CSS });
+  return page("Hush", `
+    <header class="top"><a class="logo" href="/" style="text-decoration:none">Hush</a><form method="post" action="/logout" style="margin:0"><button class="btn ghost">Salir (${esc(user.login)})</button></form></header>
     <h2>Tus repos</h2>
     <div class="group">${repos.length ? repos.map((r) => `<div class="line"><a class="name" href="/r/${esc(r.full_name)}" style="text-decoration:none">${esc(r.full_name)}${r.private ? "<small>privado</small>" : ""}</a><span class="meta"><a href="/r/${esc(r.full_name)}">Ver status →</a></span></div>`).join("") : `<div class="line"><span class="hint">La app todavía no está instalada en ningún repo tuyo.</span></div>`}</div>
     <p><a class="btn" href="${install}">${repos.length ? "Agregar o quitar repos" : "Instalar en tus repos"}</a></p>
@@ -631,7 +624,7 @@ createServer(async (req, res) => {
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
       const seen = repos.find((r) => r.full_name.toLowerCase() === m[1].toLowerCase());
-      if (!seen) return send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Factory status</a></header><p class="none">La app no está instalada en ese repo, o tu cuenta no lo ve.</p>`));
+      if (!seen) return send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Hush</a></header><p class="none">La app no está instalada en ese repo, o tu cuenta no lo ve.</p>`));
       let row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
       if (!row) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at, installation_id) VALUES (?, ?, ?, ?, ?)").run(seen.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString(), seen.installation_id);
       else if (row.installation_id !== seen.installation_id) db.prepare("UPDATE repos SET installation_id = ? WHERE full_name = ?").run(seen.installation_id, seen.full_name);
@@ -641,10 +634,10 @@ createServer(async (req, res) => {
       return send(res, 200, statusPage(s, user, origin, row));
     }
 
-    send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Factory status</a></header><p class="none">Esta página no existe.</p>`));
+    send(res, 404, page("No encontrado", `<header class="top"><a class="logo" href="/">Hush</a></header><p class="none">Esta página no existe.</p>`));
   } catch (e) {
     console.error(e);
     if (url.pathname.startsWith("/api/")) return json(res, 400, { error: e.message });
-    send(res, 500, page("Error", `<header class="top"><a class="logo" href="/">Factory status</a></header><p class="err">${esc(e.message)}</p>`));
+    send(res, 500, page("Error", `<header class="top"><a class="logo" href="/">Hush</a></header><p class="err">${esc(e.message)}</p>`));
   }
 }).listen(PORT, () => console.log(`factory-status on :${PORT}`));

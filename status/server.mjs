@@ -16,7 +16,7 @@
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
 
@@ -25,6 +25,7 @@ const DATA = process.env.DATA_DIR || "./data";
 const SECRET = process.env.SECRET || "dev-secret-change-me";
 const KEY = createHash("sha256").update(SECRET).digest();
 const WINDOW = 30;
+const INSTALL = readFileSync(new URL("./install.sh", import.meta.url), "utf8");
 mkdirSync(DATA, { recursive: true });
 
 // --- storage --------------------------------------------------------------
@@ -268,6 +269,39 @@ async function readCi(token, repo, workflows) {
   });
 }
 
+// GitHub metrics over the window: PR and issue flow, time to merge, who merged
+async function readMetrics(token, repo, ci, issuesOpen) {
+  return cached(`metrics:${repo}`, 10 * 60e3, async () => {
+    const since = new Date(Date.now() - (WINDOW - 1) * 864e5).toISOString().slice(0, 10);
+    const count = (q) => gh(token, `search/issues?per_page=1&q=${encodeURIComponent(`repo:${repo} ${q}`)}`).then((r) => r?.total_count ?? null).catch(() => null);
+    const [prOpened, prMerged, prClosedUnmerged, issOpened, issClosed] = await Promise.all([
+      count(`is:pr created:>=${since}`),
+      count(`is:pr is:merged merged:>=${since}`),
+      count(`is:pr is:closed is:unmerged closed:>=${since}`),
+      count(`is:issue created:>=${since}`),
+      count(`is:issue is:closed closed:>=${since}`),
+    ]);
+    const merged = [];
+    for (let page = 1; page <= 4; page++) {
+      const batch = (await gh(token, `repos/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=${page}`).catch(() => null)) || [];
+      merged.push(...batch.filter((p) => p.merged_at && p.merged_at.slice(0, 10) >= since));
+      if (batch.length < 100 || batch.at(-1).updated_at.slice(0, 10) < since) break;
+    }
+    const hours = merged.map((p) => (Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5).sort((a, b) => a - b);
+    const median = (xs) => (xs.length ? xs[Math.floor(xs.length / 2)] : null);
+    const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
+    const perDay = days.map((d) => ({ d, all: merged.filter((p) => p.merged_at.slice(0, 10) === d).length, agents: merged.filter((p) => p.merged_at.slice(0, 10) === d && AGENT_BRANCH.test(p.head.ref)).length }));
+    const runs = ci.reduce((a, w) => a + w.runs, 0);
+    const passed = ci.reduce((a, w) => a + Math.round(((w.pct || 0) * w.runs) / 100), 0);
+    const ages = issuesOpen.map((i) => (Date.now() - Date.parse(i.created_at)) / 864e5).sort((a, b) => a - b);
+    return {
+      prs: { opened: prOpened, merged: prMerged, closed_unmerged: prClosedUnmerged, median_merge_h: median(hours), agent_share: merged.length ? Math.round((merged.filter((p) => AGENT_BRANCH.test(p.head.ref)).length / merged.length) * 100) : null, per_day: perDay },
+      issues: { opened: issOpened, closed: issClosed, open: issuesOpen.length, median_age_d: median(ages) },
+      ci: { runs, pass_rate: runs ? Math.round((passed / runs) * 1000) / 10 : null, failing_now: ci.filter((w) => w.last?.conclusion === "failure").map((w) => w.name) },
+    };
+  });
+}
+
 async function readQueue(token, repo) {
   return cached(`queue:${repo}`, 60e3, async () => {
     const [issuesRaw, prsRaw, closedRaw, runsRaw] = await Promise.all([
@@ -303,7 +337,8 @@ function judge(factory, repo) {
   const RANK = { ok: 1, degraded: 2, skipped: 3 };
 
   const monitors = roster.map((m) => {
-    const mine = beats.filter((b) => b.monitor === m.id);
+    const all = beats.filter((b) => b.monitor === m.id);
+    const mine = all.some((b) => b.source !== "session") ? all.filter((b) => b.source !== "session") : all;
     const last = mine[0];
     const silence = m.max_silence_hours || (m.cadence === "weekly" ? 200 : 50);
     const vol = (b) => (b?.swept && m.volume_key && m.volume_key in b.swept ? Number(b.swept[m.volume_key]) : null);
@@ -353,6 +388,7 @@ async function snapshot(repoRow) {
   const token = await installationToken(repoRow.installation_id);
   const [factory, queue] = await Promise.all([readFactory(token, repo), readQueue(token, repo)]);
   const ci = await readCi(token, repo, factory.workflows || []);
+  const metrics = await readMetrics(token, repo, ci, queue.issues);
   const { monitors, beats } = judge(factory, repo);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged));
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
@@ -375,6 +411,7 @@ async function snapshot(repoRow) {
     queue,
     skills: factory.skills,
     ci,
+    metrics,
     notes: factory.notes,
   };
 }
@@ -446,6 +483,16 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .btn.ghost{background:none;color:var(--muted);padding-inline:0;font-weight:500}
 .hero h1{font-size:28px;letter-spacing:-.02em;margin:0 0 8px;text-wrap:balance}.hero p{color:var(--muted);margin:0 0 24px;max-width:56ch}
 .err{color:var(--bad);font-size:13px}.hint{color:var(--muted);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.stat{padding:16px 20px;border-left:1px solid var(--line);display:grid;gap:2px;min-width:0}.stat:first-child{border-left:0}
+.stat b{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}.stat b i{font-style:normal;color:var(--faint);font-weight:500}
+.stat span{font-size:13px;color:var(--ink)}.stat small{font-size:12px;color:var(--faint)}.stat small[data-s=bad]{color:var(--bad)}
+.chart{grid-column:1/-1;border-top:1px solid var(--line);padding:16px 20px 12px}
+.cols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;height:64px;align-items:end}
+.cols div{height:100%;display:flex;align-items:flex-end}.cols i{display:flex;align-items:flex-end;width:100%;background:#cfd2d8;border-radius:2px 2px 0 0;min-height:1px}
+.cols em{display:block;width:100%;background:var(--ink);border-radius:2px 2px 0 0}
+.key{display:inline-block;width:9px;height:9px;background:var(--ink);border-radius:2px;margin-right:4px;vertical-align:-1px}
+@media(max-width:700px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat:nth-child(3){border-left:0}.stat:nth-child(n+3){border-top:1px solid var(--line)}}
 @media(max-width:520px){.wrap{padding-block:24px 56px}.row,.line{padding-inline:14px}.name small{display:block;margin-left:0}.bars{gap:1px}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -504,6 +551,23 @@ function statusPage(s, user, origin, repoRow) {
     ? s.queue.issues.map((i) => `<div class="incident"><h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3><p>${i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("")}#${i.number} · opened ${ago(i.created_at)}</p></div>`).join("")
     : `<p class="none">No open issues.</p>`;
 
+  const M = s.metrics;
+  const dur = (h) => (h == null ? "–" : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${Math.round(h * 10) / 10} h` : `${Math.round(h / 24)} d`);
+  const n = (x) => (x == null ? "–" : x);
+  const maxDay = M ? Math.max(1, ...M.prs.per_day.map((d) => d.all)) : 1;
+  const metrics = !M ? "" : `
+    <h2>Last ${WINDOW} days</h2>
+    <div class="group stats">
+      <div class="stat"><b>${n(M.prs.merged)}</b><span>PRs merged</span><small>${M.prs.agent_share == null ? "" : `${M.prs.agent_share}% by agents · `}${n(M.prs.opened)} opened</small></div>
+      <div class="stat"><b>${dur(M.prs.median_merge_h)}</b><span>Median time to merge</span><small>${n(M.prs.closed_unmerged)} closed without merge</small></div>
+      <div class="stat"><b>${n(M.issues.closed)}<i>/${n(M.issues.opened)}</i></b><span>Issues closed / opened</span><small>${M.issues.open} open${M.issues.median_age_d == null ? "" : `, median age ${Math.round(M.issues.median_age_d)} d`}</small></div>
+      <div class="stat"><b>${M.ci.pass_rate == null ? "–" : M.ci.pass_rate + "%"}</b><span>CI runs passing</span><small data-s="${M.ci.failing_now.length ? "bad" : "ok"}">${M.ci.failing_now.length ? `Failing now: ${esc(M.ci.failing_now.join(", "))}` : `${M.ci.runs} runs, none failing now`}</small></div>
+      <div class="chart" aria-label="PRs merged per day">
+        <div class="cols">${M.prs.per_day.map((d) => `<div title="${d.d} · ${d.all} merged, ${d.agents} by agents"><i style="height:${(d.all / maxDay) * 100}%"><em style="height:${d.all ? (d.agents / d.all) * 100 : 0}%"></em></i></div>`).join("")}</div>
+        <div class="axis"><span>PRs merged per day</span><span class="rule"></span><span><span class="key"></span> by agents</span></div>
+      </div>
+    </div>`;
+
   const onRoutine = new Set(s.routines.map((r) => (r.prompt.match(/\/([a-z][a-z0-9-]*)/) || [])[1]).filter(Boolean));
   const owner = repoRow;
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
@@ -512,6 +576,8 @@ function statusPage(s, user, origin, repoRow) {
     <header class="top">${LOGO}<span class="updated">${esc(s.repo)} · updated ${ago(s.generated_at)}</span></header>
     <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
     <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
+
+    ${metrics}
 
     <h2>Monitors</h2>
     ${s.monitors.length ? `<div class="group">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. The curl every monitor runs when it finishes is at the bottom of this page.</span></div></div>`}
@@ -529,8 +595,10 @@ function statusPage(s, user, origin, repoRow) {
       <p>${s.skills.map((k) => onRoutine.has(k.name) ? `<b title="${esc(k.description)}">${esc(k.name)}</b>` : `<span title="${esc(k.description)}">${esc(k.name)}</span>`).join(" · ") || "None."}</p>
     </details>
 
-    ${owner ? `<details class="fold" style="margin-top:16px"><summary>Connect monitors and routines</summary>
-      <p class="say">Every monitor leaves a heartbeat when it finishes, clean run or not:</p>
+    ${owner ? `<details class="fold" style="margin-top:16px"><summary>Install the heartbeat in this repo</summary>
+      <p class="say">Install the heartbeat in this repo. Run it at the repo root, then commit <code>.claude/</code>:</p>
+<pre>curl -fsSL ${esc(origin)}/install.sh | sh -s -- ${esc(owner.ingest_key)}</pre>
+      <p class="say">It adds a SessionEnd hook: every Claude Code routine that runs a slash command reports itself when it ends, with no change to your skills. For status and volume, a skill ends with <code>.claude/hooks/hush.sh beat &lt;id&gt; ok '{"swept":{"events":120}}'</code>. From anywhere else, the raw call is:</p>
 <pre>curl -sS -X POST ${esc(origin)}/api/heartbeat \\
   -H "authorization: Bearer ${esc(owner.ingest_key)}" \\
   -H "content-type: application/json" \\
@@ -608,7 +676,7 @@ function insertBeat(repo, b) {
   const status = ["ok", "degraded", "skipped"].includes(b.status) ? b.status : null;
   if (!b.monitor || !status) throw new Error("monitor and status (ok|degraded|skipped) are required");
   const ts = b.ts && !Number.isNaN(Date.parse(b.ts)) ? new Date(b.ts).toISOString() : new Date().toISOString();
-  const body = JSON.stringify({ window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500) });
+  const body = JSON.stringify({ source: b.source === "session" ? "session" : "skill", window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500) });
   db.prepare("INSERT OR IGNORE INTO heartbeats (repo, monitor, ts, status, body) VALUES (?, ?, ?, ?, ?)").run(repo, String(b.monitor).slice(0, 80), ts, status, body);
 }
 
@@ -617,6 +685,7 @@ createServer(async (req, res) => {
   const origin = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
   try {
     if (url.pathname === "/healthz") return send(res, 200, "ok", { "content-type": "text/plain" });
+    if (url.pathname === "/install.sh") return send(res, 200, INSTALL.replaceAll("__ORIGIN__", origin), { "content-type": "text/x-shellscript; charset=utf-8" });
 
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");

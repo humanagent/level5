@@ -37,8 +37,10 @@ ${icon}${fonts}
 .nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:80px}
 .nav a.signin{color:var(--muted);text-decoration:none;font-size:15px}.nav a.signin:hover{color:var(--ink)}
 .h{max-width:760px;margin:0 auto;text-align:center}
-.h h1{font-size:clamp(36px,6vw,60px);line-height:1.04;letter-spacing:-.04em;font-weight:600;margin:0 0 20px;text-wrap:balance}
-.h h1 span{color:var(--faint)}
+.h{max-width:900px}
+.h h1{font-size:clamp(34px,5.6vw,64px);line-height:1.05;letter-spacing:-.04em;font-weight:500;margin:0 0 28px}
+.h h1 span{display:block;color:#b9bcc3}
+.h h1 span.now{color:var(--ink);font-weight:600}
 .h p.lede{font-size:18px;line-height:1.55;color:var(--muted);margin:0 auto 32px;max-width:54ch;text-wrap:pretty}
 .cta{display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap}
 .btn.gh{display:inline-flex;align-items:center;gap:10px;padding:14px 22px;font-size:16px;box-shadow:0 8px 24px -10px rgba(0,0,0,.4);transition:transform .15s ease}
@@ -67,8 +69,13 @@ ${icon}${fonts}
 <nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><a class="signin" href="/auth/login">Sign in</a></nav>
 
 <section class="h">
-  <h1>A status page for your software factory. <span>Quiet when it’s fine.</span></h1>
-  <p class="lede">Install the app on your repos and see on one page whether your monitors are beating, whether your Claude Code routines ran, and what is left in the queue.</p>
+  <h1>
+    <span>Your agents run the factory.</span>
+    <span>Monitors stay quiet.</span>
+    <span>Routines run while you sleep.</span>
+    <span class="now">Hush tells you when one dies.</span>
+  </h1>
+  <p class="lede">One status page for every repo you pick. See whether your monitors are beating, whether your Claude Code routines ran, and what is left in the queue.</p>
   ${cta()}
   <p class="fine">Free. Read-only. Pick one repo, a few, or all of them.</p>
   ${msg ? `<p class="err" style="text-align:center">${esc(msg)}</p>` : ""}

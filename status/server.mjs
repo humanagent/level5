@@ -226,7 +226,45 @@ async function readFactory(token, repo) {
     );
     routines = routines.concat(scheduled.flat());
 
-    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes };
+    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
+  });
+}
+
+// every workflow as a monitor: one bar per day over the window, from its completed runs
+async function readCi(token, repo, workflows) {
+  return cached(`ci:${repo}`, 10 * 60e3, async () => {
+    const since = new Date(Date.now() - (WINDOW - 1) * 864e5).toISOString().slice(0, 10);
+    const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
+    return Promise.all(
+      workflows.map(async (w) => {
+        const runs = [];
+        for (let page = 1; page <= 6; page++) {
+          const r = await gh(token, `repos/${repo}/actions/workflows/${w.id}/runs?per_page=100&page=${page}&created=>=${since}`).catch(() => null);
+          const batch = r?.workflow_runs || [];
+          runs.push(...batch);
+          if (batch.length < 100) break;
+        }
+        const done = runs.filter((r) => ["success", "failure", "timed_out"].includes(r.conclusion));
+        const byDay = Object.fromEntries(days.map((d) => [d, { ok: 0, bad: 0 }]));
+        for (const r of done) {
+          const d = byDay[r.created_at.slice(0, 10)];
+          if (d) r.conclusion === "success" ? d.ok++ : d.bad++;
+        }
+        const last = runs[0];
+        const ok = done.filter((r) => r.conclusion === "success").length;
+        return {
+          name: w.name,
+          path: w.path,
+          url: w.url,
+          runs: done.length,
+          capped: runs.length >= 600,
+          pct: done.length ? Math.round((ok / done.length) * 1000) / 10 : null,
+          days: days.map((d) => { const x = byDay[d]; return !x.ok && !x.bad ? "" : !x.bad ? "ok" : !x.ok ? "skipped" : "degraded"; }),
+          tips: days.map((d) => byDay[d]),
+          last: last ? { conclusion: last.conclusion, status: last.status, at: last.updated_at, branch: last.head_branch, url: last.html_url } : null,
+        };
+      }),
+    ).then((list) => list.filter((w) => w.runs || w.last).sort((a, b) => b.runs - a.runs));
   });
 }
 
@@ -314,6 +352,7 @@ async function snapshot(repoRow) {
   const repo = repoRow.full_name;
   const token = await installationToken(repoRow.installation_id);
   const [factory, queue] = await Promise.all([readFactory(token, repo), readQueue(token, repo)]);
+  const ci = await readCi(token, repo, factory.workflows || []);
   const { monitors, beats } = judge(factory, repo);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged));
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
@@ -335,6 +374,7 @@ async function snapshot(repoRow) {
     routines,
     queue,
     skills: factory.skills,
+    ci,
     notes: factory.notes,
   };
 }
@@ -449,9 +489,14 @@ function statusPage(s, user, origin, repoRow) {
     return `<div class="line"><span class="name">${esc(r.name.replace(/^App: /, ""))}<span class="sub">${esc(r.source)} · ${esc(r.prompt)} · ${esc(when(r))}${r.model ? " · " + esc(r.model) : ""}</span></span><span class="meta"><span class="state" data-s="${st}">${label}</span><span class="sub">next ${until(r.next_run)}</span></span></div>`;
   }).join("");
 
-  const ci = s.queue.runs.map((w) => {
-    const st = w.conclusion === "success" ? ["ok", "Passing"] : w.conclusion === "failure" ? ["bad", "Failing"] : w.status !== "completed" ? ["warn", "Running"] : ["none", w.conclusion || w.status];
-    return `<div class="line"><span class="name"><a href="${esc(w.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(w.name)}</a></span><span class="meta"><span class="state" data-s="${st[0]}">${esc(st[1])}</span><span class="sub">${ago(w.at)}</span></span></div>`;
+  const ci = (s.ci || []).map((w) => {
+    const lastS = !w.last ? ["none", "No runs"] : w.last.status !== "completed" ? ["warn", "Running"] : w.last.conclusion === "success" ? ["ok", "Passing"] : w.last.conclusion === "failure" ? ["bad", "Failing"] : ["none", w.last.conclusion];
+    const bars = w.days.map((d, i) => { const t = w.tips[i]; return `<i data-s="${d}" title="${new Date(Date.now() - (w.days.length - 1 - i) * 864e5).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })} · ${t.ok + t.bad ? `${t.ok} passed, ${t.bad} failed` : "no runs"}"></i>`; }).join("");
+    return `<details class="row"><summary>
+      <div class="row-head"><span class="name">${esc(w.name)}<small>${w.runs}${w.capped ? "+" : ""} runs</small></span><span class="state" data-s="${lastS[0]}">${lastS[1]}</span></div>
+      <div class="bars">${bars}</div>
+      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>${w.pct == null ? "no runs" : `${w.pct}% passing`}</span><span class="rule"></span><span>today</span></div>
+    </summary><div class="detail"><div><code>${esc(w.path)}</code></div>${w.last ? `<div>Last run <a href="${esc(w.last.url)}" target="_blank" rel="noopener">${ago(w.last.at)}</a> on <code>${esc(w.last.branch)}</code>, ${esc(w.last.conclusion || w.last.status)}</div>` : ""}<div>Green day: every run passed. Amber: some failed. Red: all failed.</div></div></details>`;
   }).join("");
 
   const prs = s.queue.prs.map((p) => `<div class="line"><span class="name"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(p.title)}</a><span class="sub">#${p.number} · ${esc(p.branch)}</span></span><span class="meta"><span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}">${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span></span></div>`).join("");

@@ -12,6 +12,16 @@ const EXAMPLE = [
   ["speed", "Chronically degraded", "bad", "oododddoddddoddddodddoddoddodd", "36.7"],
 ];
 
+// What Hush connects to today: the four platforms first, the rest in one line under them.
+const LOGO_GH = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="#fff" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
+const LOGO_VERCEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3l10 17.5H2z"/></svg>`;
+const INTEGRATIONS = [
+  ["github", "#24292f", LOGO_GH, "GitHub", "Repos, pull requests, issues, checks and every Actions workflow, live, through a read-only GitHub App."],
+  ["aws", "#232f3e", `<span class="wm">aws</span>`, "AWS", "Daily spend by service from Cost Explorer, the cost explorer and the city map. Sent by your own cost job."],
+  ["fly", "#7b3fe4", `<img src="https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/flydotio.svg" alt="" style="filter:invert(1)">`, "Fly.io", "Daily spend next to everything else, and heartbeats from the machines and jobs you run there."],
+  ["vercel", "#000000", LOGO_VERCEL, "Vercel", "Daily spend per project, and heartbeats from your deploys and crons."],
+];
+
 export function landingPage({ install, msg, esc, css, fonts, icon, mark }) {
   const bars = (s) => [...s].map((c) => `<i data-s="${{ o: "ok", d: "degraded", s: "skipped", ".": "" }[c]}"></i>`).join("");
   const rows = EXAMPLE.map(
@@ -56,6 +66,14 @@ ${icon}${fonts}
 .step p{color:var(--muted);margin:0}
 .step code,.reads code{font:12.5px var(--mono);color:var(--ink);background:#f4f5f6;border-radius:4px;padding:1px 5px}
 .reads{max-width:760px;margin:112px auto 0}
+.ints{max-width:1000px;margin:112px auto 0}.ints>h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600}.ints>p{color:var(--muted);text-align:center;margin:0 auto 32px;max-width:60ch}
+.int-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.int{display:flex;flex-direction:column;gap:8px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.int-m{display:grid;place-items:center;width:48px;height:48px;border-radius:12px;margin-bottom:6px}.int-m svg,.int-m img{width:24px;height:24px}
+.int-m .wm{color:#fff;font:800 16px/1 var(--f);letter-spacing:-.02em;position:relative}.int-m .wm::after{content:"";position:absolute;left:1px;right:2px;bottom:-5px;height:3px;border-radius:0 0 6px 6px;border-bottom:2px solid #ff9900}
+.int b{font-weight:600;font-size:16px}.int-t{color:var(--muted);font-size:14px;line-height:1.45}
+.ints>p.int-more{text-align:center;color:var(--muted);font-size:14px;margin:24px auto 0;max-width:70ch}.int-more code{font:13px var(--mono);background:#f4f5f6;border-radius:4px;padding:1px 5px}
+@media(max-width:860px){.int-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.int-grid{grid-template-columns:minmax(0,1fr)}}
 .reads h2,.end h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600;text-wrap:balance}
 .reads>p{color:var(--muted);text-align:center;margin:0 0 28px}
 .reads .group .line .meta{white-space:normal;text-align:right;max-width:55%}
@@ -92,8 +110,15 @@ ${icon}${fonts}
 
 <section class="steps">
   <div class="step"><span class="n">01</span><h3>Install the app</h3><p>On your account or your organization. On the same GitHub screen you pick one repo, a few, or all of them, and you can add or remove any later.</p></div>
-  <div class="step"><span class="n">02</span><h3>Your monitors beat</h3><p>One <code>curl</code> line at the end of each skill. A monitor that stops beating is marked down. One that says ok after reading nothing is too.</p></div>
+  <div class="step"><span class="n">02</span><h3>Your routines report</h3><p>One command installs a hook: every Claude Code routine reports itself when it ends. A monitor that stops beating is marked down. One that says ok after reading nothing is too.</p></div>
   <div class="step"><span class="n">03</span><h3>You read one page</h3><p>Monitors with 30 days of history, routines with their next run, CI, open PRs and issues. It refreshes on its own.</p></div>
+</section>
+
+<section class="ints">
+  <h2>Integrations</h2>
+  <p>Read-only on your code. No cloud or billing credentials: your jobs send what they already know.</p>
+  <div class="int-grid">${INTEGRATIONS.map(([k, bg, logo, name, what]) => `<div class="int"><span class="int-m" style="background:${bg}">${logo}</span><b>${name}</b><span class="int-t">${what}</span></div>`).join("")}</div>
+  <p class="int-more">Also: Claude Code routines, skills and tokens per session, Neon, the Anthropic API, and any provider or cron through one <code>curl</code>.</p>
 </section>
 
 <section class="reads">

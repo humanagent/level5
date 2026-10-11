@@ -20,6 +20,7 @@ a 1 GB volume on `/data`).
 | `users` | GitHub login and their OAuth token, sealed (AES-GCM keyed by `SECRET`). |
 | `repos` | Repos opened at least once: installation id and ingest key. |
 | `heartbeats` | Every heartbeat. Unique on `(repo, monitor, ts)`. |
+| `costs` | Daily provider spend and per-session Claude Code tokens. Unique on `(repo, source, key)`. |
 | `snapshots` | The last full snapshot per repo, so a page opens instantly. Versioned by `SNAP_V`. |
 | `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed. |
 
@@ -46,7 +47,8 @@ of the page refreshes.
 | `GET /r/<owner>/<repo>.json` | The snapshot as JSON. |
 | `GET /r/<owner>/<repo>/live` | Live Actions plus the heartbeat count. |
 | `GET /r/<owner>/<repo>/setup` | Heartbeat setup for the repo. |
-| `POST /api/heartbeat` | Ingest ([heartbeats.md](heartbeats.md)). |
+| `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
+| `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
 | `GET /install.sh` | The installer, with this origin filled in. |
 | `GET /setup?t=SETUP_TOKEN` | One-time GitHub App creation from a manifest. |
 | `GET /auth/login`, `/auth/callback`, `POST /logout` | Sign in with GitHub. |

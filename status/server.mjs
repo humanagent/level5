@@ -36,6 +36,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS repos (full_name TEXT PRIMARY KEY, owner_login TEXT NOT NULL, ingest_key TEXT NOT NULL, public INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS heartbeats (id INTEGER PRIMARY KEY, repo TEXT NOT NULL, monitor TEXT NOT NULL, ts TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL);
   CREATE UNIQUE INDEX IF NOT EXISTS hb_unique ON heartbeats(repo, monitor, ts);
+  CREATE TABLE IF NOT EXISTS costs (id INTEGER PRIMARY KEY, repo TEXT NOT NULL, source TEXT NOT NULL, key TEXT NOT NULL, day TEXT NOT NULL, usd REAL, body TEXT NOT NULL, at TEXT NOT NULL);
+  CREATE UNIQUE INDEX IF NOT EXISTS cost_unique ON costs(repo, source, key);
   CREATE INDEX IF NOT EXISTS hb_repo_ts ON heartbeats(repo, ts);
   CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS snapshots (repo TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT NOT NULL);
@@ -228,7 +230,7 @@ async function readFactory(token, repo) {
     );
     routines = routines.concat(scheduled.flat());
 
-    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
+    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
   });
 }
 
@@ -351,6 +353,82 @@ async function readLive(token, repo) {
   });
 }
 
+// --- costs -----------------------------------------------------------------------------
+// Two kinds of rows in `costs`: a provider's spend for one day (source "aws", key = the day), and
+// one Claude Code session's tokens (source "claude-code", key = the session id). Session dollars
+// are estimated from list prices per million tokens; a model with no known price shows tokens only.
+// A repo can set or override prices in .claude/factory.json: "prices": {"<model>": {"input": 3, "output": 15}}.
+const PRICES = [
+  [/opus-4-[56]/, { input: 5, output: 25 }],
+  [/opus-4/, { input: 15, output: 75 }],
+  [/sonnet-4/, { input: 3, output: 15 }],
+  [/haiku-4/, { input: 1, output: 5 }],
+];
+function priceOf(model, overrides = {}) {
+  if (overrides[model]) return overrides[model];
+  return (PRICES.find(([re]) => re.test(model || "")) || [])[1] || null;
+}
+function sessionUsd(models, overrides) {
+  let usd = 0;
+  for (const [model, t] of Object.entries(models || {})) {
+    const p = priceOf(model, overrides);
+    if (!p) return null;
+    // cache writes at 1.25x input (5 min) or 2x (1 h), reads at 0.1x
+    usd += ((t.input || 0) * p.input + (t.output || 0) * p.output + (t.cache_write_5m || 0) * p.input * 1.25 + (t.cache_write_1h || 0) * p.input * 2 + (t.cache_read || 0) * p.input * 0.1) / 1e6;
+  }
+  return Math.round(usd * 100) / 100;
+}
+function readCosts(repo, prices) {
+  const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
+  const rows = db.prepare("SELECT source, key, day, usd, body, at FROM costs WHERE repo = ? AND day >= ? ORDER BY day").all(repo, days[0]).map((r) => ({ ...r, ...JSON.parse(r.body) }));
+  if (!rows.length) return null;
+  const sessions = rows.filter((r) => r.source === "claude-code").map((r) => ({ ...r, usd: r.usd ?? sessionUsd(r.models, prices) }));
+  const tok = (t) => (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0);
+  for (const x of sessions) x.tokens = Object.values(x.models || {}).reduce((a, t) => ({ input: a.input + (t.input || 0), output: a.output + (t.output || 0), cache_write: a.cache_write + (t.cache_write_5m || 0) + (t.cache_write_1h || 0), cache_read: a.cache_read + (t.cache_read || 0), total: a.total + tok(t) }), { input: 0, output: 0, cache_write: 0, cache_read: 0, total: 0 });
+  const providers = rows.filter((r) => r.source !== "claude-code");
+  const sources = [...new Set(providers.map((r) => r.source))];
+  if (sessions.some((x) => x.usd != null)) sources.push("claude-code");
+  const perDay = days.map((d) => {
+    const by = {};
+    for (const r of providers) if (r.day === d && r.usd != null) by[r.source] = (by[r.source] || 0) + r.usd;
+    const cc = sessions.filter((x) => x.day === d && x.usd != null).reduce((a, x) => a + x.usd, 0);
+    if (cc) by["claude-code"] = cc;
+    return { d, by, total: Object.values(by).reduce((a, b) => a + b, 0), tokens: sessions.filter((x) => x.day === d).reduce((a, x) => a + x.tokens.total, 0) };
+  });
+  const total = {};
+  for (const p of perDay) for (const [k, v] of Object.entries(p.by)) total[k] = (total[k] || 0) + v;
+  const last7 = perDay.slice(-8, -1);
+  const lastBreakdown = {};
+  for (const r of providers) if (r.breakdown) lastBreakdown[r.source] = { day: r.day, breakdown: r.breakdown };
+  return {
+    sources,
+    per_day: perDay,
+    total,
+    total_usd: Object.values(total).reduce((a, b) => a + b, 0),
+    yesterday: perDay[perDay.length - 2]?.total || 0,
+    avg7: last7.reduce((a, p) => a + p.total, 0) / (last7.length || 1),
+    tokens_30d: sessions.reduce((a, x) => a + x.tokens.total, 0),
+    sessions_30d: sessions.length,
+    sessions: sessions.slice(-20).reverse().map((x) => ({ name: x.name || "session", day: x.day, at: x.at, tokens: x.tokens, models: Object.keys(x.models || {}), usd: x.usd, turns: x.turns || null })),
+    breakdown: lastBreakdown,
+    updated: Object.fromEntries(sources.map((src) => [src, rows.filter((r) => r.source === src).map((r) => r.at).sort().pop()])),
+  };
+}
+
+function insertCost(repo, c) {
+  const source = String(c.source || "").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40);
+  if (!source) throw new Error("source is required (aws, vercel, neon, anthropic, claude-code, ...)");
+  const day = c.day && /^\d{4}-\d{2}-\d{2}$/.test(c.day) ? c.day : new Date().toISOString().slice(0, 10);
+  const usd = c.usd == null || c.usd === "" || Number.isNaN(Number(c.usd)) ? null : Math.round(Number(c.usd) * 100) / 100;
+  if (source !== "claude-code" && usd == null) throw new Error("usd is required for provider costs");
+  const key = String(c.key || c.session_id || day).slice(0, 100);
+  const models = {};
+  for (const [m, t] of Object.entries(c.models || {})) models[String(m).slice(0, 60)] = Object.fromEntries(["input", "output", "cache_write_5m", "cache_write_1h", "cache_read"].map((k) => [k, Math.max(0, Number(t?.[k]) || 0)]));
+  const breakdown = c.breakdown && typeof c.breakdown === "object" ? Object.fromEntries(Object.entries(c.breakdown).slice(0, 40).map(([k, v]) => [String(k).slice(0, 60), Math.round(Number(v) * 100) / 100])) : null;
+  const body = JSON.stringify({ name: String(c.name || "").slice(0, 80), models, breakdown, turns: Number(c.turns) || null, note: String(c.note || "").slice(0, 300) });
+  db.prepare("INSERT INTO costs (repo, source, key, day, usd, body, at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(repo, source, key) DO UPDATE SET day = excluded.day, usd = excluded.usd, body = excluded.body, at = excluded.at").run(repo, source, key, day, usd, body, new Date().toISOString());
+}
+
 // --- judging monitors (the /monitor-meta rules, plus the chronic ratio) -------------------
 const AGENT_BRANCH = /^(claude\/|codex\/|fix\/pr-sweep|audit|fix-issues|fix\/issue-|agent\/)/;
 function judge(factory, repo) {
@@ -471,6 +549,7 @@ async function snapshot(repoRow) {
     skills: factory.skills,
     ci,
     metrics,
+    costs: readCosts(repo, factory.prices),
     notes: factory.notes,
   };
 }
@@ -492,7 +571,7 @@ function refresh(row) {
 }
 const FRESH_MS = 60e3;
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 3;
+const SNAP_V = 4;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -613,6 +692,8 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .line.pr .meta{display:flex;align-items:center;gap:8px}
 .agent-tag{font:500 11px var(--f);color:#fff;background:var(--ink);border-radius:6px;padding:1px 6px}
 @media(max-width:520px){.line.pr .meta code.branch{display:none}}
+.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
+.costs-fold{margin:-16px 0 32px}.cost-note{color:var(--faint);font-size:12px;margin-top:8px}.costs-fold .line .meta b{color:var(--ink);font-weight:600}
 #ci-live{margin-bottom:32px}#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
 .live-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}.live-head h2{margin:0}
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--empty)}.live-dot[data-on="0"]{background:var(--ok)}.live-dot[data-on="1"]{background:var(--warn);box-shadow:0 0 0 0 rgba(240,169,44,.6)}
@@ -799,6 +880,25 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   };
   const prLine = (p, kind, when, right = "") => `<a class="line pr" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="name">${PR_ICON[kind]}<span><span class="pr-title">${esc(p.title)}</span><span class="sub">#${p.number}${p.author ? ` · ${esc(p.author)}` : ""} · ${when}</span></span></span><span class="meta"><code class="branch">${esc(p.branch)}</code>${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}${right}</span></a>`;
   const ciTag = (p) => `<span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}"${p.ci === "running" ? " data-run" : ""}>${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span>`;
+  const C = s.costs;
+  const SRC_COLOR = ["#14161c", "#5b6cff", "#2fb36b", "#f0a92c", "#e5484d", "#8250df", "#0ea5b7", "#9a9ea5"];
+  const srcColor = (k) => (k === "claude-code" ? "#d97757" : SRC_COLOR[(C?.sources || []).filter((x) => x !== "claude-code").indexOf(k) % SRC_COLOR.length]);
+  const srcName = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
+  const usd = (n) => (n == null ? "–" : n >= 1000 ? "$" + Math.round(n).toLocaleString("en-US") : "$" + n.toFixed(n < 10 ? 2 : 0));
+  const tk = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n || 0));
+  const maxCost = C ? Math.max(1e-9, ...C.per_day.map((p) => p.total)) : 1;
+  const costs = !C ? "" : `
+    <div class="group stats">
+      <div class="stat"><b>${usd(C.total_usd)}</b><span>Spent in ${WINDOW} days</span><small>${C.sources.map((k) => `${srcName(k)} ${usd(C.total[k])}`).join(" · ")}</small></div>
+      <div class="stat"><b>${usd(C.yesterday)}</b><span>Yesterday</span><small>${usd(C.avg7)} a day over the last 7</small></div>
+      <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud sessions in ${WINDOW} days</small></div>
+      <div class="stat"><b>${C.sessions_30d ? tk(C.tokens_30d / C.sessions_30d) : "–"}</b><span>Tokens per session</span><small>average</small></div>
+      <div class="chart" aria-label="Spend per day">
+        <div class="cols">${C.per_day.map((p) => `<div title="${p.d} · ${usd(p.total)}${Object.keys(p.by).length ? " · " + Object.entries(p.by).map(([k, v]) => `${srcName(k)} ${usd(v)}`).join(", ") : ""}${p.tokens ? ` · ${tk(p.tokens)} tokens` : ""}"><i class="stack" style="height:${(p.total / maxCost) * 100}%">${C.sources.filter((k) => p.by[k]).map((k) => `<em style="flex:${p.by[k]};background:${srcColor(k)}"></em>`).join("")}</i></div>`).join("")}</div>
+        <div class="axis"><span>Spend per day</span><span class="rule"></span>${C.sources.map((k) => `<span><span class="key" style="background:${srcColor(k)}"></span> ${srcName(k)}</span>`).join("")}</div>
+      </div>
+    </div>
+    ${C.sessions.length ? `<details class="fold costs-fold"><summary>Last ${C.sessions.length} Claude Code sessions</summary><div class="group" style="margin-top:10px">${C.sessions.map((x) => `<div class="line"><span class="name"><code>/${esc(x.name)}</code><span class="sub">${ago(x.at)} · ${esc(x.models.join(", "))}${x.turns ? ` · ${x.turns} turns` : ""}</span></span><span class="meta"><b>${tk(x.tokens.total)}</b> tokens <span class="sub">${tk(x.tokens.input + x.tokens.cache_write)} in · ${tk(x.tokens.cache_read)} cached · ${tk(x.tokens.output)} out${x.usd != null ? ` · ~${usd(x.usd)}` : ""}</span></span></div>`).join("")}</div><div class="cost-note">Dollars are estimated at API list prices. On a Claude subscription they show what the same tokens would cost, not what you pay. A model with no known price shows tokens only; set it under <code>prices</code> in <code>.claude/factory.json</code>.</div></details>` : ""}`;
   const prTabs = [
     ["open", "Open", s.queue.prs.map((p) => prLine(p, p.draft ? "draft" : "open", `opened ${ago(p.created_at)}${p.draft ? " · draft" : ""}`, ciTag(p)))],
     ["merged", "Merged", (s.queue.merged || []).slice(0, 15).map((p) => prLine(p, "merged", `merged ${ago(p.merged_at)}`))],
@@ -840,6 +940,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <section id="ci-live" aria-live="polite"><div class="live-head"><h2>Actions</h2><span class="live-dot"></span><span class="live-meta">Checking…</span></div></section>
 
     ${metrics}
+
+    ${costs ? `<h2>Costs</h2>${costs}` : ""}
 
     <h2>Monitors</h2>
     ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet.${onboarding ? " Finish the setup above." : ""}</span></div></div>`}
@@ -927,6 +1029,15 @@ createServer(async (req, res) => {
     if (url.pathname === "/healthz") return send(res, 200, "ok", { "content-type": "text/plain" });
     if (url.pathname === "/install.sh") return send(res, 200, INSTALL.replaceAll("__ORIGIN__", origin), { "content-type": "text/x-shellscript; charset=utf-8" });
 
+    if (url.pathname === "/api/cost" && req.method === "POST") {
+      const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      const repo = key && db.prepare("SELECT full_name FROM repos WHERE ingest_key = ?").get(key);
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const list = Array.isArray(body) ? body : [body];
+      for (const c of list) insertCost(repo.full_name, c);
+      return json(res, 200, { ok: true, stored: list.length });
+    }
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
       const repo = key && db.prepare("SELECT full_name FROM repos WHERE ingest_key = ?").get(key);

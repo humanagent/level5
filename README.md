@@ -15,7 +15,8 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 - **Last 30 days**: PRs merged (and the share merged by agents), median time to merge, issues
   closed against opened, CI pass rate, merges per day.
 - **CI**: every active workflow with 30 days of pass/fail bars.
-- **Open PRs and issues.**
+- **Costs**: daily spend per provider (AWS, Vercel, Neon...) and tokens per Claude Code session.
+- **Pull requests**: open (with CI), merged and closed, and open issues.
 
 ## How the data gets in
 
@@ -36,6 +37,7 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 
 - [Heartbeats](docs/heartbeats.md): the API, the installer, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
+- [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [How Hush judges](docs/judging.md): monitor states, routine evidence, the banner, CI and metrics.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
 

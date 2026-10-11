@@ -86,3 +86,13 @@ notification (the bell) when it crosses its limit, at most once per period.
 Rules are checked every time the repo refreshes and every time costs are posted. Each shows its
 current value against its limit. They belong to the repo: a rule id is only accepted together with
 the repo it was created on.
+
+## Map
+
+A 3D view of every service the factory pays for, from the same cost rows: one island per provider,
+one block per service (each AWS service from the Cost Explorer breakdown; providers that report a
+single total are one block). Height is the spend over 30 days; color is the last 7 complete days
+against the 7 before (orange rising, blue falling, grey steady), red while a price rule on that
+service is firing. Drag to rotate, scroll to zoom, hover for the numbers, click a block for the
+service's window with its daily spend. Built with three.js (loaded from jsDelivr only on this view);
+the list under it has the same numbers if WebGL is not available.

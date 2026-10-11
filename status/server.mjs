@@ -398,6 +398,7 @@ function sessionUsd(models, overrides) {
   }
   return Math.round(usd * 100) / 100;
 }
+const srcLabel = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
 async function readCosts(repoId, prices) {
   const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
   const rows = (await db.all("SELECT source, key, day, usd, body, at FROM costs WHERE repo_id = $1 AND day >= $2 ORDER BY day", repoId, days[0])).map((r) => ({ ...r, ...JSON.parse(r.body) }));
@@ -418,6 +419,25 @@ async function readCosts(repoId, prices) {
   const total = {};
   for (const p of perDay) for (const [k, v] of Object.entries(p.by)) total[k] = (total[k] || 0) + v;
   const last7 = perDay.slice(-8, -1);
+  // per service: every breakdown key of every provider (AWS services), plus providers that only
+  // report a total as one block each; 30 daily values, last 7 days against the 7 before
+  const svc = {};
+  const addSvc = (provider, name, d, v) => {
+    const k = `${provider}/${name}`;
+    const x = (svc[k] ??= { key: k, provider, name, per_day: days.map(() => 0) });
+    const i = days.indexOf(d);
+    if (i >= 0) x.per_day[i] += v;
+  };
+  for (const r of providers) {
+    if (r.usd == null) continue;
+    const parts = r.breakdown && Object.keys(r.breakdown).length ? Object.entries(r.breakdown) : [[srcLabel(r.source), r.usd]];
+    for (const [name, v] of parts) addSvc(r.source, name, r.day, Number(v) || 0);
+  }
+  for (const x of sessions) if (x.usd != null) addSvc("claude-code", "Claude Code sessions", x.day, x.usd);
+  const services = Object.values(svc).map((x) => {
+    const total = x.per_day.reduce((a, b) => a + b, 0), last7 = x.per_day.slice(-8, -1).reduce((a, b) => a + b, 0), prev7 = x.per_day.slice(-15, -8).reduce((a, b) => a + b, 0);
+    return { ...x, per_day: x.per_day.map((v) => Math.round(v * 100) / 100), total: Math.round(total * 100) / 100, last7: Math.round(last7 * 100) / 100, prev7: Math.round(prev7 * 100) / 100, trend: prev7 > 0.5 ? (last7 - prev7) / prev7 : last7 > 0.5 ? 1 : 0 };
+  }).filter((x) => x.total >= 0.01).sort((a, b) => b.total - a.total).slice(0, 60);
   const lastBreakdown = {};
   for (const r of providers) if (r.breakdown) lastBreakdown[r.source] = { day: r.day, breakdown: r.breakdown };
   return {
@@ -431,6 +451,8 @@ async function readCosts(repoId, prices) {
     sessions_30d: sessions.length,
     sessions: sessions.slice(-20).reverse().map((x) => ({ name: x.name || "session", day: x.day, at: x.at, tokens: x.tokens, models: Object.keys(x.models || {}), usd: x.usd, turns: x.turns || null })),
     breakdown: lastBreakdown,
+    services,
+    days,
     updated: Object.fromEntries(sources.map((src) => [src, rows.filter((r) => r.source === src).map((r) => r.at).sort().pop()])),
   };
 }
@@ -754,7 +776,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 7;
+const SNAP_V = 8;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -976,6 +998,17 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .dow{display:flex;gap:6px;flex-wrap:wrap}.dow-i{flex-direction:row!important;align-items:center}.dow-i input{position:absolute;opacity:0;pointer-events:none}
 .dow-i span{display:inline-block;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-weight:500;color:var(--ink);cursor:pointer;user-select:none}.dow-i input:checked+span{background:var(--squid,#232f3e);border-color:var(--squid,#232f3e);color:#fff}.dow-i input:focus-visible+span{outline:2px solid var(--link,#0073bb)}
 .f-actions{display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:6px}.f-msg{flex:1;font-size:13px;font-weight:400;color:var(--muted)}
+.map-wrap{position:relative}
+.svc-map{position:relative;height:min(560px,62vh);border-radius:10px;overflow:hidden;background:radial-gradient(120% 90% at 50% 0%,#ffffff 0,#eef1f4 60%,#e3e8ee 100%);box-shadow:var(--shadow,0 0 0 1px var(--line))}
+.svc-map canvas{display:block;width:100%!important;height:100%!important;cursor:grab}.svc-map canvas:active{cursor:grabbing}
+.map-hint{position:absolute;left:14px;bottom:12px;font-size:12px;color:var(--faint);pointer-events:none;z-index:2}
+.map-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.map-label,.map-island{position:absolute;left:0;top:0;white-space:nowrap;font:600 11.5px var(--f);color:var(--ink);background:rgba(255,255,255,.88);padding:2px 7px;border-radius:5px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.map-label.alarm{background:var(--bad);color:#fff}
+.map-island{background:var(--squid,#232f3e);color:#fff;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
+.map-tip{position:absolute;z-index:3;width:228px;display:grid;gap:2px;padding:10px 12px;border-radius:8px;background:var(--squid,#232f3e);color:#d5dbdb;font-size:12px;pointer-events:none;box-shadow:0 8px 24px -8px rgba(0,0,0,.4)}.map-tip b{color:#fff;font-size:13px}
+.map-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;color:var(--muted)}.map-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.w-cols{height:90px;margin-bottom:6px}.w-cols i{background:var(--squid,#232f3e)}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -1098,7 +1131,7 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "setup"];
+const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{color:var(--accent);font-weight:700;box-shadow:inset 3px 0 var(--accent)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
@@ -1196,8 +1229,111 @@ try{await post(base()+(f.dataset.ruleId?"/"+f.dataset.ruleId:""),b);msg.textCont
 document.addEventListener("click",async ev=>{const b=ev.target.closest("[data-rule-act]");if(!b)return;ev.preventDefault();ev.stopPropagation();const act=b.dataset.ruleAct,id=b.dataset.id;
 if(act==="delete"&&!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to delete";return}b.disabled=true;
 try{await post(base()+"/"+id+"/"+act);if(act==="delete"){const w=b.closest(".win");w&&w.querySelector('[data-act="close"]').click()}}catch(x){b.textContent="Failed"}b.disabled=false},true)})()</script>`;
+const MAP_JS = `<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+const M = window.hushMap || (window.hushMap = {});
+const COLORS = { up: 0xec7211, flat: 0x5b6b7c, down: 0x2f7fc1, alarm: 0xd13212 };
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+async function build() {
+  const host = document.getElementById("svc-map"), dataEl = document.getElementById("map-data");
+  if (!host || !dataEl || document.documentElement.dataset.view !== "map") return;
+  if (M.host === host) return;
+  M.dispose?.();
+  let THREE, OrbitControls;
+  try { THREE = await import("three"); ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js")); }
+  catch { host.innerHTML = '<div class="map-hint">The 3D map could not load. The list below has the same numbers.</div>'; return; }
+  const { services } = JSON.parse(dataEl.textContent);
+  const W = () => host.clientWidth, H = () => host.clientHeight;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(W(), H()); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d1d9, 1.15));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(14, 26, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40 }); scene.add(sun);
+  // islands: one per provider, blocks in a square grid inside, biggest first
+  const groups = {}; for (const s of services) (groups[s.provider] ??= []).push(s);
+  const islands = Object.entries(groups).sort((a, b) => b[1].reduce((t, x) => t + x.total, 0) - a[1].reduce((t, x) => t + x.total, 0));
+  const max = Math.max(...services.map((s) => s.total)), CELL = 1.7, FOOT = 1.25;
+  const blocks = [], labels = [];
+  let x0 = 0;
+  for (const [prov, list] of islands) {
+    const cols = Math.ceil(Math.sqrt(list.length)), rows = Math.ceil(list.length / cols), w = cols * CELL + 0.8, d = rows * CELL + 0.8;
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(w, 0.3, d), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
+    plate.position.set(x0 + w / 2, -0.15, d / 2); plate.receiveShadow = true; scene.add(plate);
+    labels.push({ text: list[0].label, pos: new THREE.Vector3(x0 + 0.3, 0.05, d + 0.6), cls: "map-island" });
+    list.forEach((s, i) => {
+      const h = 0.25 + 7 * Math.sqrt(s.total / max);
+      const color = s.alarm ? COLORS.alarm : s.trend > 0.15 ? COLORS.up : s.trend < -0.15 ? COLORS.down : COLORS.flat;
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(FOOT, h, FOOT), mat);
+      m.position.set(x0 + 0.4 + (i % cols) * CELL + CELL / 2, h / 2, 0.4 + Math.floor(i / cols) * CELL + CELL / 2);
+      m.castShadow = true; m.receiveShadow = true; m.userData = { s, h, base: color };
+      scene.add(m); blocks.push(m);
+      if (i < 3 || s.alarm) labels.push({ text: s.name.replace(/^Amazon |^AWS /, ""), pos: new THREE.Vector3(m.position.x, h + 0.3, m.position.z), cls: s.alarm ? "map-label alarm" : "map-label" });
+    });
+    x0 += w + 2.2;
+  }
+  const center = new THREE.Vector3(x0 / 2 - 1.1, 0, (Math.max(...islands.map(([, l]) => Math.ceil(l.length / Math.ceil(Math.sqrt(l.length))))) * CELL) / 2);
+  // frame the whole scene: its bounding sphere fits at any rotation
+  const sphere = new THREE.Box3().setFromObject(scene).getBoundingSphere(new THREE.Sphere());
+  center.copy(sphere.center);
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -200, 400);
+  const fit = () => { const a = W() / H(), v = sphere.radius * (a >= 1 ? 0.86 : 0.86 / a); cam.left = -v * a; cam.right = v * a; cam.top = v; cam.bottom = -v; cam.updateProjectionMatrix(); renderer.setSize(W(), H()); };
+  cam.position.set(center.x + 30, 26, center.z + 30); cam.lookAt(center); fit();
+  const controls = new OrbitControls(cam, renderer.domElement);
+  Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, autoRotate: !still, autoRotateSpeed: 0.6, minZoom: 0.5, maxZoom: 4, maxPolarAngle: Math.PI * 0.46, enablePan: false });
+  controls.target.copy(center);
+  renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false), { once: true });
+  // labels and tooltip are HTML on top of the canvas
+  const layer = document.createElement("div"); layer.className = "map-layer"; host.appendChild(layer);
+  labels.sort((a, b) => (a.cls === "map-island" ? -1 : 0) - (b.cls === "map-island" ? -1 : 0));
+  const tags = labels.map((l) => { const e = document.createElement("span"); e.className = l.cls; e.textContent = l.text; layer.appendChild(e); return { ...l, e }; });
+  const tip = document.createElement("div"); tip.className = "map-tip"; tip.hidden = true; host.appendChild(tip);
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let hover = null, down = null;
+  const money = (v) => "$" + (v >= 100 ? Math.round(v).toLocaleString("en-US") : v.toFixed(2));
+  const pick = (ev) => { const r = renderer.domElement.getBoundingClientRect(); ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, cam); return ray.intersectObjects(blocks)[0]?.object || null; };
+  renderer.domElement.addEventListener("pointermove", (ev) => {
+    const o = pick(ev);
+    if (hover && hover !== o) hover.material.emissive.setHex(0);
+    hover = o; renderer.domElement.style.cursor = o ? "pointer" : "grab";
+    if (!o) { tip.hidden = true; return; }
+    o.material.emissive.setHex(0x222222);
+    const s = o.userData.s, t = Math.abs(s.trend) < 0.05 ? "flat" : (s.trend > 0 ? "+" : "") + Math.round(s.trend * 100) + "%";
+    tip.innerHTML = "<b></b><span></span><span></span>"; tip.children[0].textContent = s.name; tip.children[1].textContent = s.label + " · " + money(s.total) + " in 30 days"; tip.children[2].textContent = money(s.last7) + " last 7 days, " + t + (s.alarm ? " · price rule firing" : "");
+    const r = host.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 240) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px"; tip.hidden = false;
+  });
+  renderer.domElement.addEventListener("pointerleave", () => { tip.hidden = true; if (hover) hover.material.emissive.setHex(0); hover = null; });
+  renderer.domElement.addEventListener("pointerdown", (ev) => (down = [ev.clientX, ev.clientY]));
+  renderer.domElement.addEventListener("pointerup", (ev) => { if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return; const o = pick(ev); if (o && window.hushOpen) window.hushOpen("service:" + o.userData.s.key); });
+  const ro = new ResizeObserver(fit); ro.observe(host);
+  const v3 = new THREE.Vector3(); let raf, t0 = performance.now();
+  const loop = (t) => {
+    raf = requestAnimationFrame(loop);
+    if (document.hidden || document.documentElement.dataset.view !== "map") return;
+    controls.update();
+    if (!still) for (const b of blocks) if (b.userData.s.alarm) { const k = 1 + 0.04 * Math.sin((t - t0) / 260); b.scale.set(k, 1, k); }
+    renderer.render(scene, cam);
+    const r = host.getBoundingClientRect();
+    const placed = [];
+    for (const g of tags) {
+      v3.copy(g.pos).project(cam);
+      const x = (v3.x + 1) / 2 * r.width, y = (1 - v3.y) / 2 * r.height, w = g.w ??= g.e.offsetWidth, h = 22;
+      const box = [x - w / 2, y - h, x + w / 2, y];
+      const clash = g.cls !== "map-island" && placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
+      g.e.style.visibility = clash ? "hidden" : "visible";
+      if (!clash) placed.push(box);
+      g.e.style.transform = "translate(" + x + "px," + y + "px) translate(-50%,-100%)";
+    }
+  };
+  raf = requestAnimationFrame(loop);
+  M.host = host;
+  M.dispose = () => { cancelAnimationFrame(raf); ro.disconnect(); controls.dispose(); renderer.dispose(); scene.traverse((o) => { o.geometry?.dispose(); o.material?.dispose?.(); }); M.host = null; };
+}
+addEventListener("hashchange", build); document.addEventListener("hush:swap", () => { M.dispose?.(); build(); }); build();
+</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1427,6 +1563,27 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         <span class="meter" data-s="${st[0]}"><i style="width:${pct.toFixed(1)}%"></i></span></span>
         <span class="meta"><span class="state" data-s="${st[0]}">${st[1]}</span><span class="sub">${fmtRule(r, r.value)} of ${r.limit == null ? "no baseline yet" : fmtRule(r, r.limit)}</span><button type="button" class="btn-plain" data-rule-act="toggle" data-id="${r.id}">${r.enabled ? "Pause" : "Resume"}</button></span></div>`;
     }).join("") : `<div class="line"><span class="hint">No price rules yet. For example: AWS above $50 a day, Claude Code tokens 50% above the 7-day average, or a month-end forecast above $1,500.</span></div>`}</div>`;
+  const SVCS = C?.services || [];
+  const firingRules = RULES.filter((r) => r.firing && r.enabled);
+  const alarmOn = (x) => firingRules.filter((r) => (r.config.source === "any" || r.config.source === x.provider) && r.config.service && x.name.toLowerCase().includes(r.config.service.toLowerCase()));
+  const trendTxt = (t) => (Math.abs(t) < 0.05 ? "flat" : `${t > 0 ? "+" : ""}${Math.round(t * 100)}%`);
+  for (const x of SVCS) {
+    const mx = Math.max(1e-9, ...x.per_day);
+    const al = alarmOn(x);
+    wins.push({ key: `service:${x.key}`, kind: srcName(x.provider), title: x.name, body: `
+      <div class="w-head">${al.length ? statePill("bad", "Price rule firing") : statePill(x.trend > 0.15 ? "warn" : "ok", x.trend > 0.15 ? "Rising" : x.trend < -0.15 ? "Falling" : "Steady")}</div>
+      <div class="cols w-cols">${x.per_day.map((v, i) => `<div title="${C.days[i]} · ${usd(v)}"><i style="height:${(v / mx) * 100}%"></i></div>`).join("")}</div>
+      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>today</span></div>
+      ${kv([["Provider", srcName(x.provider)], ["Last 30 days", usd(x.total)], ["Last 7 days", `${usd(x.last7)} <span class="faint">${trendTxt(x.trend)} vs the 7 before (${usd(x.prev7)})</span>`], ["Daily average", usd(x.total / WINDOW)], ["Price rules", al.map((r) => `<a href="#" data-open="rule:${r.id}">${esc(r.name)}</a>`).join(", ") || "none firing"]])}` });
+  }
+  const mapData = JSON.stringify({ services: SVCS.map((x) => ({ key: x.key, provider: x.provider, label: srcName(x.provider), name: x.name, total: x.total, last7: x.last7, prev7: x.prev7, trend: x.trend, alarm: alarmOn(x).length > 0 })) }).replace(/</g, "\\u003c");
+  const mapSection = SVCS.length ? `
+    <div class="map-wrap"><div id="svc-map" class="svc-map" aria-label="3D map of services by spend"><div class="map-hint">Drag to rotate · scroll to zoom · click a block</div></div>
+      <div class="map-legend"><span><i style="background:#ec7211"></i>Rising</span><span><i style="background:#5b6b7c"></i>Steady</span><span><i style="background:#2f7fc1"></i>Falling</span><span><i style="background:#d13212"></i>Price rule firing</span><span class="faint">Height = spend in ${WINDOW} days</span></div></div>
+    <script type="application/json" id="map-data">${mapData}</script>
+    <h2 style="margin-top:28px">Services</h2>
+    <div class="group">${SVCS.map((x) => `<div class="line openable" data-open="service:${esc(x.key)}" role="button" tabindex="0"><span class="name">${esc(x.name)}<span class="sub">${srcName(x.provider)}</span></span><span class="meta"><b>${usd(x.total)}</b> <span class="sub">${usd(x.last7)} last 7 days · ${trendTxt(x.trend)}${alarmOn(x).length ? ' · <span style="color:var(--bad)">rule firing</span>' : ""}</span></span></div>`).join("")}</div>`
+    : `<div class="group"><div class="line"><span class="hint">The map draws every service you spend on, from the cost data. Nothing has arrived yet: see <a href="#setup">Setup</a>, step 4.</span></div></div>`;
   const winTemplates = `<div id="win-tpl" hidden>${wins.map((w) => `<template data-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-title="${esc(w.title)}" data-href="${esc(w.href || "")}">${w.body}</template>`).join("")}</div>`;
 
   const incidents = s.queue.issues.length
@@ -1456,6 +1613,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
 
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
   const NAV_ICON = {
+    map: `<path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z"/><path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2"/>`,
     assistant: `<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/>`,
     overview: `<path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z"/>`,
     monitors: `<path d="M1.5 8.5h3l1.8-4.5 3.4 8.5 1.8-4h3"/>`,
@@ -1482,6 +1640,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ["prs", "Pull requests", count(s.queue.prs.length)],
     ["issues", "Issues", count(s.queue.issues.length)],
     ["costs", "Costs", C ? `<span class="nc">${usd(C.total_usd)}</span>` : ""],
+    ["map", "Map", ""],
   ];
   const navLink = ([k, label, extra]) => `<a href="#${k}" data-nav="${k}">${ico(k)}<span>${label}</span>${extra}</a>`;
   const vh = (title, desc) => `<header class="vh"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</header>`;
@@ -1545,6 +1704,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
           <form class="ask" id="ask-form"><textarea id="ask-input" rows="2" placeholder="Ask about ${esc(s.repo)}…"></textarea><button type="submit">Ask</button></form>
           <div class="chat-note">Answers come from ${esc(ASK_MODEL)} on OpenRouter, from this page's data. They can be wrong; check the source.</div>
         </div>`)}
+      ${view("map", `${vh("Map", "Every service the factory pays for, as a 3D block: height is what it cost in the last 30 days, color is where it is heading.")}${mapSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>

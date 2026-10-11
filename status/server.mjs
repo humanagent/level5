@@ -353,7 +353,8 @@ async function readLive(token, repo) {
 // --- judging monitors (the /monitor-meta rules, plus the chronic ratio) -------------------
 const AGENT_BRANCH = /^(claude\/|codex\/|fix\/pr-sweep|audit|fix-issues|fix\/issue-|agent\/)/;
 function judge(factory, repo) {
-  const since = new Date(Date.now() - WINDOW * 864e5).toISOString();
+  const WEEKS = 12;
+  const since = new Date(Date.now() - WEEKS * 7 * 864e5).toISOString();
   const beats = db.prepare("SELECT monitor, ts, status, body FROM heartbeats WHERE repo = ? AND ts >= ? ORDER BY ts DESC").all(repo, since).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
   const roster = [...factory.monitors];
   // A SessionEnd beat named after a declared routine's slash command is evidence for that
@@ -387,14 +388,26 @@ function judge(factory, repo) {
     else if (mine[1] && last.status !== "ok" && mine[1].status !== "ok") [state, why] = ["degraded", "two runs in a row not ok"];
     else if (last.status !== "ok") [state, why] = ["warn", last.note || `last run ${last.status}`];
     if (m.unlisted && state === "dead") [state, why] = ["retired", "stopped beating and is not in the roster"];
+    const worst = (list) => list.reduce((w, b) => (!w || RANK[b.status] > RANK[w] ? b.status : w), "");
+    // Weekly monitors get one bar per week, so a monitor that runs once a week reads as a solid
+    // line, not one green bar between six grey ones.
+    if (m.cadence === "weekly") {
+      const buckets = [...Array(WEEKS)].map((_, i) => {
+        const end = Date.now() - (WEEKS - 1 - i) * 7 * 864e5, start = end - 7 * 864e5;
+        const inWeek = mine.filter((b) => { const t = new Date(b.ts).getTime(); return t > start && t <= end; });
+        return { s: worst(inWeek), label: `Week to ${new Date(end).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })}` };
+      });
+      return { id: m.id, cadence: "weekly", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, buckets, span: `${WEEKS} weeks ago`, filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20) };
+    }
     const byDay = {};
     for (const b of mine) {
       const d = b.ts.slice(0, 10);
       if (!byDay[d] || RANK[b.status] > RANK[byDay[d]]) byDay[d] = b.status;
     }
-    return { id: m.id, cadence: m.cadence || "daily", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, days: days.map((d) => byDay[d] || ""), filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20) };
+    return { id: m.id, cadence: m.cadence || "daily", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, buckets: days.map((d) => ({ s: byDay[d] || "", label: new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }) })), span: `${WINDOW} days ago`, filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20) };
   });
-  return { monitors, beats: beats.length, sessions };
+  const cut = new Date(Date.now() - WINDOW * 864e5).toISOString();
+  return { monitors, beats: beats.filter((b) => b.ts >= cut).length, sessions };
 }
 
 function routineState(r, monitors, merged, sessions = {}) {
@@ -436,6 +449,7 @@ async function snapshot(repoRow) {
   const overall = bad.length ? "down" : warn.length || lateRoutines.length || redCi.length ? "degraded" : "ok";
   const day = new Date(Date.now() - 864e5).toISOString();
   return {
+    v: SNAP_V,
     repo,
     meta: factory.meta,
     generated_at: new Date().toISOString(),
@@ -468,6 +482,8 @@ function refresh(row) {
   return inflight.get(row.full_name);
 }
 const FRESH_MS = 60e3;
+// Bump when the snapshot's shape changes, so a page never renders one saved by older code.
+const SNAP_V = 2;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -500,7 +516,7 @@ const CSS = `
 ::selection{background:var(--dusk);color:#fff}
 a{color:var(--ink)}a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
 code{font-family:var(--mono);font-size:.86em}
-.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:32px 72px}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:32px 72px}
 header.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:36px}
 .logo{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:18px;letter-spacing:-.02em;margin:0;text-decoration:none;color:var(--ink)}
 .crumb{color:var(--faint);font-weight:400;margin-left:2px}.crumb b{color:var(--ink);font-weight:500}
@@ -572,6 +588,9 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .cmd{position:relative;margin:8px 0 6px}.cmd pre{margin:0;padding-right:72px;white-space:pre-wrap;word-break:break-all}
 .copy{position:absolute;top:7px;right:7px;font:500 12px var(--f);border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 9px;cursor:pointer;color:var(--ink)}.copy:hover{background:#f6f7f8}
 .more{margin-top:8px}.more summary{cursor:pointer;color:var(--muted);font-size:13px}.more pre{margin:6px 0 12px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}
+.grid2>.row{background:var(--bg);border-top:0}.grid2>.row:last-child:nth-child(odd){grid-column:1/-1}
+@media(max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
 #ci-live{margin-bottom:32px}#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
 .live-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}.live-head h2{margin:0}
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--empty)}.live-dot[data-on="0"]{background:var(--ok)}.live-dot[data-on="1"]{background:var(--warn);box-shadow:0 0 0 0 rgba(240,169,44,.6)}
@@ -659,7 +678,7 @@ function skeletonPage(repo) {
     <h2>Last ${WINDOW} days</h2>
     <div class="group stats">${stat.repeat(4)}</div>
     <h2>Monitors</h2>
-    <div class="group">${[120, 90, 140, 100].map(row).join("")}</div>
+    <div class="group grid2">${[120, 90, 140, 100].map(row).join("")}</div>
     <h2>Routines</h2>
     <div class="group">${row(110)}${row(80)}</div>
     <p class="sk-note" role="status">The first read of a repo takes a few seconds. After that it opens instantly.</p>
@@ -712,15 +731,15 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const banner = s.overall === "ok" ? "All systems operational" : s.overall === "degraded" ? "Degraded performance" : "Monitors need attention";
   const monRows = s.monitors.map((m) => {
     const [ps, label] = STATE[m.state] || ["none", m.state];
-    const ran = m.days.filter(Boolean).length;
-    const pct = ran ? Math.round((m.days.filter((d) => d === "ok").length / ran) * 1000) / 10 : 0;
-    const bars = m.days.map((d, i) => `<i data-s="${d}" title="${new Date(Date.now() - (m.days.length - 1 - i) * 864e5).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })} · ${d || "no run"}"></i>`).join("");
+    const ran = m.buckets.filter((b) => b.s).length;
+    const pct = ran ? Math.round((m.buckets.filter((b) => b.s === "ok").length / ran) * 1000) / 10 : 0;
+    const bars = m.buckets.map((b) => `<i data-s="${b.s}" title="${b.label} · ${b.s || "no run"}"></i>`).join("");
     const swept = m.last?.swept ? Object.entries(m.last.swept).map(([k, v]) => `${esc(k)} <code>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</code>`).join(" · ") : "";
     const filed = m.filed.map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ");
     return `<details class="row"><summary>
       <div class="row-head"><span class="name"><span class="mon-id">${esc(m.id)}</span><small>${m.cadence === "weekly" ? "weekly" : "daily"}${m.unlisted ? " · not in roster" : ""}</small></span><span class="state" data-s="${ps}">${label}</span></div>
       <div class="bars">${bars}</div>
-      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>${pct}% ok</span><span class="rule"></span><span>today</span></div>
+      <div class="axis"><span>${m.span}</span><span class="rule"></span><span>${pct}% ok</span><span class="rule"></span><span>today</span></div>
     </summary><div class="detail">${m.why ? `<div>${esc(m.why)}</div>` : ""}<div>Last heartbeat ${ago(m.last?.ts)}${swept ? ` · ${swept}` : ""}</div>${m.last?.note ? `<div>${esc(m.last.note)}</div>` : ""}<div>${filed ? `Filed ${filed}` : `Filed nothing in ${WINDOW} days`}</div></div></details>`;
   }).join("");
 
@@ -787,12 +806,12 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ${metrics}
 
     <h2>Monitors</h2>
-    ${s.monitors.length ? `<div class="group">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet.${onboarding ? " Finish the setup above." : ""}</span></div></div>`}
+    ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet.${onboarding ? " Finish the setup above." : ""}</span></div></div>`}
 
     <h2>Routines</h2>
     ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}
 
-    ${ci ? `<h2>CI · GitHub Actions</h2><div class="group">${ci}</div>` : ""}
+    ${ci ? `<h2>CI · GitHub Actions</h2><div class="group grid2">${ci}</div>` : ""}
     ${prs ? `<h2>Open pull requests</h2><div class="group">${prs}</div>` : ""}
 
     <h2>Open issues</h2>
@@ -943,7 +962,8 @@ createServer(async (req, res) => {
       row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
       if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: db.prepare("SELECT COUNT(*) n FROM heartbeats WHERE repo = ?").get(row.full_name).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
-      const saved = db.prepare("SELECT at, body FROM snapshots WHERE repo = ?").get(row.full_name);
+      let saved = db.prepare("SELECT at, body FROM snapshots WHERE repo = ?").get(row.full_name);
+      if (saved && JSON.parse(saved.body).v !== SNAP_V) saved = null;
       const fresh = saved && Date.now() - saved.at < FRESH_MS;
       if (m[2]) return json(res, 200, fresh ? JSON.parse(saved.body) : await refresh(row));
       // ?partial=1 is the page's own background fetch: always a fresh read (deduped, and

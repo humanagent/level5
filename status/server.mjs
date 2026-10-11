@@ -93,6 +93,22 @@ function appConfig() {
   const raw = getSetting("app");
   return raw ? JSON.parse(open(raw)) : null;
 }
+// The app's name and slug can be changed on GitHub at any time (Settings → Developer settings →
+// GitHub Apps → Edit). The install link uses the slug, so keep the stored copy in step.
+async function syncAppSlug() {
+  const app = appConfig();
+  if (!app) return;
+  const r = await fetch("https://api.github.com/app", { headers: { authorization: `Bearer ${appJwt(app)}`, accept: "application/vnd.github+json", "user-agent": "factory-status" } }).catch(() => null);
+  if (!r?.ok) return;
+  const a = await r.json();
+  if (a.slug && (a.slug !== app.slug || a.name !== app.name)) {
+    setSetting("app", seal(JSON.stringify({ ...app, slug: a.slug, name: a.name })));
+    console.log(`app renamed: ${app.slug} -> ${a.slug}`);
+  }
+}
+setTimeout(() => syncAppSlug().catch(() => {}), 2000);
+setInterval(() => syncAppSlug().catch(() => {}), 5 * 60e3);
+
 function appJwt(app) {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const now = Math.floor(Date.now() / 1000);
@@ -1127,7 +1143,7 @@ function homePage(user, repos = [], msg = "") {
 
 function setupPage(origin, t) {
   const manifest = {
-    name: `Factory Status ${randomBytes(2).toString("hex")}`,
+    name: `Hush ${randomBytes(2).toString("hex")}`,
     url: origin,
     hook_attributes: { url: `${origin}/api/github/webhook`, active: false },
     redirect_url: `${origin}/setup/callback/${encodeURIComponent(t)}`,

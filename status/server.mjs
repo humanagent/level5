@@ -16,6 +16,7 @@
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { openDb } from "./db.mjs";
 import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -23,6 +24,10 @@ import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
+// Local dev (npm run dev): signed in as DEV_USER, GitHub read with your own `gh` session instead of
+// the GitHub App, and the database a Neon branch from .env.local. Never on in production.
+const DEV = !!process.env.DEV_USER && process.env.NODE_ENV !== "production";
+const DEV_TOKEN = DEV ? process.env.DEV_GITHUB_TOKEN || execSync("gh auth token").toString().trim() : null;
 const DATA = process.env.DATA_DIR || "./data";
 const SECRET = process.env.SECRET || "dev-secret-change-me";
 const KEY = createHash("sha256").update(SECRET).digest();
@@ -55,6 +60,7 @@ function sessionCookie(login) {
   return `fs=${v}.${sign(v)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 86400}`;
 }
 async function sessionUser(req) {
+  if (DEV) return { login: process.env.DEV_USER, token: "" };
   const m = (req.headers.cookie || "").match(/(?:^|;\s*)fs=([^;]+)/);
   if (!m) return null;
   const parts = m[1].split(".");
@@ -83,7 +89,12 @@ let APP = null;
 const setSetting = (k, v) => db.run("INSERT INTO settings (k, v) VALUES ($1, $2) ON CONFLICT(k) DO UPDATE SET v = excluded.v", k, v);
 async function loadApp() {
   const r = await db.one("SELECT v FROM settings WHERE k = $1", "app");
-  APP = r ? JSON.parse(open(r.v)) : null;
+  try {
+    APP = r ? JSON.parse(open(r.v)) : null;
+  } catch {
+    APP = null; // sealed with another SECRET (a dev copy of production): unreadable here
+  }
+  if (DEV && !APP) APP = { slug: "factory-status-cae6", dev: true };
 }
 async function saveApp(app) {
   await setSetting("app", seal(JSON.stringify(app)));
@@ -96,7 +107,7 @@ function appConfig() {
 // GitHub Apps → Edit). The install link uses the slug, so keep the stored copy in step.
 async function syncAppSlug() {
   const app = appConfig();
-  if (!app) return;
+  if (!app || app.dev) return;
   const r = await fetch("https://api.github.com/app", { headers: { authorization: `Bearer ${appJwt(app)}`, accept: "application/vnd.github+json", "user-agent": "factory-status" } }).catch(() => null);
   if (!r?.ok) return;
   const a = await r.json();
@@ -116,6 +127,7 @@ function appJwt(app) {
 }
 const instTokens = new Map();
 async function installationToken(installationId) {
+  if (DEV) return DEV_TOKEN;
   const hit = instTokens.get(installationId);
   if (hit && hit.exp - Date.now() > 5 * 60e3) return hit.token;
   const r = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
@@ -129,6 +141,10 @@ async function installationToken(installationId) {
 }
 // repos this person can see through their installations of the app
 async function userRepos(user) {
+  if (DEV) {
+    const rows = await db.all("SELECT r.id, r.full_name, r.installation_id, a.id AS aid, a.login, a.type FROM repos r JOIN accounts a ON a.id = r.account_id ORDER BY r.full_name");
+    return rows.map((r) => ({ id: Number(r.id), full_name: r.full_name, private: true, installation_id: Number(r.installation_id), account: { id: Number(r.aid), login: r.login, type: r.type } }));
+  }
   return cached(`userrepos:${user.login}`, 3 * 60e3, async () => {
     const token = open(user.token);
     const inst = await gh(token, "user/installations?per_page=100");
@@ -1974,13 +1990,17 @@ async function migrateLocal() {
 }
 
 await loadApp();
-await migrateLegacy().catch((e) => console.error("migrate failed:", e));
-await migrateLocal().catch((e) => console.error("migrate local failed:", e));
+if (!DEV) {
+  await migrateLegacy().catch((e) => console.error("migrate failed:", e));
+  await migrateLocal().catch((e) => console.error("migrate local failed:", e));
+}
+if (DEV) console.log(`dev mode: signed in as ${process.env.DEV_USER}, GitHub read with your gh session, storage ${db.kind}`);
 await loadApp();
 
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
-  const origin = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+  const origin = `${req.headers["x-forwarded-proto"] || (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https")}://${host}`;
   try {
     if (url.pathname === "/healthz") return send(res, 200, "ok", { "content-type": "text/plain" });
     if (url.pathname === "/install.sh") return send(res, 200, INSTALL.replaceAll("__ORIGIN__", origin), { "content-type": "text/x-shellscript; charset=utf-8" });

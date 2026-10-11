@@ -55,6 +55,19 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 | `status/Dockerfile`, `status/fly.toml` | Fly app `factory-status`, region `gru`, volume `factory_data` on `/data`. |
 | `index.html`, `PRODUCT.md`, `.impeccable/` | The earlier landing prototype (a claude.ai artifact) and its product brief. |
 
+## Local dev
+
+```sh
+cd status && npm install
+npm run dev        # http://localhost:8787, restarts on save
+```
+
+`status/.env.local` (not in git) sets `DATABASE_URL` to the Neon branch `dev`, a copy of production,
+plus `DEV_USER` and `OPENROUTER_API_KEY`. In dev mode you are signed in as `DEV_USER`, GitHub is read
+with your own `gh auth token` instead of the GitHub App, and nothing is migrated. It never turns on
+in production (`NODE_ENV=production` in the image). To refresh the copy, reset the `dev` branch from
+`main` in Neon.
+
 ## Run and deploy
 
 ```sh

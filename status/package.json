@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },
-  "scripts": { "start": "node --no-warnings server.mjs" },
+  "scripts": { "start": "node --no-warnings server.mjs", "dev": "node --watch --env-file=.env.local --no-warnings server.mjs" },
   "dependencies": { "postgres": "^3.4.5" }
 }

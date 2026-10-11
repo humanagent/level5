@@ -38,6 +38,7 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS hb_unique ON heartbeats(repo, monitor, ts);
   CREATE INDEX IF NOT EXISTS hb_repo_ts ON heartbeats(repo, ts);
   CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS snapshots (repo TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT NOT NULL);
 `);
 try { db.exec("ALTER TABLE repos ADD COLUMN installation_id INTEGER"); } catch {}
 
@@ -416,6 +417,23 @@ async function snapshot(repoRow) {
   };
 }
 
+// One GitHub read per repo at a time. The result is kept in SQLite so a page can render
+// the last snapshot instantly, even right after the machine wakes up, and refresh behind it.
+const inflight = new Map();
+function refresh(row) {
+  if (!inflight.has(row.full_name)) {
+    const p = snapshot(row)
+      .then((s) => {
+        db.prepare("INSERT INTO snapshots (repo, at, body) VALUES (?, ?, ?) ON CONFLICT(repo) DO UPDATE SET at = excluded.at, body = excluded.body").run(row.full_name, Date.now(), JSON.stringify(s));
+        return s;
+      })
+      .finally(() => inflight.delete(row.full_name));
+    inflight.set(row.full_name, p);
+  }
+  return inflight.get(row.full_name);
+}
+const FRESH_MS = 60e3;
+
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function ago(ts) {
@@ -493,17 +511,58 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .cols em{display:block;width:100%;background:var(--ink);border-radius:2px 2px 0 0}
 .key{display:inline-block;width:9px;height:9px;background:var(--ink);border-radius:2px;margin-right:4px;vertical-align:-1px}
 @media(max-width:700px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat:nth-child(3){border-left:0}.stat:nth-child(n+3){border-top:1px solid var(--line)}}
+.sk{background:linear-gradient(90deg,#eef0f2 0,#f6f7f8 40%,#eef0f2 80%);background-size:300% 100%;border-radius:4px}
+@media (prefers-reduced-motion:no-preference){.sk{animation:sk 1.4s ease-in-out infinite}}
+@keyframes sk{0%{background-position:100% 0}100%{background-position:0 0}}
+.sk-t{display:block;height:12px}.row-head .sk-t{display:inline-block}.stat .sk-t{display:block}
+.bars i.sk{background:linear-gradient(90deg,#eef0f2 0,#f6f7f8 40%,#eef0f2 80%);background-size:3000% 100%}
+.sk-banner{background:#e3e5e8}
+.sk-note{color:var(--faint);font-size:13px;text-align:center;margin-top:8px}
+.updated::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-left:8px;vertical-align:middle;background:transparent}
+.wrap[data-loading="1"] .updated::after{background:var(--warn)}
+@media (prefers-reduced-motion:no-preference){.wrap[data-loading="1"] .updated::after{animation:beat 1s ease-in-out infinite}}
+@keyframes beat{50%{opacity:.3}}
+.wrap[data-failed="1"] .updated::after{background:var(--bad)}
 @media(max-width:520px){.wrap{padding-block:24px 56px}.row,.line{padding-inline:14px}.name small{display:block;margin-left:0}.bars{gap:1px}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ALERT = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg>`;
 const ICON = `<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23070b1c'/><path d='M5 22h8l3-8 5 16 3-8h11' fill='none' stroke='%23f0a35e' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/></svg>">`;
-const page = (title, body, { refresh } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? `<meta http-equiv="refresh" content="${refresh}">` : ""}<title>${esc(title)}</title>${ICON}${FONTS}<style>${CSS}</style></head><body><div class="wrap">${body}</div></body></html>`;
+// A live page swaps its .wrap for a fresh render: now when it was served stale or as a
+// skeleton, then every two minutes. Open <details> stay open across swaps.
+const LIVE = `<script>(()=>{const u=location.pathname+"?partial=1";let busy=0;
+const pull=async()=>{if(busy)return;busy=1;const w=document.querySelector(".wrap");w.dataset.loading="1";
+try{const r=await fetch(u,{credentials:"same-origin"});if(r.status===401){location.href="/auth/login";return}
+const d=new DOMParser().parseFromString(await r.text(),"text/html");const n=d.querySelector(".wrap");if(!n)throw 0;
+if(!r.ok)throw 0;const open=[...w.querySelectorAll("details")].map(x=>x.open);w.replaceWith(n);
+n.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true});document.title=d.title}catch(e){w.dataset.loading="";w.dataset.failed="1"}finally{busy=0}};
+if(document.body.dataset.stale)pull();setInterval(()=>{if(!document.hidden)pull()},120e3);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()})})()</script>`;
+const page = (title, body, { live, stale } = {}) =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}<style>${CSS}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap">${body}</div>${live ? LIVE : ""}</body></html>`;
+
+// What the repo page looks like while its first snapshot is being read from GitHub.
+function skeletonPage(repo) {
+  const bars = `<div class="bars">${'<i class="sk"></i>'.repeat(WINDOW)}</div>`;
+  const row = (w) => `<div class="row"><div class="row-head"><span class="sk sk-t" style="width:${w}px"></span><span class="sk sk-t" style="width:84px"></span></div>${bars}<div class="axis"><span class="sk sk-t" style="width:100%;height:8px"></span></div></div>`;
+  const stat = `<div class="stat"><span class="sk sk-t" style="width:56px;height:26px"></span><span class="sk sk-t" style="width:110px;margin-top:10px"></span><span class="sk sk-t" style="width:90px;margin-top:8px;height:8px"></span></div>`;
+  return page(`${repo} · hush`, `
+    <header class="top">${LOGO}<span class="updated">${esc(repo)} · reading GitHub…</span></header>
+    <div class="banner sk-banner"><span class="sk sk-t" style="width:200px;background:rgba(255,255,255,.55)"></span></div>
+    <p class="banner-sub"><span class="sk sk-t" style="width:62%"></span></p>
+    <h2>Last ${WINDOW} days</h2>
+    <div class="group stats">${stat.repeat(4)}</div>
+    <h2>Monitors</h2>
+    <div class="group">${[120, 90, 140, 100].map(row).join("")}</div>
+    <h2>Routines</h2>
+    <div class="group">${row(110)}${row(80)}</div>
+    <p class="sk-note" role="status">The first read of a repo takes a few seconds. After that it opens instantly.</p>
+  `, { live: true, stale: true });
+}
 
 const STATE = { alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degraded: ["bad", "Chronically degraded"], lying: ["bad", "Said ok, read nothing"], dead: ["bad", "Down"], retired: ["none", "Retired"] };
 
-function statusPage(s, user, origin, repoRow) {
+function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const repoUrl = s.meta.url;
   const banner = s.overall === "ok" ? "All systems operational" : s.overall === "degraded" ? "Degraded performance" : "Monitors need attention";
   const monRows = s.monitors.map((m) => {
@@ -615,7 +674,7 @@ function statusPage(s, user, origin, repoRow) {
     </details>` : ""}
 
     <footer><span><a href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a> · ${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span>${user ? `<a href="/">Your repos</a>` : ""}</span></footer>
-  `, { refresh: 120 });
+  `, { live: true, stale });
 }
 
 function homePage(user, repos = [], msg = "") {
@@ -757,9 +816,15 @@ createServer(async (req, res) => {
       if (!row) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at, installation_id) VALUES (?, ?, ?, ?, ?)").run(seen.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString(), seen.installation_id);
       else if (row.installation_id !== seen.installation_id) db.prepare("UPDATE repos SET installation_id = ? WHERE full_name = ?").run(seen.installation_id, seen.full_name);
       row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
-      const s = await snapshot(row);
-      if (m[2]) return json(res, 200, s);
-      return send(res, 200, statusPage(s, user, origin, row));
+      const saved = db.prepare("SELECT at, body FROM snapshots WHERE repo = ?").get(row.full_name);
+      const fresh = saved && Date.now() - saved.at < FRESH_MS;
+      if (m[2]) return json(res, 200, fresh ? JSON.parse(saved.body) : await refresh(row));
+      // ?partial=1 is the page's own background fetch: always a fresh read (deduped, and
+      // the readers keep their own short caches).
+      if (url.searchParams.has("partial")) return send(res, 200, statusPage(fresh ? JSON.parse(saved.body) : await refresh(row), user, origin, row));
+      if (saved) return send(res, 200, statusPage(JSON.parse(saved.body), user, origin, row, { stale: !fresh }));
+      refresh(row).catch((e) => console.error(e));
+      return send(res, 200, skeletonPage(row.full_name));
     }
 
     send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">This page does not exist.</p>`));

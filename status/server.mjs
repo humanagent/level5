@@ -996,6 +996,7 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .tb-count{position:absolute;top:2px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--accent,#ec7211);color:#fff;font:700 10px/16px var(--f);text-align:center}
 .notif{position:fixed;top:44px;right:12px;z-index:220;width:min(400px,calc(100vw - 24px));max-height:min(560px,calc(100vh - 60px));display:flex;flex-direction:column;background:var(--bg);border-radius:10px;box-shadow:0 0 0 1px rgba(0,28,36,.12),0 16px 40px -10px rgba(0,28,36,.4);overflow:hidden}
 .notif-h{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);font-size:14px}.notif-h .faint{font-size:12px}
+.notif-all{background:none;border:0;padding:0;color:var(--link,#0073bb);font:600 13px var(--f);cursor:pointer}.notif-all:hover{background:none;text-decoration:underline}
 .notif-list{overflow-y:auto}
 .notif-i{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:11px 16px;border-top:1px solid var(--line);text-decoration:none;color:var(--ink);font-size:13px}.notif-i:first-child{border-top:0}.notif-i:hover{background:#f9fafa}
 .notif-i.unread{background:#f2f8fd}.notif-i.unread:hover{background:#e9f3fb}
@@ -1261,11 +1262,14 @@ const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just 
 const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
-function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b><span class="faint">'+(d&&d.items.length?d.items.length+" latest":"")+"</span></div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
+function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
 async function load(){try{const r=await fetch("/api/notifications",{credentials:"same-origin"});if(r.ok){N.data=await r.json();badge();if(!panel().hidden)draw()}}catch(x){}}
-function toggle(show){const p=panel(),b=document.getElementById("tb-bell");if(show===undefined)show=p.hidden;p.hidden=!show;if(b)b.setAttribute("aria-expanded",show);if(show){draw();if(N.data&&N.data.unread){fetch("/api/notifications",{method:"POST",credentials:"same-origin"});N.data.unread=0;badge()}}}
+function toggle(show){const p=panel(),b=document.getElementById("tb-bell");if(show===undefined)show=p.hidden;p.hidden=!show;if(b)b.setAttribute("aria-expanded",show);if(show)draw()}
+function mark(ids){if(!N.data)return;const all=!ids;N.data.items.forEach(x=>{if(all||ids.includes(x.id))x.unread=false});N.data.unread=N.data.items.filter(x=>x.unread).length;badge();if(!panel().hidden)draw();
+fetch("/api/notifications",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify(all?{all:true}:{ids})})}
 document.addEventListener("click",ev=>{if(ev.target.closest("#tb-bell")){ev.preventDefault();toggle();return}
-const a=ev.target.closest(".notif-i");if(a){const here=location.pathname.replace(/[/]$/,"")==="/r/"+a.dataset.repo;if(here&&window.hushOpen&&!ev.metaKey&&!ev.ctrlKey){ev.preventDefault();toggle(false);location.hash=a.hash.slice(1);if(a.dataset.entity)window.hushOpen(a.dataset.entity)}return}
+if(ev.target.closest(".notif-all")){ev.preventDefault();mark();return}
+const a=ev.target.closest(".notif-i");if(a){if(a.classList.contains("unread"))mark([+a.dataset.id]);const here=location.pathname.replace(/[/]$/,"")==="/r/"+a.dataset.repo;if(here&&window.hushOpen&&!ev.metaKey&&!ev.ctrlKey){ev.preventDefault();toggle(false);location.hash=a.hash.slice(1);if(a.dataset.entity)window.hushOpen(a.dataset.entity)}return}
 if(!ev.target.closest("#notif-panel"))toggle(false)});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")toggle(false)});
 document.addEventListener("hush:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
@@ -2219,16 +2223,26 @@ createServer(async (req, res) => {
       const repos = await userRepos(user).catch(() => []);
       const ids = repos.map((r) => r.id);
       const seenKey = `notif_seen:${user.login}`;
+      const readKey = `notif_read:${user.login}`;
       if (req.method === "POST") {
-        await setSetting(seenKey, new Date().toISOString());
+        const b = JSON.parse((await readBody(req, 2e4)) || "{}");
+        if (Array.isArray(b.ids) && b.ids.length) {
+          const prev = JSON.parse((await db.one("SELECT v FROM settings WHERE k = $1", readKey))?.v || "[]");
+          await setSetting(readKey, JSON.stringify([...new Set([...b.ids.map(Number).filter(Boolean), ...prev])].slice(0, 500)));
+        } else {
+          await setSetting(seenKey, new Date().toISOString());
+          await setSetting(readKey, "[]");
+        }
         return json(res, 200, { ok: true });
       }
       if (!ids.length) return json(res, 200, { unread: 0, items: [] });
       const ph = ids.map((_, i) => "$" + (i + 1)).join(",");
       const items = await db.all(`SELECT e.id, e.repo_id, e.at, e.level, e.kind, e.title, e.detail, e.entity FROM events e WHERE e.repo_id IN (${ph}) ORDER BY e.at DESC, e.id DESC LIMIT 60`, ...ids);
       const seen = (await db.one("SELECT v FROM settings WHERE k = $1", seenKey))?.v || "";
+      const read = new Set(JSON.parse((await db.one("SELECT v FROM settings WHERE k = $1", `notif_read:${user.login}`))?.v || "[]"));
       const names = Object.fromEntries(repos.map((r) => [r.id, r.full_name]));
-      return json(res, 200, { unread: items.filter((e) => e.at > seen).length, items: items.map((e) => ({ ...e, repo: names[Number(e.repo_id)], unread: e.at > seen })) });
+      const out = items.map((e) => ({ ...e, id: Number(e.id), repo: names[Number(e.repo_id)], unread: e.at > seen && !read.has(Number(e.id)) }));
+      return json(res, 200, { unread: out.filter((e) => e.unread).length, items: out });
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 

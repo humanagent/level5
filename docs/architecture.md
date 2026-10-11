@@ -10,7 +10,7 @@ a 1 GB volume on `/data`).
 | GitHub App auth: manifest setup, app JWT, installation tokens, user OAuth | `server.mjs`, "GitHub App" |
 | Readers: factory files, CI, metrics, queue, live Actions | `readFactory`, `readCi`, `readMetrics`, `readQueue`, `readLive` |
 | Judging | `judge`, `routineState`, `snapshot` ([judging.md](judging.md)) |
-| HTML | `statusPage`, `skeletonPage`, `heartbeatSetup`, `landing.mjs` |
+| HTML | `statusPage` (a left-nav app: Overview, Monitors, Automations, CI, Pull requests, Issues, Costs, Setup, one view per URL hash), `skeletonPage`, `heartbeatSetup`, `landing.mjs` |
 | Heartbeat client | `install.sh` ([heartbeats.md](heartbeats.md)) |
 
 ## Storage (`/data/factory.db`)

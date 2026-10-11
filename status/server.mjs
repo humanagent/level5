@@ -694,7 +694,45 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 @media(max-width:520px){.line.pr .meta code.branch{display:none}}
 .cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
 .costs-fold{margin:-16px 0 32px}.cost-note{color:var(--faint);font-size:12px;margin-top:8px}.costs-fold .line .meta b{color:var(--ink);font-weight:600}
-#ci-live{margin-bottom:32px}#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
+.ci-live{margin-bottom:32px}
+:root{--sel:#f1f2f4}
+.app-wrap{max-width:none;padding:0}
+.app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;border-right:1px solid var(--line);padding:22px 12px 16px;display:flex;flex-direction:column;gap:18px;background:#fbfbfc}
+.side .logo{padding:0 10px}
+.repo-box{padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.repo-name{display:block;font:500 13px var(--mono);color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.repo-name:hover{text-decoration:underline}
+.repo-state{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:4px}
+.repo-state i{width:7px;height:7px;border-radius:50%;background:var(--ok)}.repo-state[data-s=degraded] i{background:var(--warn)}.repo-state[data-s=down] i{background:var(--bad)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a,.side-foot a{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:14px}
+.nav a:hover,.side-foot a:hover{background:var(--sel);color:var(--ink)}
+.ni{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.nav a span:first-of-type,.side-foot a span:first-of-type{flex:1}
+.nc{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+.nb{font:600 11px var(--f);color:#fff;background:var(--bad);border-radius:999px;min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center}.nb[data-t=warn]{background:var(--warn)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding-top:12px}
+.side-foot .updated{padding:6px 10px 0;font-size:12px;color:var(--faint)}
+.main{padding:36px 48px 80px;max-width:1120px;width:100%}
+.vh{margin-bottom:24px}.vh h1{font-size:24px;letter-spacing:-.02em;margin:0 0 4px;font-weight:600}.vh p{color:var(--muted);margin:0;max-width:70ch}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-h h3{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted);margin:0}
+.card-h a{font-size:12px;color:var(--faint);text-decoration:none}.card-h a:hover{color:var(--ink)}
+.card .big{font-size:28px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}.card .big i{font-style:normal;color:var(--faint);font-weight:500}
+.card .cap{color:var(--muted);font-size:13px;margin-top:4px}.card .cap.ok{color:var(--ok)}.card .cap.bad{color:var(--bad)}
+.mini{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;font-size:13px}.mini li{display:flex;justify-content:space-between;gap:10px}.mini li>span:first-child,.mini code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1000px){.cards{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:820px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:sticky;top:0;z-index:5;height:auto;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto}
+  .side .logo span,.repo-box,.side-foot .updated{display:none}
+  .nav{flex-direction:row}.nav a span:first-of-type,.side-foot a span:first-of-type{flex:none}
+  .nav a,.side-foot a{white-space:nowrap;padding:6px 10px}
+  .side-foot{margin:0;flex-direction:row;border:0;padding:0}
+  .main{padding:24px 16px 64px}
+}#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
 .live-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}.live-head h2{margin:0}
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--empty)}.live-dot[data-on="0"]{background:var(--ok)}.live-dot[data-on="1"]{background:var(--warn);box-shadow:0 0 0 0 rgba(240,169,44,.6)}
 @media (prefers-reduced-motion:no-preference){.live-dot[data-on="1"]{animation:ping 1.6s ease-out infinite}.gi.spin{animation:spin .9s linear infinite;transform-origin:50% 50%}.gi .pulse{animation:beat 1.2s ease-in-out infinite}.rrow.just{animation:flash 2.4s ease-out}.job-bar i{transition:width .6s ease}}
@@ -740,7 +778,7 @@ window.hushPull=pull;if(document.body.dataset.stale)pull();setInterval(()=>{if(!
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()})})()</script>`;
 // The "Actions" panel: polls /r/<repo>/live every 8 s while something runs, 30 s otherwise,
 // ticks the elapsed timers every second, and re-renders into the new .wrap after a swap.
-const ACTIONS = `<script>(()=>{const box=()=>document.getElementById("ci-live");if(!box())return;
+const ACTIONS = `<script>(()=>{const boxes=()=>document.querySelectorAll(".ci-live");if(!boxes().length)return;
 const u=location.pathname.replace(/[/]$/,"")+"/live";let data=null,prev=new Set(),timer;
 const e=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const I={
@@ -753,21 +791,27 @@ const icon=(st,c)=>st==="completed"?(c==="success"?I.success:["failure","timed_o
 const dur=ms=>{ms=Math.max(0,ms);const s=Math.floor(ms/1e3),m=Math.floor(s/60),h=Math.floor(m/60);return h?h+"h "+(m%60)+"m":m?m+"m "+String(s%60).padStart(2,"0")+"s":s+"s"};
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const verb=r=>r.status==="in_progress"?"Running":r.status==="queued"?"Queued":r.status==="waiting"?"Waiting for approval":r.status==="requested"||r.status==="pending"?"Starting":"In progress";
-function render(){const b=box();if(!b||!data)return;const a=data.active,ids=new Set(a.map(r=>r.id));
+function render(){if(!data)return;boxes().forEach(b=>draw(b,b.dataset.compact==="1"));prev=new Set(data.active.map(r=>r.id))}
+function draw(b,compact){const a=data.active;
 const done=data.recent.filter(r=>prev.has(r.id)).map(r=>r.id);
 let h='<div class="live-head"><h2>Actions</h2><span class="live-dot" data-on="'+(a.length?1:0)+'"></span><span class="live-meta">'+(a.length?a.length+" running":"Nothing running")+' · checked <span data-ago="'+e(data.at)+'">'+ago(data.at)+'</span></span></div>';
 if(!data.ok)h+='<div class="group"><div class="line"><span class="hint">Could not read Actions for this repo.</span></div></div>';
 if(a.length){h+='<div class="group run-group">'+a.map(r=>{const jobs=r.jobs.map(j=>{const pct=j.steps?Math.round(j.done/j.steps*100):0;
 return '<li class="job" data-st="'+e(j.status)+'">'+icon(j.status,j.conclusion)+'<span class="job-name">'+e(j.name)+'</span><span class="job-step">'+(j.status==="in_progress"&&j.step?e(j.step)+' <span class="faint">'+j.done+"/"+j.steps+"</span>":j.status==="completed"?"":"waiting")+'</span><span class="job-time" '+(j.status==="in_progress"&&j.started?'data-since="'+e(j.started)+'"':"")+'>'+(j.started?dur((j.completed?new Date(j.completed):Date.now())-new Date(j.started)):"")+'</span>'+(j.status==="in_progress"?'<span class="job-bar"><i style="width:'+pct+'%"></i></span>':"")+'</li>'}).join("");
 return '<div class="run" data-st="'+e(r.status)+'"><a class="run-head" href="'+e(r.url)+'" target="_blank" rel="noopener">'+icon(r.status,r.conclusion)+'<span class="run-main"><span class="run-title">'+e(r.title||r.name)+'</span><span class="run-sub"><b>'+e(r.name)+'</b> #'+r.number+' · '+e(r.event)+(r.actor?" by "+e(r.actor):"")+'</span></span><span class="run-side"><code class="branch">'+e(r.branch)+'</code><span class="run-time"><span class="faint">'+verb(r)+'</span> <span data-since="'+e(r.started)+'">'+dur(Date.now()-new Date(r.started))+'</span></span></span></a>'+(jobs?'<ul class="jobs">'+jobs+'</ul>':"")+'</div>'}).join("")+'</div>'}
-if(data.recent.length)h+='<div class="recent-label">Recently finished</div><div class="group recent">'+data.recent.map(r=>'<a class="line rrow'+(done.includes(r.id)?" just":"")+'" href="'+e(r.url)+'" target="_blank" rel="noopener"><span class="name">'+icon(r.status,r.conclusion)+'<span>'+e(r.name)+' <span class="faint">#'+r.number+'</span><span class="sub">'+e(r.title)+'</span></span></span><span class="meta"><code class="branch">'+e(r.branch)+'</code><span class="sub">'+dur(new Date(r.updated)-new Date(r.started))+' · '+ago(r.updated)+'</span></span></a>').join("")+'</div>';
-b.innerHTML=h;prev=ids}
+if(data.recent.length&&!compact)h+='<div class="recent-label">Recently finished</div><div class="group recent">'+data.recent.map(r=>'<a class="line rrow'+(done.includes(r.id)?" just":"")+'" href="'+e(r.url)+'" target="_blank" rel="noopener"><span class="name">'+icon(r.status,r.conclusion)+'<span>'+e(r.name)+' <span class="faint">#'+r.number+'</span><span class="sub">'+e(r.title)+'</span></span></span><span class="meta"><code class="branch">'+e(r.branch)+'</code><span class="sub">'+dur(new Date(r.updated)-new Date(r.started))+' · '+ago(r.updated)+'</span></span></a>').join("")+'</div>';
+b.innerHTML=h}
 async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await fetch(u,{credentials:"same-origin"});if(r.ok){const d=await r.json();const finished=data&&data.active.some(x=>!d.active.some(y=>y.id===x.id));data=d;render();if(d.beats&&document.getElementById("onboard")&&window.hushPull)window.hushPull();else if(finished&&window.hushPull)setTimeout(window.hushPull,1500)}}catch(e){}}
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
-setInterval(()=>{document.querySelectorAll("#ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll("#ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
+setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const page = (title, body, { live, stale } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}<style>${CSS}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap">${body}</div>${live ? LIVE : ""}${live && body.includes('id="ci-live"') ? ACTIONS : ""}</body></html>`;
+const VIEWS = ["overview", "monitors", "automations", "ci", "prs", "issues", "costs", "setup"];
+const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
+const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:var(--sel);color:var(--ink);font-weight:500}`).join("");
+const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
+addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
+const page = (title, body, { live, stale, app } = {}) =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -785,7 +829,7 @@ function skeletonPage(repo) {
     <h2>Routines</h2>
     <div class="group">${row(110)}${row(80)}</div>
     <p class="sk-note" role="status">The first read of a repo takes a few seconds. After that it opens instantly.</p>
-  `, { live: true, stale: true });
+  `, { live: true, stale: true, app: true });
 }
 
 const STATE = { alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degraded: ["bad", "Chronically degraded"], lying: ["bad", "Said ok, read nothing"], dead: ["bad", "Down"], retired: ["none", "Retired"] };
@@ -891,14 +935,14 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <div class="group stats">
       <div class="stat"><b>${usd(C.total_usd)}</b><span>Spent in ${WINDOW} days</span><small>${C.sources.map((k) => `${srcName(k)} ${usd(C.total[k])}`).join(" · ")}</small></div>
       <div class="stat"><b>${usd(C.yesterday)}</b><span>Yesterday</span><small>${usd(C.avg7)} a day over the last 7</small></div>
-      <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud sessions in ${WINDOW} days</small></div>
+      <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud session${C.sessions_30d === 1 ? "" : "s"} in ${WINDOW} days</small></div>
       <div class="stat"><b>${C.sessions_30d ? tk(C.tokens_30d / C.sessions_30d) : "–"}</b><span>Tokens per session</span><small>average</small></div>
       <div class="chart" aria-label="Spend per day">
         <div class="cols">${C.per_day.map((p) => `<div title="${p.d} · ${usd(p.total)}${Object.keys(p.by).length ? " · " + Object.entries(p.by).map(([k, v]) => `${srcName(k)} ${usd(v)}`).join(", ") : ""}${p.tokens ? ` · ${tk(p.tokens)} tokens` : ""}"><i class="stack" style="height:${(p.total / maxCost) * 100}%">${C.sources.filter((k) => p.by[k]).map((k) => `<em style="flex:${p.by[k]};background:${srcColor(k)}"></em>`).join("")}</i></div>`).join("")}</div>
         <div class="axis"><span>Spend per day</span><span class="rule"></span>${C.sources.map((k) => `<span><span class="key" style="background:${srcColor(k)}"></span> ${srcName(k)}</span>`).join("")}</div>
       </div>
     </div>
-    ${C.sessions.length ? `<details class="fold costs-fold"><summary>Last ${C.sessions.length} Claude Code sessions</summary><div class="group" style="margin-top:10px">${C.sessions.map((x) => `<div class="line"><span class="name"><code>/${esc(x.name)}</code><span class="sub">${ago(x.at)} · ${esc(x.models.join(", "))}${x.turns ? ` · ${x.turns} turns` : ""}</span></span><span class="meta"><b>${tk(x.tokens.total)}</b> tokens <span class="sub">${tk(x.tokens.input + x.tokens.cache_write)} in · ${tk(x.tokens.cache_read)} cached · ${tk(x.tokens.output)} out${x.usd != null ? ` · ~${usd(x.usd)}` : ""}</span></span></div>`).join("")}</div><div class="cost-note">Dollars are estimated at API list prices. On a Claude subscription they show what the same tokens would cost, not what you pay. A model with no known price shows tokens only; set it under <code>prices</code> in <code>.claude/factory.json</code>.</div></details>` : ""}`;
+    ${C.sessions.length ? `<h2>Last ${C.sessions.length === 1 ? "Claude Code session" : `${C.sessions.length} Claude Code sessions`}</h2><div><div class="group" style="margin-bottom:0">${C.sessions.map((x) => `<div class="line"><span class="name"><code>/${esc(x.name)}</code><span class="sub">${ago(x.at)} · ${esc(x.models.join(", "))}${x.turns ? ` · ${x.turns} turns` : ""}</span></span><span class="meta"><b>${tk(x.tokens.total)}</b> tokens <span class="sub">${tk(x.tokens.input + x.tokens.cache_write)} in · ${tk(x.tokens.cache_read)} cached · ${tk(x.tokens.output)} out${x.usd != null ? ` · ~${usd(x.usd)}` : ""}</span></span></div>`).join("")}</div><div class="cost-note">Dollars are estimated at API list prices. On a Claude subscription they show what the same tokens would cost, not what you pay. A model with no known price shows tokens only; set it under <code>prices</code> in <code>.claude/factory.json</code>.</div></div>` : ""}`;
   const prTabs = [
     ["open", "Open", s.queue.prs.map((p) => prLine(p, p.draft ? "draft" : "open", `opened ${ago(p.created_at)}${p.draft ? " · draft" : ""}`, ciTag(p)))],
     ["merged", "Merged", (s.queue.merged || []).slice(0, 15).map((p) => prLine(p, "merged", `merged ${ago(p.merged_at)}`))],
@@ -930,34 +974,88 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const onboarding = repoRow && s.counts.heartbeats === 0;
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-  return page(`${s.repo} · hush`, `
-    <header class="top">${LOGO}<span class="updated">${esc(s.repo)} · updated ${ago(s.generated_at)}</span></header>
-    <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
-    <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
+  // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
+  const NAV_ICON = {
+    overview: `<path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z"/>`,
+    monitors: `<path d="M1.5 8.5h3l1.8-4.5 3.4 8.5 1.8-4h3"/>`,
+    automations: `<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>`,
+    ci: `<circle cx="8" cy="8" r="6"/><path d="M5.5 8.2l1.8 1.8 3.3-3.6"/>`,
+    prs: `<circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/><path d="M4 5v6M12 11V6.5A2 2 0 0 0 10 4.5H7.5M9 3l-1.5 1.5L9 6"/>`,
+    issues: `<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1.2"/>`,
+    costs: `<path d="M10.8 5.2c-.4-.9-1.5-1.5-2.8-1.5-1.6 0-2.8.8-2.8 2 0 2.9 5.8 1.6 5.8 4.5 0 1.2-1.3 2.1-3 2.1-1.4 0-2.6-.6-3-1.6M8 2v1.7M8 12.3V14"/>`,
+    setup: `<circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>`,
+  };
+  const ico = (k) => `<svg class="ni" viewBox="0 0 16 16" aria-hidden="true">${NAV_ICON[k]}</svg>`;
+  const badMon = s.monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state)).length;
+  const warnMon = s.monitors.filter((m) => m.state === "warn").length;
+  const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
+  const lateN = s.routines.filter(isLate).length;
+  const failingCi = (s.ci || []).filter((w) => w.last?.status === "completed" && w.last.conclusion === "failure").length;
+  const badge = (n, tone) => (n ? `<span class="nb" data-t="${tone}">${n}</span>` : "");
+  const count = (n) => (n ? `<span class="nc">${n}</span>` : "");
+  const NAV = [
+    ["overview", "Overview", ""],
+    ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(s.monitors.length)],
+    ["automations", "Automations", lateN ? badge(lateN, "bad") : count(s.routines.length)],
+    ["ci", "CI", failingCi ? badge(failingCi, "bad") : count((s.ci || []).length)],
+    ["prs", "Pull requests", count(s.queue.prs.length)],
+    ["issues", "Issues", count(s.queue.issues.length)],
+    ["costs", "Costs", C ? `<span class="nc">${usd(C.total_usd)}</span>` : ""],
+  ];
+  const navLink = ([k, label, extra]) => `<a href="#${k}" data-nav="${k}">${ico(k)}<span>${label}</span>${extra}</a>`;
+  const vh = (title, desc) => `<header class="vh"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</header>`;
+  const view = (k, body) => `<section class="view" data-view="${k}">${body}</section>`;
+  const liveBox = (compact) => `<div class="ci-live"${compact ? ' data-compact="1"' : ""} aria-live="polite"><div class="live-head"><h2>Actions</h2><span class="live-dot"></span><span class="live-meta">Checking…</span></div></div>`;
 
-    ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true)}</section>` : ""}
+  // overview cards
+  const probs = s.monitors.filter((m) => ["dead", "lying", "degraded", "warn"].includes(m.state));
+  const ops = s.monitors.filter((m) => m.state === "alive").length;
+  const nextRuns = s.routines.filter((r) => r.next_run).sort((a, b) => (a.next_run < b.next_run ? -1 : 1)).slice(0, 4);
+  const card = (k, title, body) => `<div class="card"><div class="card-h"><h3>${ico(k)}${title}</h3><a href="#${k}">View →</a></div>${body}</div>`;
+  const cards = `<div class="cards">
+    ${card("monitors", "Monitors", s.monitors.length ? `<div class="big">${ops}<i>/${s.monitors.length}</i></div><div class="cap">operational</div>${probs.length ? `<ul class="mini">${probs.slice(0, 4).map((m) => { const [ps, label] = STATE[m.state]; return `<li><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${label}</span></li>`; }).join("")}</ul>` : `<div class="cap ok">Nothing needs attention.</div>`}` : `<div class="cap">No heartbeat yet. <a href="#setup">Set it up</a>.</div>`)}
+    ${card("automations", "Next runs", nextRuns.length ? `<ul class="mini">${nextRuns.map((r) => `<li><span>${esc(r.name.replace(/^App: /, ""))}</span><span class="faint">${until(r.next_run)}</span></li>`).join("")}</ul>${lateN ? `<div class="cap bad">${plural(lateN, "routine")} late</div>` : ""}` : `<div class="cap">No routines found.</div>`)}
+    ${card("costs", "Costs", C ? `<div class="big">${usd(C.total_usd)}</div><div class="cap">in ${WINDOW} days · ${usd(C.yesterday)} yesterday</div><div class="cap">${tk(C.tokens_30d)} Claude Code tokens, ${C.sessions_30d} session${C.sessions_30d === 1 ? "" : "s"}</div>` : `<div class="cap">No cost data yet. <a href="#costs">How to connect</a>.</div>`)}
+  </div>`;
 
-    <section id="ci-live" aria-live="polite"><div class="live-head"><h2>Actions</h2><span class="live-dot"></span><span class="live-meta">Checking…</span></div></section>
+  const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
-    ${metrics}
-
-    ${costs ? `<h2>Costs</h2>${costs}` : ""}
-
-    <h2>Monitors</h2>
-    ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet.${onboarding ? " Finish the setup above." : ""}</span></div></div>`}
-
-    <h2>Routines</h2>
-    ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}
-
-    ${ci ? `<h2>CI · GitHub Actions</h2><div class="group grid2">${ci}</div>` : ""}
-    <h2>Pull requests</h2>
-    ${prSection}
-
-    <h2>Open issues</h2>
-    <div class="incidents">${incidents}</div>
-
-    <footer><span><a href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a> · ${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span>${repoRow && !onboarding ? `<a href="/r/${esc(s.repo)}/setup">Heartbeat setup</a> · ` : ""}${user ? `<a href="/">Your repos</a>` : ""}</span></footer>
-  `, { live: true, stale });
+  return page(`${s.repo} · hush`, `<div class="app">
+    <aside class="side">
+      <a class="logo" href="/">${MARK()}<span>hush</span></a>
+      <div class="repo-box">
+        <a class="repo-name" href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a>
+        <span class="repo-state" data-s="${s.overall}"><i></i>${s.overall === "ok" ? "Operational" : s.overall === "degraded" ? "Degraded" : "Needs attention"}</span>
+      </div>
+      <nav class="nav" aria-label="Sections">${NAV.map(navLink).join("")}</nav>
+      <div class="side-foot">
+        <a href="#setup" data-nav="setup">${ico("setup")}<span>Setup</span>${onboarding ? badge("!", "warn") : ""}</a>
+        ${user ? `<a href="/">${ico("overview")}<span>All repos</span></a>` : ""}
+        <span class="updated">Updated ${ago(s.generated_at)}</span>
+      </div>
+    </aside>
+    <main class="main">
+      ${view("overview", `
+        <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
+        <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
+        ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true)}</section>` : ""}
+        ${cards}
+        ${liveBox(true)}
+        ${metrics}`)}
+      ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}
+        ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
+      ${view("automations", `${vh("Automations", "Claude Code routines and scheduled GitHub Actions, with their next run and proof that the last one happened.")}
+        ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
+      ${view("ci", `${vh("CI", "GitHub Actions: what is running now, and every workflow over the last 30 days.")}
+        ${liveBox(false)}
+        ${ci ? `<h2>Workflows</h2><div class="group grid2">${ci}</div>` : ""}`)}
+      ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
+      ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
+      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
+      ${view("setup", `${vh("Setup", "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding)}</section>` : ""}
+        <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
+    </main>
+  </div>`, { live: true, stale, app: true });
 }
 
 function homePage(user, repos = [], msg = "") {

@@ -1,4 +1,5 @@
 // The public landing at "/", for people who are not signed in.
+const REPO = "https://github.com/humanagent/hush";
 // Every number in the preview is invented and labelled as an example.
 
 const GITHUB = `<svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
@@ -48,12 +49,12 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark }) {
 
   const cta = () => `<div class="cta">
     <a class="btn gh" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>
-    <a class="btn ghost" href="/auth/login">Already installed? Sign in →</a>
+    <a class="btn ghost" href="${REPO}" target="_blank" rel="noopener">View the code on GitHub →</a>
   </div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>hush</title>
-<meta name="description" content="A status page for your software factory: every skill your Claude Code routines run, whether it ran, and what it cost.">
+<title>hush · observability for your software factory</title>
+<meta name="description" content="Observability for your software factory: whether every skill your agents run actually ran, and what it cost.">
 ${icon}${fonts}
 <style>${css}
 /* Landing: one white column. Headline, install button, an example status page, three steps, what it reads, the button again. */
@@ -80,6 +81,9 @@ ${icon}${fonts}
 .step p{color:var(--muted);margin:0}
 .step code,.reads code{font:12.5px var(--mono);color:var(--ink);background:#f4f5f6;border-radius:4px;padding:1px 5px}
 .reads{max-width:760px;margin:112px auto 0}
+.nav-r{display:flex;align-items:center;gap:20px}.gh-link{display:inline-flex;align-items:center;gap:7px}.gh-link svg{width:16px;height:16px}
+.oss{display:inline-block;margin:0 0 22px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;font:500 12.5px var(--mono);color:var(--muted);text-decoration:none}.oss:hover{color:var(--ink);border-color:#d6d8dc}
+.fine a{color:var(--muted)}
 .costs{max-width:1000px;margin:112px auto 0}.costs>h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600}.costs>p{color:var(--muted);text-align:center;margin:0 auto 32px;max-width:60ch;text-wrap:pretty}
 .cost-shot{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,24,30,.25)}
 .cost-chart,.cost-runs{background:var(--bg);padding:22px 24px}
@@ -108,18 +112,14 @@ ${icon}${fonts}
 @media(max-width:760px){.nav{margin-bottom:48px}.steps{grid-template-columns:minmax(0,1fr);gap:28px;margin-top:80px}.shot{padding:18px 14px 4px;margin-top:44px}.reads,.end{margin-top:80px}.reads .group .line{flex-direction:column;gap:2px}.reads .group .line .meta{text-align:left;max-width:none}}
 </style></head><body><div class="wrap land">
 
-<nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><a class="signin" href="/auth/login">Sign in</a></nav>
+<nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><span class="nav-r"><a class="signin gh-link" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>GitHub</span></a><a class="signin" href="/auth/login">Sign in</a></span></nav>
 
 <section class="h">
-  <h1>
-    <span>Your agents run the factory.</span>
-    <span>Monitors stay quiet.</span>
-    <span>Routines run while you sleep.</span>
-    <span class="now">Hush tells you when one dies.</span>
-  </h1>
-  <p class="lede">One status page for every repo you pick. See whether each skill your Claude Code routines run actually ran, whether it read anything, and what it cost.</p>
+  <a class="oss" href="${REPO}" target="_blank" rel="noopener">Open source · MIT</a>
+  <h1><span class="now">Observability for your software factory.</span></h1>
+  <p class="lede">Whether every skill your agents run actually ran, and what it cost.</p>
   ${cta()}
-  <p class="fine">Free. Read-only. Pick one repo, a few, or all of them.</p>
+  <p class="fine">Free and open source. Read-only on your repos. Use ours or <a href="${REPO}#run-and-deploy" target="_blank" rel="noopener">host your own</a>.</p>
   ${msg ? `<p class="err" style="text-align:center">${esc(msg)}</p>` : ""}
 </section>
 
@@ -165,7 +165,7 @@ ${icon}${fonts}
 
 <section class="reads">
   <h2>What it reads from each repo</h2>
-  <p>Read-only permissions. It never writes to your repo.</p>
+  <p>Read-only permissions. It never writes to your repo, and every line that reads it is <a href="${REPO}/blob/main/status/server.mjs" target="_blank" rel="noopener">on GitHub</a>.</p>
   <div class="group">
     <div class="line"><span class="name"><code>.claude/skills</code></span><span class="meta">The skills in your factory, and which ones run on a routine</span></div>
     <div class="line"><span class="name"><code>.claude/factory.json</code></span><span class="meta">Your monitor roster and Claude Code routines, with their cron</span></div>
@@ -180,7 +180,7 @@ ${icon}${fonts}
   ${cta()}
 </section>
 
-<footer><span>hush · a read-only GitHub App</span><span><a href="/auth/login">Sign in</a></span></footer>
+<footer><span>hush · open source, MIT · <a href="${REPO}" target="_blank" rel="noopener">github.com/humanagent/hush</a></span><span><a href="/auth/login">Sign in</a></span></footer>
 </div>
 </body></html>`;
 }

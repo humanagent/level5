@@ -1,7 +1,8 @@
 # hush
 
-A status page for a software factory: the monitors, Claude Code routines, CI and queue of every
-repo you pick, on one page. Live at https://factory-status.fly.dev.
+Observability for your software factory: whether every skill your agents run actually ran, and
+what it cost. Open source under the [MIT license](LICENSE). Use the hosted one at
+https://factory-status.fly.dev or [run your own](#run-and-deploy).
 
 ## What it shows per repo
 

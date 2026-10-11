@@ -495,14 +495,14 @@ async function judge(factory, repoId) {
         const inWeek = mine.filter((b) => { const t = new Date(b.ts).getTime(); return t > start && t <= end; });
         return { s: worst(inWeek), label: `Week to ${new Date(end).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })}` };
       });
-      return { id: m.id, cadence: "weekly", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, buckets, span: `${WEEKS} weeks ago`, filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20) };
+      return { id: m.id, cadence: "weekly", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, buckets, span: `${WEEKS} weeks ago`, filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20), history: mine.slice(0, 15).map((b) => ({ ts: b.ts, status: b.status, source: b.source, note: b.note || "", swept: b.swept || {}, filed: b.filed || [] })) };
     }
     const byDay = {};
     for (const b of mine) {
       const d = b.ts.slice(0, 10);
       if (!byDay[d] || RANK[b.status] > RANK[byDay[d]]) byDay[d] = b.status;
     }
-    return { id: m.id, cadence: m.cadence || "daily", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, buckets: days.map((d) => ({ s: byDay[d] || "", label: new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }) })), span: `${WINDOW} days ago`, filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20) };
+    return { id: m.id, cadence: m.cadence || "daily", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, buckets: days.map((d) => ({ s: byDay[d] || "", label: new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }) })), span: `${WINDOW} days ago`, filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20), history: mine.slice(0, 15).map((b) => ({ ts: b.ts, status: b.status, source: b.source, note: b.note || "", swept: b.swept || {}, filed: b.filed || [] })) };
   });
   const cut = new Date(Date.now() - WINDOW * 864e5).toISOString();
   return { monitors, beats: beats.filter((b) => b.ts >= cut).length, sessions };
@@ -592,7 +592,7 @@ function refresh(row) {
 }
 const FRESH_MS = 60e3;
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 5;
+const SNAP_V = 6;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -761,6 +761,33 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .ask textarea{flex:1;border:0;resize:none;font:15px/1.45 var(--f);color:var(--ink);padding:6px 8px;background:transparent;outline:none}
 .ask button{flex:none}.ask button:disabled{opacity:.5;cursor:default}
 .chat-note{font-size:12px;color:var(--faint)}
+.openable{cursor:pointer}.row.openable:hover,.line.openable:hover,.mini li.openable:hover{background:#f9fafa}.openable:focus-visible{outline:2px solid var(--link);outline-offset:-2px}
+.win{position:fixed;z-index:50;display:flex;flex-direction:column;background:var(--bg);border-radius:10px;box-shadow:0 0 0 1px rgba(0,28,36,.12),0 14px 40px -8px rgba(0,28,36,.35);overflow:hidden;min-width:380px;min-height:280px}
+.win.moving{user-select:none}.win.moving .win-body{pointer-events:none}
+.win-bar{display:flex;align-items:center;gap:8px;height:42px;padding:0 6px 0 16px;border-bottom:1px solid var(--line);cursor:grab;flex:none;background:#fafafa}.win.moving .win-bar{cursor:grabbing}
+.win-kind{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);flex:none}
+.win-title{flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint)}.win.active .win-title{color:var(--ink)}
+.win-acts{display:flex;gap:2px;flex:none}
+.win-btn{display:grid;place-items:center;width:30px;height:30px;border-radius:6px;background:none;border:0;padding:0;color:var(--muted);cursor:pointer}.win-btn:hover{background:#eceeef;color:var(--ink)}
+.win-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.win-body{flex:1;overflow:auto;padding:16px 18px 20px;font-size:14px}
+.win-gone{display:none;padding:8px 18px;font-size:12px;color:var(--warn-ink,#8d6605);background:#fff7e6;border-top:1px solid var(--line)}.win.gone .win-gone{display:block}
+.win-rz{position:absolute;z-index:2}.win-rz[data-dir=n],.win-rz[data-dir=s]{left:8px;right:8px;height:6px;cursor:ns-resize}.win-rz[data-dir=n]{top:-3px}.win-rz[data-dir=s]{bottom:-3px}
+.win-rz[data-dir=e],.win-rz[data-dir=w]{top:8px;bottom:8px;width:6px;cursor:ew-resize}.win-rz[data-dir=e]{right:-3px}.win-rz[data-dir=w]{left:-3px}
+.win-rz[data-dir=ne],.win-rz[data-dir=nw],.win-rz[data-dir=se],.win-rz[data-dir=sw]{width:12px;height:12px}.win-rz[data-dir=ne]{top:-3px;right:-3px;cursor:nesw-resize}.win-rz[data-dir=sw]{bottom:-3px;left:-3px;cursor:nesw-resize}.win-rz[data-dir=nw]{top:-3px;left:-3px;cursor:nwse-resize}.win-rz[data-dir=se]{bottom:-3px;right:-3px;cursor:nwse-resize}
+.win-dock{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:45;display:flex;gap:8px;padding:6px;border-radius:12px;background:rgba(35,47,62,.92);box-shadow:0 8px 24px -8px rgba(0,0,0,.4);max-width:calc(100vw - 32px);overflow-x:auto}
+.win-chip{background:rgba(255,255,255,.08);color:#fff;border:0;border-radius:8px;padding:6px 12px;font:500 13px var(--f);white-space:nowrap;cursor:pointer}.win-chip:hover{background:rgba(255,255,255,.18)}.win-chip span{color:#aab7b8;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.w-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}.w-why{color:var(--muted);font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:#e9f5e3;color:var(--ok)}.pill.sm{padding:0 8px;font-size:11px}
+.pill[data-s=warn]{background:#fff4e0;color:var(--warn-ink,#8d6605)}.pill[data-s=bad]{background:#fde8e5;color:var(--bad)}.pill[data-s=none]{background:#f2f3f3;color:var(--muted)}.pill[data-s=merged]{background:#f1eaff;color:#8250df}
+.bars.tall{height:44px;margin-top:0}
+.kv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 14px;margin:16px 0;font-size:13.5px}.kv dt{color:var(--muted)}.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.win-body h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);margin:20px 0 8px}
+.w-list{display:grid;border:1px solid var(--line);border-radius:8px}.w-list>div{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:10px;align-items:baseline;padding:8px 12px;border-top:1px solid var(--line);font-size:13px}.w-list>div:first-child{border-top:0}
+.w-list>div.openable{grid-template-columns:minmax(0,1fr) auto}
+.w-note{background:#f9fafa;border-left:3px solid var(--line);padding:8px 12px;margin:0 0 12px;font-size:13px;color:var(--muted)}
+.w-title{font-size:16px;font-weight:600;margin:0 0 4px}
+@media(max-width:820px){.win{inset:40px 0 0 0!important;width:auto!important;height:auto!important;border-radius:12px 12px 0 0;min-width:0}.win-rz{display:none}.win-bar{cursor:default}}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -904,8 +931,53 @@ document.addEventListener("keydown",ev=>{if(ev.target.id==="ask-input"&&ev.key==
 document.addEventListener("input",ev=>{if(ev.target.id==="ask-input")S.draft=ev.target.value});
 document.addEventListener("click",ev=>{const c=ev.target.closest&&ev.target.closest(".chip");if(c){location.hash="assistant";ask(c.dataset.q)}});
 document.addEventListener("hush:swap",draw);draw()})()</script>`;
+// Floating windows, after the admin's PanelHost (docs/admin/crud-panel.md → Windows): one click on
+// an entity opens its own window; the same entity never opens twice (it comes to the front);
+// windows are dragged by the title bar, resized from any edge (min 380×280), cascade 28 px from
+// the right, take focus on pointer-down, minimize to a dock, never zoom, never dim the page.
+// They live on <body>, outside the page, so section changes and background refreshes keep them;
+// their contents come from the page's <template>s and are refreshed with it. The open set is in
+// the URL (?w=), so a link reopens them. On a phone each window is a full-screen sheet.
+const WIN_JS = `<script>(()=>{const W=window.hushWin||(window.hushWin={list:[],frames:{}});
+const MINW=380,MINH=280,STEP=28,TOP=52;
+const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tpl=k=>[...document.querySelectorAll("#win-tpl template")].find(t=>t.dataset.key===k);
+const phone=()=>matchMedia("(max-width:820px)").matches;
+const ICON={min:'<svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg>',close:'<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',gh:'<svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L7.5 8.5M11.5 9.5v4h-9v-9h4"/></svg>'};
+function dockEl(){let d=document.getElementById("win-dock");if(!d){d=document.createElement("div");d.id="win-dock";d.className="win-dock";document.body.appendChild(d)}return d}
+function syncUrl(){const u=new URL(location.href);const ks=W.list.map(w=>w.key);ks.length?u.searchParams.set("w",ks.join(",")):u.searchParams.delete("w");if(u.href!==location.href)history.replaceState(history.state,"",u)}
+function order(){const vis=W.list.filter(w=>!w.min);vis.forEach((w,i)=>{w.el.style.zIndex=50+Math.min(i,140);w.el.classList.toggle("active",i===vis.length-1)})}
+function renderDock(){const d=dockEl();const mins=W.list.filter(w=>w.min);d.innerHTML=mins.map(w=>'<button type="button" class="win-chip" data-key="'+esc(w.key)+'"><span>'+esc(w.kind)+'</span> '+esc(w.title)+"</button>").join("");d.hidden=!mins.length}
+function clamp(f){const vw=innerWidth,vh=innerHeight;f.w=Math.max(MINW,Math.min(f.w,vw-16));f.h=Math.max(MINH,Math.min(f.h,vh-TOP-8));f.x=Math.max(8-f.w+120,Math.min(f.x,vw-120));f.y=Math.max(TOP-6,Math.min(f.y,vh-40));return f}
+function place(w){if(phone()){w.el.removeAttribute("style");order();return}const f=clamp(W.frames[w.key]);Object.assign(w.el.style,{left:f.x+"px",top:f.y+"px",width:f.w+"px",height:f.h+"px"});order()}
+function fill(w){const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
+function focus(w){W.list.splice(W.list.indexOf(w),1);W.list.push(w);if(w.min){w.min=false;w.el.hidden=false;renderDock()}order()}
+function close(w){w.el.remove();W.list.splice(W.list.indexOf(w),1);order();renderDock();syncUrl()}
+function open(key,quiet){const had=W.list.find(w=>w.key===key);if(had){focus(had);return true}const t=tpl(key);if(!t)return false;
+const n=W.list.filter(w=>!w.min).length,vw=innerWidth,vh=innerHeight,ww=Math.min(620,Math.max(MINW,vw*.42));
+W.frames[key]=W.frames[key]||{w:ww,h:vh-TOP-24-n*STEP,x:vw-ww-20-n*STEP,y:TOP+8+n*STEP};
+const el=document.createElement("section");el.className="win";el.setAttribute("role","dialog");el.setAttribute("aria-label",t.dataset.kind+" "+t.dataset.title);
+el.innerHTML='<header class="win-bar"><span class="win-kind">'+esc(t.dataset.kind)+'</span><b class="win-title"></b><span class="win-acts">'+(t.dataset.href?'<a class="win-btn" data-no-drag href="'+esc(t.dataset.href)+'" target="_blank" rel="noopener" title="Open on GitHub">'+ICON.gh+"</a>":"")+'<button type="button" class="win-btn" data-act="min" title="Minimize">'+ICON.min+'</button><button type="button" class="win-btn" data-act="close" title="Close">'+ICON.close+'</button></span></header><div class="win-body"></div><div class="win-gone">No longer in this page\\'s data.</div>'+["n","s","e","w","ne","nw","se","sw"].map(d=>'<i class="win-rz" data-dir="'+d+'"></i>').join("");
+document.body.appendChild(el);const w={key,el,kind:t.dataset.kind,title:t.dataset.title,min:false};W.list.push(w);fill(w);place(w);if(!quiet)syncUrl();
+el.addEventListener("pointerdown",()=>focus(w),true);
+el.querySelector('[data-act="close"]').onclick=()=>close(w);
+el.querySelector('[data-act="min"]').onclick=()=>{w.min=true;el.hidden=true;order();renderDock()};
+const bar=el.querySelector(".win-bar");
+bar.addEventListener("pointerdown",ev=>{if(phone()||ev.button!==0||ev.target.closest("button,a,input,textarea,select,[data-no-drag]"))return;ev.preventDefault();const f=W.frames[key],sx=ev.clientX-f.x,sy=ev.clientY-f.y;bar.setPointerCapture(ev.pointerId);el.classList.add("moving");
+const mv=e=>{f.x=e.clientX-sx;f.y=e.clientY-sy;place(w)};const up=()=>{bar.removeEventListener("pointermove",mv);bar.removeEventListener("pointerup",up);el.classList.remove("moving")};bar.addEventListener("pointermove",mv);bar.addEventListener("pointerup",up)});
+el.querySelectorAll(".win-rz").forEach(h=>h.addEventListener("pointerdown",ev=>{if(phone())return;ev.preventDefault();ev.stopPropagation();const f=W.frames[key],o={...f,cx:ev.clientX,cy:ev.clientY},d=h.dataset.dir;h.setPointerCapture(ev.pointerId);el.classList.add("moving");
+const mv=e=>{const dx=e.clientX-o.cx,dy=e.clientY-o.cy;if(d.includes("e"))f.w=Math.max(MINW,o.w+dx);if(d.includes("s"))f.h=Math.max(MINH,o.h+dy);if(d.includes("w")){const nw=Math.max(MINW,o.w-dx);f.x=o.x+(o.w-nw);f.w=nw}if(d.includes("n")){const nh=Math.max(MINH,o.h-dy);f.y=o.y+(o.h-nh);f.h=nh}place(w)};
+const up=()=>{h.removeEventListener("pointermove",mv);h.removeEventListener("pointerup",up);el.classList.remove("moving")};h.addEventListener("pointermove",mv);h.addEventListener("pointerup",up)}));
+return true}
+document.addEventListener("click",ev=>{const chip=ev.target.closest(".win-chip");if(chip){const w=W.list.find(x=>x.key===chip.dataset.key);if(w)focus(w);return}
+const o=ev.target.closest("[data-open]");if(!o||ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;
+const inner=ev.target.closest("a,button");if(inner&&inner!==o&&!inner.hasAttribute("data-open"))return;if(open(o.dataset.open))ev.preventDefault()});
+document.addEventListener("keydown",ev=>{if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches&&ev.target.matches("[data-open][tabindex]")){ev.preventDefault();open(ev.target.dataset.open)}
+if(ev.key==="Escape"&&!ev.target.closest("input,textarea")){const top=W.list.filter(w=>!w.min).at(-1);if(top)close(top)}});
+document.addEventListener("hush:swap",()=>W.list.forEach(fill));addEventListener("resize",()=>W.list.forEach(place));
+if(!W.started){W.started=true;(new URL(location.href).searchParams.get("w")||"").split(",").filter(Boolean).forEach(k=>open(k,true));syncUrl()}})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -989,11 +1061,11 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     const bars = m.buckets.map((b) => `<i data-s="${b.s}" title="${b.label} · ${b.s || "no run"}"></i>`).join("");
     const swept = m.last?.swept ? Object.entries(m.last.swept).map(([k, v]) => `${esc(k)} <code>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</code>`).join(" · ") : "";
     const filed = m.filed.map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ");
-    return `<details class="row"><summary>
+    return `<div class="row openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0">
       <div class="row-head"><span class="name"><span class="mon-id">${esc(m.id)}</span><small>${m.cadence === "weekly" ? "weekly" : "daily"}${m.unlisted ? " · not in roster" : ""}</small></span><span class="state" data-s="${ps}">${label}</span></div>
       <div class="bars">${bars}</div>
       <div class="axis"><span>${m.span}</span><span class="rule"></span><span>${pct}% ok</span><span class="rule"></span><span>today</span></div>
-    </summary><div class="detail">${m.why ? `<div>${esc(m.why)}</div>` : ""}<div>Last heartbeat ${ago(m.last?.ts)}${swept ? ` · ${swept}` : ""}</div>${m.last?.note ? `<div>${esc(m.last.note)}</div>` : ""}<div>${filed ? `Filed ${filed}` : `Filed nothing in ${WINDOW} days`}</div></div></details>`;
+    </div>`;
   }).join("");
 
   const DOW = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
@@ -1009,17 +1081,17 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const routineRows = s.routines.map((r) => {
     const late = r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
     const [st, label] = !r.last_seen ? ["none", "No evidence"] : late ? ["bad", "Late"] : ["ok", `Ran ${ago(r.last_seen)}`];
-    return `<div class="line"><span class="name">${esc(r.name.replace(/^App: /, ""))}<span class="sub">${esc(r.source)} · ${esc(r.prompt)} · ${esc(when(r))}${r.model ? " · " + esc(r.model) : ""}</span></span><span class="meta"><span class="state" data-s="${st}">${label}</span><span class="sub">next ${until(r.next_run)}</span></span></div>`;
+    return `<div class="line openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0"><span class="name">${esc(r.name.replace(/^App: /, ""))}<span class="sub">${esc(r.source)} · ${esc(r.prompt)} · ${esc(when(r))}${r.model ? " · " + esc(r.model) : ""}</span></span><span class="meta"><span class="state" data-s="${st}">${label}</span><span class="sub">next ${until(r.next_run)}</span></span></div>`;
   }).join("");
 
   const ci = (s.ci || []).map((w) => {
     const lastS = !w.last ? ["none", "No runs"] : w.last.status !== "completed" ? ["warn", "Running"] : w.last.conclusion === "success" ? ["ok", "Passing"] : w.last.conclusion === "failure" ? ["bad", "Failing"] : ["none", w.last.conclusion];
     const bars = w.days.map((d, i) => { const t = w.tips[i]; return `<i data-s="${d}" title="${new Date(Date.now() - (w.days.length - 1 - i) * 864e5).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })} · ${t.ok + t.bad ? `${t.ok} passed, ${t.bad} failed` : "no runs"}"></i>`; }).join("");
-    return `<details class="row"><summary>
+    return `<div class="row openable" data-open="workflow:${esc(encodeURIComponent(w.path))}" role="button" tabindex="0">
       <div class="row-head"><span class="name">${esc(w.name)}<small>${w.runs}${w.capped ? "+" : ""} runs</small></span><span class="state" data-s="${lastS[0]}">${lastS[1]}</span></div>
       <div class="bars">${bars}</div>
       <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>${w.pct == null ? "no runs" : `${w.pct}% passing`}</span><span class="rule"></span><span>today</span></div>
-    </summary><div class="detail"><div><code>${esc(w.path)}</code></div>${w.last ? `<div>Last run <a href="${esc(w.last.url)}" target="_blank" rel="noopener">${ago(w.last.at)}</a> on <code>${esc(w.last.branch)}</code>, ${esc(w.last.conclusion || w.last.status)}</div>` : ""}<div>Green day: every run passed. Amber: some failed. Red: all failed.</div></div></details>`;
+    </div>`;
   }).join("");
 
   const PR_ICON = {
@@ -1028,7 +1100,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     merged: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#8250df" d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z"/></svg>`,
     closed: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#cf222e" d="M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 5.5a.75.75 0 0 1 .75.75v3.378a2.251 2.251 0 1 1-1.5 0V7.25a.75.75 0 0 1 .75-.75Zm-2.03-5.273a.75.75 0 0 1 1.06 0l.97.97.97-.97a.748.748 0 0 1 1.265.332.75.75 0 0 1-.205.729l-.97.97.97.97a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-.97-.97-.97.97a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l.97-.97-.97-.97a.75.75 0 0 1 0-1.06ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>`,
   };
-  const prLine = (p, kind, when, right = "") => `<a class="line pr" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="name">${PR_ICON[kind]}<span><span class="pr-title">${esc(p.title)}</span><span class="sub">#${p.number}${p.author ? ` · ${esc(p.author)}` : ""} · ${when}</span></span></span><span class="meta"><code class="branch">${esc(p.branch)}</code>${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}${right}</span></a>`;
+  const prLine = (p, kind, when, right = "") => `<a class="line pr" href="${esc(p.url)}" target="_blank" rel="noopener" data-open="pr:${p.number}"><span class="name">${PR_ICON[kind]}<span><span class="pr-title">${esc(p.title)}</span><span class="sub">#${p.number}${p.author ? ` · ${esc(p.author)}` : ""} · ${when}</span></span></span><span class="meta"><code class="branch">${esc(p.branch)}</code>${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}${right}</span></a>`;
   const ciTag = (p) => `<span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}"${p.ci === "running" ? " data-run" : ""}>${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span>`;
   const C = s.costs;
   const SRC_COLOR = ["#14161c", "#5b6cff", "#2fb36b", "#f0a92c", "#e5484d", "#8250df", "#0ea5b7", "#9a9ea5"];
@@ -1056,8 +1128,54 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   ];
   const prSection = `<div class="tabs">${prTabs.map(([k, label, rows], i) => `<input type="radio" name="prtab" id="prtab-${k}"${i === 0 ? " checked" : ""}><label for="prtab-${k}">${PR_ICON[k]}${label} <span class="count">${k === "open" ? rows.length : rows.length + (rows.length === 15 ? "+" : "")}</span></label>`).join("")}
     ${prTabs.map(([k, , rows]) => `<div class="group tab-panel" data-tab="${k}">${rows.join("") || `<div class="line"><span class="hint">No ${k} pull requests${k === "open" ? "" : " recently"}.</span></div>`}</div>`).join("")}</div>`;
+  // --- window contents: one <template> per entity; the window manager clones them -----------
+  const kv = (rows) => `<dl class="kv">${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  const when2 = (ts) => (ts ? `${ago(ts)} <span class="faint">${new Date(ts).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : "never");
+  const statePill = (st, label) => `<span class="pill" data-s="${st}">${label}</span>`;
+  const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
+  const wins = [];
+  for (const m of s.monitors) {
+    const [ps, label] = STATE[m.state] || ["none", m.state];
+    const bars = m.buckets.map((b) => `<i data-s="${b.s}" title="${b.label} · ${b.s || "no run"}"></i>`).join("");
+    const swept = (x) => Object.entries(x || {}).map(([k, v]) => `${esc(k)} <code>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</code>`).join(" · ");
+    const routine = s.routines.find((r) => r.name === m.routine);
+    wins.push({ key: `monitor:${m.id}`, kind: "Monitor", title: m.id, body: `
+      <div class="w-head">${statePill(ps, label)}${m.why ? `<span class="w-why">${esc(m.why)}</span>` : ""}</div>
+      <div class="bars tall">${bars}</div><div class="axis"><span>${m.span}</span><span class="rule"></span><span>today</span></div>
+      ${kv([["Cadence", m.cadence], ["Runs", `${m.runs} in the window`], ["Routine", routine ? `<a href="#" data-open="routine:${esc(encodeURIComponent(routine.name))}">${esc(routine.name.replace(/^App: /, ""))}</a>` : m.routine ? esc(m.routine) : ""], ["Last heartbeat", when2(m.last?.ts)], ["Read", swept(m.last?.swept)], ["Filed", m.filed.map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ") || `nothing in ${WINDOW} days`]])}
+      ${m.last?.note ? `<p class="w-note">${esc(m.last.note)}</p>` : ""}
+      ${m.history?.length ? `<h4>Last ${m.history.length} heartbeats</h4><div class="w-list">${m.history.map((b) => `<div><span class="pill sm" data-s="${b.status === "ok" ? "ok" : b.status === "degraded" ? "warn" : "bad"}">${b.status}</span><span class="faint">${ago(b.ts)}${b.source === "session" ? " · session" : ""}</span><span>${swept(b.swept)}${b.note ? ` <span class="faint">${esc(b.note)}</span>` : ""}</span></div>`).join("")}</div>` : ""}` });
+  }
+  for (const r of s.routines) {
+    const late = isLate(r);
+    const [st, label] = !r.last_seen ? ["none", "No evidence"] : late ? ["bad", "Late"] : ["ok", "On schedule"];
+    const fed = s.monitors.filter((m) => m.routine === r.name);
+    wins.push({ key: `routine:${encodeURIComponent(r.name)}`, kind: r.source === "GitHub Actions" ? "Scheduled workflow" : "Routine", title: r.name.replace(/^App: /, ""), body: `
+      <div class="w-head">${statePill(st, label)}</div>
+      ${kv([["Runs", esc(r.prompt)], ["Schedule", `${esc(when(r))} <code>${esc(r.cron)}</code>`], ["Next run", r.next_run ? `${until(r.next_run)} <span class="faint">${new Date(r.next_run).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : ""], ["Last run", when2(r.last_seen)], ["Evidence", esc(r.evidence || "none")], ["Model", esc(r.model || "")], ["Source", esc(r.source)]])}
+      ${fed.length ? `<h4>Monitors it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
+  }
+  for (const w of s.ci || []) {
+    const bars = w.days.map((d, i) => { const t = w.tips[i]; return `<i data-s="${d}" title="${t.ok + t.bad ? `${t.ok} passed, ${t.bad} failed` : "no runs"}"></i>`; }).join("");
+    wins.push({ key: `workflow:${encodeURIComponent(w.path)}`, kind: "Workflow", title: w.name, href: w.last?.url || `${repoUrl}/actions`, body: `
+      <div class="bars tall">${bars}</div><div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>today</span></div>
+      ${kv([["File", `<code>${esc(w.path)}</code>`], ["Passing", w.pct == null ? "no runs" : `${w.pct}% of ${w.runs}${w.capped ? "+" : ""} runs`], ["Last run", w.last ? `<a href="${esc(w.last.url)}" target="_blank" rel="noopener">${ago(w.last.at)}</a> on <code>${esc(w.last.branch)}</code>, ${esc(w.last.conclusion || w.last.status)}` : "none"]])}
+      <p class="faint">Green day: every run passed. Amber: some failed. Red: all failed.</p>` });
+  }
+  const prWin = (p, state) => wins.push({ key: `pr:${p.number}`, kind: "Pull request", title: `#${p.number} ${p.title}`, href: p.url, body: `
+      <div class="w-head">${statePill(state === "open" ? "ok" : state === "merged" ? "merged" : "bad", state === "open" ? (p.draft ? "Draft" : "Open") : state === "merged" ? "Merged" : "Closed")}${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}</div>
+      <p class="w-title">${esc(p.title)}</p>
+      ${kv([["Branch", `<code class="branch">${esc(p.branch)}</code>`], ["Author", esc(p.author || "")], ["Opened", p.created_at ? when2(p.created_at) : ""], ["Merged", p.merged_at ? when2(p.merged_at) : ""], ["Closed", p.closed_at ? when2(p.closed_at) : ""], ["CI", p.ci ? { green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci] : ""]])}` });
+  for (const p of s.queue.prs) prWin(p, "open");
+  for (const p of (s.queue.merged || []).slice(0, 15)) prWin(p, "merged");
+  for (const p of (s.queue.closed || []).slice(0, 15)) prWin(p, "closed");
+  for (const i of s.queue.issues) wins.push({ key: `issue:${i.number}`, kind: "Issue", title: `#${i.number} ${i.title}`, href: i.url, body: `
+      <p class="w-title">${esc(i.title)}</p>
+      ${kv([["Labels", i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("") || "none"], ["Opened", when2(i.created_at)]])}` });
+  const winTemplates = `<div id="win-tpl" hidden>${wins.map((w) => `<template data-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-title="${esc(w.title)}" data-href="${esc(w.href || "")}">${w.body}</template>`).join("")}</div>`;
+
   const incidents = s.queue.issues.length
-    ? s.queue.issues.map((i) => `<div class="incident"><h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3><p>${i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("")}#${i.number} · opened ${ago(i.created_at)}</p></div>`).join("")
+    ? s.queue.issues.map((i) => `<div class="incident"><h3><a href="${esc(i.url)}" target="_blank" rel="noopener" data-open="issue:${i.number}">${esc(i.title)}</a></h3><p>${i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("")}#${i.number} · opened ${ago(i.created_at)}</p></div>`).join("")
     : `<p class="none">No open issues.</p>`;
 
   const M = s.metrics;
@@ -1096,7 +1214,6 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const ico = (k) => `<svg class="ni" viewBox="0 0 16 16" aria-hidden="true">${NAV_ICON[k]}</svg>`;
   const badMon = s.monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state)).length;
   const warnMon = s.monitors.filter((m) => m.state === "warn").length;
-  const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
   const lateN = s.routines.filter(isLate).length;
   const failingCi = (s.ci || []).filter((w) => w.last?.status === "completed" && w.last.conclusion === "failure").length;
   const badge = (n, tone) => (n ? `<span class="nb" data-t="${tone}">${n}</span>` : "");
@@ -1122,8 +1239,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const nextRuns = s.routines.filter((r) => r.next_run).sort((a, b) => (a.next_run < b.next_run ? -1 : 1)).slice(0, 4);
   const card = (k, title, body) => `<div class="card"><div class="card-h"><h3>${ico(k)}${title}</h3><a href="#${k}">View →</a></div>${body}</div>`;
   const cards = `<div class="cards">
-    ${card("monitors", "Monitors", s.monitors.length ? `<div class="big">${ops}<i>/${s.monitors.length}</i></div><div class="cap">operational</div>${probs.length ? `<ul class="mini">${probs.slice(0, 4).map((m) => { const [ps, label] = STATE[m.state]; return `<li><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${label}</span></li>`; }).join("")}</ul>` : `<div class="cap ok">Nothing needs attention.</div>`}` : `<div class="cap">No heartbeat yet. <a href="#setup">Set it up</a>.</div>`)}
-    ${card("automations", "Next runs", nextRuns.length ? `<ul class="mini">${nextRuns.map((r) => `<li><span>${esc(r.name.replace(/^App: /, ""))}</span><span class="faint">${until(r.next_run)}</span></li>`).join("")}</ul>${lateN ? `<div class="cap bad">${plural(lateN, "routine")} late</div>` : ""}` : `<div class="cap">No routines found.</div>`)}
+    ${card("monitors", "Monitors", s.monitors.length ? `<div class="big">${ops}<i>/${s.monitors.length}</i></div><div class="cap">operational</div>${probs.length ? `<ul class="mini">${probs.slice(0, 4).map((m) => { const [ps, label] = STATE[m.state]; return `<li class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${label}</span></li>`; }).join("")}</ul>` : `<div class="cap ok">Nothing needs attention.</div>`}` : `<div class="cap">No heartbeat yet. <a href="#setup">Set it up</a>.</div>`)}
+    ${card("automations", "Next runs", nextRuns.length ? `<ul class="mini">${nextRuns.map((r) => `<li class="openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0"><span>${esc(r.name.replace(/^App: /, ""))}</span><span class="faint">${until(r.next_run)}</span></li>`).join("")}</ul>${lateN ? `<div class="cap bad">${plural(lateN, "routine")} late</div>` : ""}` : `<div class="cap">No routines found.</div>`)}
     ${card("costs", "Costs", C ? `<div class="big">${usd(C.total_usd)}</div><div class="cap">in ${WINDOW} days · ${usd(C.yesterday)} yesterday</div><div class="cap">${tk(C.tokens_30d)} Claude Code tokens, ${C.sessions_30d} session${C.sessions_30d === 1 ? "" : "s"}</div>` : `<div class="cap">No cost data yet. <a href="#costs">How to connect</a>.</div>`)}
   </div>`;
 
@@ -1148,6 +1265,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       </div>
     </aside>
     <main class="main">
+      ${winTemplates}
       ${view("overview", `
         <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
         <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>

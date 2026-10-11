@@ -1,0 +1,302 @@
+<title>Hush landing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: night-to-dawn gradient hero with a stacked headline, big white product cards rising out of it, quiet off-white page, columned footer */
+  :root {
+    --page: #fbfaf8;
+    --card: #ffffff;
+    --ink: #111216;
+    --muted: #66686f;
+    --line: #ececea;
+    --soft: #f3f2ef;
+    --chip-ok-bg: #e3f4ea; --chip-ok: #1d7a45;
+    --chip-bad-bg: #fde7e4; --chip-bad: #b8352b;
+    --chip-warn-bg: #fdf1dc; --chip-warn: #96600a;
+    --chip-blue-bg: #e2efff; --chip-blue: #2a62d6;
+    --mark: #e2632b;
+    --select: #ffe1c7;
+    --night: #070b1c; --dusk: #1b2350; --dawn: #c4532a; --glow: #f0a35e;
+    --sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0d0e12; --card: #16171c; --ink: #eeeef0; --muted: #8e9099; --line: #25262d; --soft: #1d1e24;
+      --chip-ok-bg: #12301f; --chip-ok: #6fd39a; --chip-bad-bg: #3a1714; --chip-bad: #ff8a7f;
+      --chip-warn-bg: #352610; --chip-warn: #f0bd5e; --chip-blue-bg: #14264a; --chip-blue: #8fb4ff;
+      --select: #5a2f4a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0d0e12; --card: #16171c; --ink: #eeeef0; --muted: #8e9099; --line: #25262d; --soft: #1d1e24;
+    --chip-ok-bg: #12301f; --chip-ok: #6fd39a; --chip-bad-bg: #3a1714; --chip-bad: #ff8a7f;
+    --chip-warn-bg: #352610; --chip-warn: #f0bd5e; --chip-blue-bg: #14264a; --chip-blue: #8fb4ff;
+    --select: #5a2f4a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--select); color: var(--ink); }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible { outline: 2px solid var(--chip-blue); outline-offset: 3px; border-radius: 4px; }
+  code { font-family: var(--mono); font-size: 0.84em; }
+  .container { max-width: 1120px; margin-inline: auto; padding-inline: 24px; }
+
+  /* hero */
+  .hero {
+    background: linear-gradient(180deg, var(--night) 0%, var(--dusk) 36%, #5a2f4a 64%, #7a3a42 80%, var(--dawn) 92%, var(--glow) 100%);
+    color: #f4f1ee; padding-block: 0 220px; position: relative; overflow: hidden;
+  }
+  .hero ::selection { background: rgba(255,255,255,.25); color: #fff; }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.55), transparent 60%),
+      radial-gradient(1px 1px at 78% 12%, rgba(255,255,255,.45), transparent 60%),
+      radial-gradient(1px 1px at 62% 28%, rgba(255,255,255,.35), transparent 60%),
+      radial-gradient(1px 1px at 30% 8%, rgba(255,255,255,.4), transparent 60%),
+      radial-gradient(1px 1px at 90% 34%, rgba(255,255,255,.3), transparent 60%);
+  }
+  nav { display: flex; justify-content: space-between; align-items: center; padding-block: 32px; position: relative; z-index: 1; }
+  .logo svg { width: 38px; height: 38px; display: block; }
+  .navlinks { display: flex; gap: 32px; font-size: 18px; flex-wrap: wrap; justify-content: flex-end; }
+  .navlinks a { color: rgba(244,241,238,.62); padding-block: 8px; }
+  .navlinks a:hover, .navlinks a:focus-visible { color: #fff; }
+
+  .headline { padding-top: 170px; position: relative; z-index: 1; }
+  .headline h1 {
+    margin: 0; font-weight: 500; font-size: clamp(38px, 7vw, 88px); line-height: 1.03; letter-spacing: -0.04em;
+  }
+  .headline h1 span { display: block; color: rgba(244,241,238,.46); }
+  .headline h1 span.now { color: #f6f2ee; }
+  .actions { display: flex; gap: 10px; margin-top: 64px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 500; padding: 14px 20px; border-radius: 8px; }
+  .btn.solid { background: #fff; color: #111216; }
+  .btn.glass { background: rgba(255,255,255,.2); color: #fff; }
+  .btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .btn svg { width: 16px; height: 16px; }
+
+  /* cards */
+  .cards { margin-top: -150px; position: relative; z-index: 2; display: flex; flex-direction: column; gap: 40px; }
+  .card { background: var(--card); border-radius: 28px; box-shadow: 0 30px 80px rgba(17,18,22,.12), 0 2px 6px rgba(17,18,22,.05); overflow: hidden; min-width: 0; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 36px 40px 32px; border-bottom: 1px solid var(--line); }
+  .card-head h2 { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: -0.015em; }
+  .card-head p { margin: 6px 0 0; font-size: 21px; color: var(--muted); letter-spacing: -0.01em; text-wrap: pretty; }
+  .round { flex: none; width: 56px; height: 56px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; color: var(--ink); font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .card-body { padding: 72px 40px 48px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .card-body h3 { margin: 0; font-size: clamp(30px, 4.2vw, 46px); font-weight: 600; letter-spacing: -0.035em; text-align: center; text-wrap: balance; line-height: 1.08; }
+  .card-body .sub { margin: 0 0 30px; font-size: 21px; color: var(--muted); text-align: center; text-wrap: balance; }
+  .inner { width: 100%; max-width: 760px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); box-shadow: 0 10px 30px rgba(17,18,22,.06); min-width: 0; overflow: hidden; }
+  .note { width: 100%; max-width: 760px; margin: 18px 0 0; font-size: 14px; color: var(--muted); text-align: center; }
+
+  .log { margin: 0; padding: 26px 28px; font-family: var(--mono); font-size: 14px; line-height: 1.9; overflow-x: auto; white-space: pre; font-variant-numeric: tabular-nums; }
+  .log .d { color: var(--muted); }
+  .log .hit { color: var(--chip-bad); font-weight: 500; }
+
+  .rows { width: 100%; max-width: 760px; margin-top: 26px; display: flex; flex-direction: column; }
+  .rows .lbl { color: var(--muted); font-size: 16px; margin-bottom: 14px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-block: 14px; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row b { display: block; font-weight: 500; font-size: 19px; letter-spacing: -0.01em; }
+  .row small { color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .chip { flex: none; font-size: 15px; font-weight: 500; border-radius: 999px; padding: 7px 16px; white-space: nowrap; }
+  .chip.ok { background: var(--chip-ok-bg); color: var(--chip-ok); }
+  .chip.bad { background: var(--chip-bad-bg); color: var(--chip-bad); }
+  .chip.warn { background: var(--chip-warn-bg); color: var(--chip-warn); }
+  .chip.blue { background: var(--chip-blue-bg); color: var(--chip-blue); }
+
+  .issue { padding: 28px 30px; display: flex; flex-direction: column; gap: 16px; }
+  .issue-top { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .issue h4 { margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.015em; }
+  .issue h4 span { color: var(--muted); font-weight: 400; }
+  .issue dl { display: grid; grid-template-columns: 130px 1fr; gap: 10px 18px; margin: 0; font-size: 16.5px; }
+  .issue dt { color: var(--muted); }
+  .issue dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+  .gate { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 15px 28px; border-top: 1px solid var(--line); font-size: 18px; }
+  .gate:first-child { border-top: 0; }
+  .gate svg { width: 18px; height: 18px; color: var(--chip-ok); }
+  .gate small { color: var(--muted); font-family: var(--mono); font-size: 13px; text-align: right; }
+  .result { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 18px 28px; border-top: 1px solid var(--line); font-size: 16.5px; flex-wrap: wrap; }
+  .result.held { background: var(--soft); }
+  .result b { font-weight: 500; }
+
+  /* install */
+  .install { padding-block: 120px 40px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .install h2 { margin: 0; font-size: clamp(30px, 4.2vw, 46px); font-weight: 600; letter-spacing: -0.035em; text-align: center; }
+  .install .sub { margin: 0 0 26px; font-size: 21px; color: var(--muted); text-align: center; text-wrap: balance; max-width: 30em; }
+  .cmd { width: 100%; max-width: 640px; display: flex; align-items: center; gap: 14px; border: 1px dashed var(--line); background: var(--card); border-radius: 16px; padding: 16px 22px; min-width: 0; }
+  .cmd span { font-family: var(--mono); font-size: 13px; color: var(--muted); flex: none; }
+  .cmd code { font-size: 15.5px; overflow-wrap: anywhere; min-width: 0; color: var(--muted); }
+  .also { margin-top: 10px; color: var(--muted); font-size: 16px; text-align: center; max-width: 560px; }
+
+  footer { padding-block: 120px 90px; }
+  .foot { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 40px; }
+  .foot svg { width: 40px; height: 40px; display: block; margin-bottom: 30px; }
+  .foot p { margin: 0; color: var(--muted); font-size: 18px; line-height: 1.6; max-width: 32em; }
+  .col h5 { margin: 0 0 22px; font-size: 18px; font-weight: 400; color: var(--muted); }
+  .col a, .col span { display: block; font-size: 21px; margin-bottom: 14px; letter-spacing: -0.01em; }
+  .col span { color: var(--muted); }
+  .col a:hover { color: var(--muted); }
+
+  @media (max-width: 760px) {
+    .navlinks { gap: 20px; font-size: 16px; }
+    .headline { padding-top: 90px; }
+    .hero { padding-bottom: 180px; }
+    .card-head { padding: 26px 22px; }
+    .card-head p { font-size: 18px; }
+    .card-body { padding: 44px 18px 32px; }
+    .issue dl { grid-template-columns: 1fr; gap: 2px; }
+    .issue dd { margin-bottom: 10px; }
+    .gate { grid-template-columns: 22px 1fr; padding-inline: 20px; }
+    .gate small { grid-column: 2; text-align: left; }
+    .result { padding-inline: 20px; }
+    .log { font-size: 12.5px; padding: 20px; white-space: pre-wrap; }
+    .foot { grid-template-columns: 1fr 1fr; }
+    .foot > div:first-child { grid-column: 1 / -1; }
+  }
+</style>
+
+<header class="hero">
+  <div class="container">
+    <nav>
+      <a class="logo" href="#" aria-label="hush home">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <div class="navlinks">
+        <a href="#watch">How it works</a>
+        <a href="#pulse">Pulse</a>
+        <a href="#install">Install</a>
+      </div>
+    </nav>
+    <div class="headline">
+      <h1>
+        <span>Agents read production.</span>
+        <span>Stay quiet when it’s fine.</span>
+        <span>Fix what they can prove.</span>
+        <span class="now">And tell you when one dies.</span>
+      </h1>
+      <div class="actions">
+        <a class="btn solid" href="#watch">How it works
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v11M3.5 8.5 8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <a class="btn glass" href="#install">Install preview</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="cards">
+
+    <article class="card" id="watch">
+      <div class="card-head">
+        <div><h2>Watch</h2><p>Six sources, every morning. Nothing to read when nothing is broken.</p></div>
+        <div class="round" aria-hidden="true">09:00</div>
+      </div>
+      <div class="card-body">
+        <h3>Silence is the default output.</h3>
+        <p class="sub">Known noise stays known. Only new problems get through.</p>
+        <div class="inner">
+<pre class="log"><span class="d">errors    </span> 412 events, 3 clusters, all known
+<span class="hit">logs      </span><span class="hit"> 31,600 lines, 1 new pattern: restart loop</span>
+<span class="d">cost      </span> +4% week over week, inside the band
+<span class="d">llm       </span> 1,208 traces, every tool returned ok
+<span class="d">jobs      </span> queue drained
+<span class="d">speed     </span> p95 flat</pre>
+        </div>
+        <div class="rows">
+          <div class="lbl">Today’s run:</div>
+          <div class="row"><div><b>errors, cost, llm, jobs, speed</b><small>5 monitors</small></div><span class="chip ok">Quiet</span></div>
+          <div class="row"><div><b>logs</b><small>one new pattern</small></div><span class="chip bad">Issue #418 filed</span></div>
+        </div>
+        <p class="note">Example run. Invented data.</p>
+      </div>
+    </article>
+
+    <article class="card" id="file">
+      <div class="card-head">
+        <div><h2>File</h2><p>One issue per real defect, with the evidence another agent needs.</p></div>
+        <div class="round" aria-hidden="true">#418</div>
+      </div>
+      <div class="card-body">
+        <h3>An issue you can act on.</h3>
+        <p class="sub">Where it happens. How often. The line that causes it.</p>
+        <div class="inner">
+          <div class="issue">
+            <div class="issue-top"><h4>Retry guard never backs off after a reconnect <span>#418</span></h4><span class="chip blue">Ready to fix</span></div>
+            <dl>
+              <dt>What</dt><dd>A worker restarts every 5 seconds while its upstream is down.</dd>
+              <dt>Evidence</dt><dd>3 restart loops in 24h, 11 to 16 seconds each</dd>
+              <dt>Mechanism</dt><dd><code>worker/retry.ts:84</code> checks the whole window, so one good run turns the guard off</dd>
+              <dt>Fix size</dt><dd>Bounded. No schema change, no new dependency.</dd>
+            </dl>
+          </div>
+        </div>
+        <p class="note">Example issue. Invented data.</p>
+      </div>
+    </article>
+
+    <article class="card" id="mend">
+      <div class="card-head">
+        <div><h2>Mend</h2><p>A fix with a regression test, one PR per issue, taken to green.</p></div>
+        <div class="round" aria-hidden="true">5/5</div>
+      </div>
+      <div class="card-body">
+        <h3>Five gates, or it waits.</h3>
+        <p class="sub">The paths you mark as yours never merge on their own.</p>
+        <div class="inner">
+          <div class="gate"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5 7.5 13.5 14.5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>A code defect in this repo</span><small>not config, not vendor</small></div>
+          <div class="gate"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5 7.5 13.5 14.5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>A mechanism you can point to</span><small>worker/retry.ts:84</small></div>
+          <div class="gate"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5 7.5 13.5 14.5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>A bounded fix</span><small>no schema, no deps</small></div>
+          <div class="gate"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5 7.5 13.5 14.5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>A test that fails without the fix</span><small>reverted and checked</small></div>
+          <div class="gate"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 9.5 7.5 13.5 14.5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Nobody else on it</span><small>branch claimed first</small></div>
+          <div class="result"><span><b>PR #419</b> fixes #418, with a regression test</span><span class="chip ok">Green, merged</span></div>
+          <div class="result held"><span><b>PR #421</b> touches <code>billing/</code></span><span class="chip warn">Waiting for you</span></div>
+        </div>
+        <p class="note">Example PRs. Invented data.</p>
+      </div>
+    </article>
+
+    <article class="card" id="pulse">
+      <div class="card-head">
+        <div><h2>Pulse</h2><p>A dead monitor and a healthy system look the same. Both are silent.</p></div>
+        <div class="round" aria-hidden="true">2/4</div>
+      </div>
+      <div class="card-body">
+        <h3>Who watches the monitors.</h3>
+        <p class="sub">Every run leaves a heartbeat. Pulse checks them on its own schedule.</p>
+        <div class="rows">
+          <div class="lbl">Roster:</div>
+          <div class="row"><div><b>errors</b><small>2h ago · read 412</small></div><span class="chip ok">Alive</span></div>
+          <div class="row"><div><b>logs</b><small>2h ago · read 31,600</small></div><span class="chip ok">Alive</span></div>
+          <div class="row"><div><b>jobs</b><small>2h ago · read 0</small></div><span class="chip warn">Said ok, read nothing</span></div>
+          <div class="row"><div><b>speed</b><small>4 days ago</small></div><span class="chip bad">Dead</span></div>
+        </div>
+        <p class="note">Example roster. Invented data.</p>
+      </div>
+    </article>
+  </div>
+
+  <section class="install" id="install">
+    <h2>Not out yet.</h2>
+    <p class="sub">Hush is coming to Claude Code as a free plugin. This is what install will look like.</p>
+    <div class="cmd"><span>1</span><code>/plugin marketplace add &lt;repo&gt;</code></div>
+    <div class="cmd"><span>2</span><code>/plugin install hush</code></div>
+    <div class="cmd"><span>3</span><code>/hush setup</code></div>
+    <p class="also">Setup will ask which sources you have and which paths stay yours, then write a short <code>CHARTER.md</code> to the repo.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="container foot">
+    <div>
+      <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="var(--mark)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <p>Hush is a Claude Code plugin that watches production, files what broke, fixes what it can prove, and checks that its own monitors are alive.</p>
+    </div>
+    <div class="col"><h5>Product</h5><a href="#watch">How it works</a><a href="#pulse">Pulse</a><a href="#install">Install</a></div>
+    <div class="col"><h5>Status</h5><span>Not released</span><span>Mock landing</span></div>
+  </div>
+</footer>

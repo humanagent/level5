@@ -33,7 +33,8 @@ const INTEGRATIONS = [
   ["vercel", "#000000", LOGO_VERCEL, "Vercel", "Daily spend per project, and heartbeats from your deploys and crons."],
 ];
 
-export function landingPage({ install, msg, esc, css, fonts, icon, mark }) {
+export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars = null }) {
+  const starTag = stars == null ? "" : `<span class="stars" aria-label="${stars} stars">★ ${stars >= 1000 ? (stars / 1000).toFixed(1).replace(/\.0$/, "") + "k" : stars}</span>`;
   const bars = (s) => [...s].map((c) => `<i data-s="${{ o: "ok", d: "degraded", s: "skipped", ".": "" }[c]}"></i>`).join("");
   const rows = EXAMPLE.map(
     ([id, label, st, days, pct]) => `<div class="row">
@@ -81,8 +82,9 @@ ${icon}${fonts}
 .step p{color:var(--muted);margin:0}
 .step code,.reads code{font:12.5px var(--mono);color:var(--ink);background:#f4f5f6;border-radius:4px;padding:1px 5px}
 .reads{max-width:760px;margin:112px auto 0}
+.oss svg{width:14px;height:14px}.oss>span:not(.stars){padding-right:6px}.stars{padding:2px 9px;border-left:1px solid var(--line);font:500 12px var(--mono);color:var(--ink)}
 .nav-r{display:flex;align-items:center;gap:20px}.gh-link{display:inline-flex;align-items:center;gap:7px}.gh-link svg{width:16px;height:16px}
-.oss{display:inline-block;margin:0 0 22px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;font:500 12.5px var(--mono);color:var(--muted);text-decoration:none}.oss:hover{color:var(--ink);border-color:#d6d8dc}
+.oss{display:inline-flex;align-items:center;gap:8px;margin:0 0 22px;padding:5px 6px 5px 12px;border:1px solid var(--line);border-radius:999px;font:500 12.5px var(--mono);color:var(--muted);text-decoration:none}.oss:hover{color:var(--ink);border-color:#d6d8dc}
 .fine a{color:var(--muted)}
 .costs{max-width:1000px;margin:112px auto 0}.costs>h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600}.costs>p{color:var(--muted);text-align:center;margin:0 auto 32px;max-width:60ch;text-wrap:pretty}
 .cost-shot{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,24,30,.25)}
@@ -115,7 +117,7 @@ ${icon}${fonts}
 <nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><span class="nav-r"><a class="signin gh-link" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>GitHub</span></a><a class="signin" href="/auth/login">Sign in</a></span></nav>
 
 <section class="h">
-  <a class="oss" href="${REPO}" target="_blank" rel="noopener">Open source · MIT</a>
+  <a class="oss" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>Star on GitHub</span>${starTag}</a>
   <h1>
     <span>Your agents run the factory.</span>
     <span>Skills run while you sleep.</span>

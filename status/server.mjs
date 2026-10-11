@@ -2314,6 +2314,18 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   </div>`, { live: true, stale, app: true });
 }
 
+// The repo's GitHub stars for the landing, read once an hour without a token (the repo is
+// public). Kept null until a read works, so the landing never shows a made-up number.
+const STARS = { n: null, at: 0 };
+async function refreshStars() {
+  if (Date.now() - STARS.at < 36e5) return;
+  STARS.at = Date.now();
+  try {
+    const r = await fetch("https://api.github.com/repos/humanagent/hush", { headers: { accept: "application/vnd.github+json", "user-agent": "hush" }, signal: AbortSignal.timeout(5000) });
+    if (r.ok) STARS.n = (await r.json()).stargazers_count ?? null;
+  } catch {}
+}
+
 function homePage(user, repos = [], msg = "", snaps = {}) {
   const app = appConfig();
   if (!app) {
@@ -2321,7 +2333,7 @@ function homePage(user, repos = [], msg = "", snaps = {}) {
       <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK });
+  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK, stars: STARS.n });
   // Every repo the person can see, grouped by account, with the numbers from its last snapshot.
   const usdF = (n) => (n == null ? "–" : "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2)));
   const STATE_LABEL = { ok: "Operational", degraded: "Degraded", down: "Needs attention" };
@@ -2588,6 +2600,7 @@ createServer(async (req, res) => {
     const user = await sessionUser(req);
 
     // the public landing, also for someone signed in who wants to see it
+    if ((url.pathname === "/landing" || (url.pathname === "/" && !user)) && req.method === "GET") await refreshStars();
     if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null));
     if (url.pathname === "/" && req.method === "GET") {
       if (!user) return send(res, 200, homePage(null));

@@ -359,13 +359,12 @@ function judge(factory, repo) {
   const roster = [...factory.monitors];
   // A SessionEnd beat named after a declared routine's slash command is evidence for that
   // routine, not a monitor of its own. Anything else unknown still shows, marked unlisted.
-  const routineSkill = (r) => (r.prompt?.match(/\/([a-z][a-z0-9:_-]*)/) || [])[1];
-  const routineSkills = new Set(factory.routines.map(routineSkill).filter(Boolean));
+  const isRoutine = (id) => factory.routines.some((r) => routineMatch(r)(id));
   const sessions = {};
   for (const b of beats) if (b.source === "session" && !sessions[b.monitor]) sessions[b.monitor] = b.ts;
   for (const id of new Set(beats.map((b) => b.monitor))) {
     if (roster.some((m) => m.id === id)) continue;
-    if (routineSkills.has(id) && beats.every((b) => b.monitor !== id || b.source === "session")) continue;
+    if (isRoutine(id) && beats.every((b) => b.monitor !== id || b.source === "session")) continue;
     roster.push({ id, cadence: "daily", max_silence_hours: 50, unlisted: true });
   }
   const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
@@ -410,6 +409,14 @@ function judge(factory, repo) {
   return { monitors, beats: beats.filter((b) => b.ts >= cut).length, sessions };
 }
 
+// Which session names count as a run of this routine: "/fix-issues" matches fix-issues only,
+// "/audit-*" (or a prompt that names a family like "/audit-") matches every audit-… skill.
+function routineMatch(r) {
+  const m = (r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)(\*)?/);
+  if (!m) return () => false;
+  return m[2] || m[1].endsWith("-") ? (id) => id.startsWith(m[1]) : (id) => id === m[1];
+}
+
 function routineState(r, monitors, merged, sessions = {}) {
   const fed = monitors.filter((m) => m.routine && m.routine === r.name && m.last);
   let last = fed.map((m) => m.last.ts).sort().pop() || null;
@@ -419,7 +426,8 @@ function routineState(r, monitors, merged, sessions = {}) {
     const m = monitors.find((x) => x.id === skill && x.last);
     if (m) [last, evidence] = [m.last.ts, "heartbeat"];
   }
-  const ran = sessions[(r.prompt?.match(/\/([a-z][a-z0-9:_-]*)/) || [])[1]];
+  const match = routineMatch(r);
+  const ran = Object.entries(sessions).filter(([id]) => match(id)).map(([, ts]) => ts).sort().pop();
   if (ran && (!last || ran > last)) [last, evidence] = [ran, "routine session"];
   if (!last && /review/i.test(r.name)) {
     const p = merged.find((x) => /pr-sweep|review/.test(x.branch));

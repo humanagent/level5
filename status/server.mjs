@@ -414,6 +414,9 @@ function sessionUsd(models, overrides) {
   }
   return Math.round(usd * 100) / 100;
 }
+// Service names the way Cost Explorer shows them: "Amazon Simple Storage Service" -> "S3"
+const SVC_SHORT = [[/simple storage service/i, "S3"], [/elastic container service/i, "Elastic Container Service"], [/relational database service/i, "RDS"], [/simple email service/i, "SES"], [/simple notification service/i, "SNS"], [/simple queue service/i, "SQS"], [/elastic compute cloud - compute/i, "EC2-Instances"], [/^ec2 - other$/i, "EC2-Other"], [/virtual private cloud/i, "VPC"], [/key management service/i, "Key Management Service"], [/^amazon ?cloudwatch$/i, "CloudWatch"], [/^aws ?cloudtrail$|^amazon ?cloudtrail$/i, "CloudTrail"], [/elastic container registry/i, "EC2 Container Registry (ECR)"], [/^aws cost explorer$/i, "Cost Explorer"]];
+const svcShort = (n) => (SVC_SHORT.find(([re]) => re.test(n)) || [null, String(n).replace(/^(Amazon|AWS) ?/, "")])[1];
 const srcLabel = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
 async function readCosts(repoId, prices) {
   const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
@@ -1026,6 +1029,40 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .map-tip{position:absolute;z-index:3;width:228px;display:grid;gap:2px;padding:10px 12px;border-radius:8px;background:var(--squid,#232f3e);color:#d5dbdb;font-size:12px;pointer-events:none;box-shadow:0 8px 24px -8px rgba(0,0,0,.4)}.map-tip b{color:#fff;font-size:13px}
 .map-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;color:var(--muted)}.map-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .w-cols{height:90px;margin-bottom:6px}.w-cols i{background:var(--squid,#232f3e)}
+.cx{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;margin:20px 0 32px;background:var(--bg);border-radius:8px;box-shadow:var(--shadow,0 0 0 1px var(--line))}
+.cx-main{padding:20px 22px 18px;min-width:0}
+.cx-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.cx-head h2{font-size:20px;margin:0}
+.seg{display:inline-flex;border:2px solid #7d8998;border-radius:20px;padding:2px;gap:2px}.seg button{background:none;border:0;border-radius:16px;padding:5px 12px;color:var(--ink);cursor:pointer;font:700 14px var(--f)}.seg button:hover{background:#f2f3f3}.seg button.on{background:#0972d3;color:#fff}
+.seg svg{width:18px;height:18px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.seg.wide{display:flex;margin-bottom:14px}.seg.wide button{flex:1}
+.cx-sub{color:var(--muted);font-size:13px;margin:6px 0 10px}.cx-sub b{color:var(--ink);font-size:15px}
+.cx-chart{position:relative;min-height:340px}.cx-loading,.cx-note{color:var(--faint);font-size:13px}.cx-loading{padding:140px 0;text-align:center}
+.cx-svg{display:block;max-width:100%;height:auto;font:12px var(--f)}
+.cx-svg .grid{stroke:#e9ebed}.cx-svg .axis0{stroke:#aab7b8}.cx-svg .yl{fill:var(--muted);text-anchor:end}.cx-svg .xl{fill:var(--muted);text-anchor:middle;font-size:12.5px}
+.cx-svg .hit{fill:transparent}.cx-svg .cap{fill:#fff;opacity:.5}
+.cx-svg.hov .col:not(.on) rect:not(.hit){opacity:.32}.cx-svg .col rect{transition:opacity .12s}
+.cx-svg .ln{fill:none;stroke-width:2}.cx-svg .pt{opacity:0}.cx-svg .pt.on{opacity:1}
+.cx-svg .prev{fill:none;stroke:#16191f;stroke-width:1.6;stroke-dasharray:5 4;opacity:.65}
+.cx-tip{position:absolute;z-index:4;width:300px;max-width:calc(100% - 8px);padding:14px 16px;background:#fff;border:1px solid #d1d5db;border-radius:12px;box-shadow:0 8px 24px -6px rgba(0,28,36,.3);font-size:13.5px;pointer-events:none}
+.cx-tip b{display:block;margin-bottom:8px;font-size:14px}.cx-tip .tr,.cx-tip .tt,.cx-tip .tp{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:8px;align-items:center;padding:3px 0}
+.cx-tip .tr i{width:11px;height:11px;border-radius:2px}.cx-tip em{font-style:normal;font-variant-numeric:tabular-nums}.cx-tip .tr span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx-tip .tt{grid-template-columns:minmax(0,1fr) auto;border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700}.cx-tip .tp{grid-template-columns:minmax(0,1fr) auto;color:var(--muted)}.cx-tip small{color:var(--muted)}
+.cx-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 4px;font-size:12.5px;color:var(--ink)}.cx-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}.cx-legend i.dash{width:16px;height:0;border-top:2px dashed #16191f;border-radius:0;vertical-align:3px}
+.cx-table table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}.cx-table th{text-align:left;font-size:12px;color:var(--muted);font-weight:700;padding:8px 6px;border-bottom:1px solid var(--line)}.cx-table td{padding:7px 6px;border-bottom:1px solid #f2f3f3}.cx-table td:nth-child(2){font-variant-numeric:tabular-nums;width:110px}.cx-table td:nth-child(3){width:200px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cx-table .bar{display:inline-block;width:100px;height:6px;border-radius:3px;background:#e9ebed;margin-right:8px;vertical-align:middle;overflow:hidden}.cx-table .bar i{display:block;height:100%;background:#688ae8}
+.cx-panel{border-left:1px solid var(--line);padding:6px 20px 18px}
+.cx-panel details{border-bottom:1px solid var(--line);padding:12px 0}.cx-panel details:last-child{border-bottom:0}
+.cx-panel summary{font-weight:700;font-size:16px;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;margin-bottom:10px}.cx-panel summary::-webkit-details-marker{display:none}
+.cx-panel summary::before{content:"";border:6px solid transparent;border-top:8px solid var(--ink);border-bottom:0;transition:transform .15s}.cx-panel details:not([open]) summary::before{transform:rotate(-90deg)}
+.cx-panel label{display:flex;flex-direction:column;gap:5px;font-weight:700;font-size:13.5px;margin-bottom:12px}
+.cx-panel .lab{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13.5px;margin:4px 0 6px}.cx-panel .lab a{font-weight:600;color:var(--link,#0073bb);text-decoration:none}
+.cx-panel select,.cx-panel input[type=date],.cx-panel input[type=search]{font:14px var(--f);color:var(--ink);padding:7px 10px;border:2px solid #7d8998;border-radius:8px;background:#fff;width:100%}
+.cx-custom{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cx-custom[hidden]{display:none}.cx-note{margin:-4px 0 12px}
+.ms{position:relative;margin-bottom:12px}.ms-btn{display:flex;justify-content:space-between;align-items:center;width:100%;background:#fff;color:var(--ink);border:2px solid #7d8998;border-radius:8px;padding:7px 10px;font:italic 14px var(--f);cursor:pointer}.ms-btn:hover{background:#fff}
+.ms-btn svg{width:16px;height:16px;fill:none;stroke:#0972d3;stroke-width:2.2}
+.ms-pop{position:absolute;z-index:6;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px -6px rgba(0,28,36,.3);padding:8px}.ms-pop[hidden]{display:none}
+.ms-list{max-height:240px;overflow-y:auto;margin-top:6px}.ms-list label,.cx-checks label{flex-direction:row;align-items:center;gap:8px;font-weight:400;margin:0;padding:4px 2px;font-size:13.5px}
+.cx-checks{display:grid;gap:2px}
+@media(max-width:1100px){.cx{grid-template-columns:minmax(0,1fr)}.cx-panel{border-left:0;border-top:1px solid var(--line)}}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -1387,8 +1424,87 @@ async function build() {
 }
 addEventListener("hashchange", build); document.addEventListener("hush:swap", () => { M.dispose?.(); build(); }); build();
 </script>`;
+// The cost explorer, after AWS Cost Explorer: stacked/bar/line chart with a hover column and a
+// tooltip, and a parameters panel (time, compare, range, granularity, group by, service and
+// provider filters). Data comes once from /r/<repo>/costs; all filtering runs in the browser, and the
+// state survives background refreshes and reloads (localStorage).
+const CX_JS = `<script>(()=>{const X=window.hushCx||(window.hushCx={data:null,at:0,st:null});
+const PAL=["#688ae8","#c33d69","#2ea597","#8456ce","#e07941","#3759ce","#962249","#096f64","#6237a7"],OTHER="#a84401";
+const NAMES={aws:"AWS",vercel:"Vercel",neon:"Neon",anthropic:"Anthropic API","claude-code":"Claude Code",openai:"OpenAI",fly:"Fly",cloudflare:"Cloudflare"};
+const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=v=>"$"+(Math.abs(v)>=1000?Math.round(v).toLocaleString("en-US"):v.toFixed(2));
+const D=d=>new Date(d+"T00:00:00Z"),iso=t=>new Date(t).toISOString().slice(0,10),add=(d,n)=>iso(D(d).getTime()+n*864e5);
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DEF={mode:"stacked",compare:false,range:"30",from:"",to:"",gran:"daily",group:"service",services:[],providers:[]};
+function load(){try{return {...DEF,...JSON.parse(localStorage.getItem("hush.cx")||"{}")}}catch(x){return {...DEF}}}
+function save(){try{localStorage.setItem("hush.cx",JSON.stringify(X.st))}catch(x){}}
+if(!X.st)X.st=load();
+const root=()=>document.getElementById("cx");
+function period(){const s=X.st,today=X.data.today,y=add(today,-1);let a,b=y;
+if(s.range==="custom"&&s.from&&s.to){a=s.from;b=s.to}else if(s.range==="mtd"){a=today.slice(0,8)+"01";b=today}else{a=add(y,1-Number(s.range||30))}if(a>b)[a,b]=[b,a];return [a,b]}
+function bucketOf(d){const g=X.st.gran;if(g==="monthly")return d.slice(0,7)+"-01";if(g==="weekly"){const t=D(d),wd=(t.getUTCDay()+6)%7;return add(d,-wd)}return d}
+function buckets(a,b){const out=[];let d=a;while(d<=b){const k=bucketOf(d);if(out[out.length-1]!==k)out.push(k);d=add(d,1)}return out}
+function label(k){const t=D(k);return X.st.gran==="monthly"?MON[t.getUTCMonth()]+"-"+String(t.getUTCFullYear()).slice(2):MON[t.getUTCMonth()]+"-"+String(t.getUTCDate()).padStart(2,"0")}
+function keyOf(r){const g=X.st.group;return g==="provider"?(NAMES[r[1]]||r[1]):g==="none"?"Total":r[2]}
+function pass(r){const s=X.st;return(!s.services.length||s.services.includes(r[2]))&&(!s.providers.length||s.providers.includes(r[1]))}
+function compute(){const [a,b]=period(),bk=buckets(a,b),idx=Object.fromEntries(bk.map((k,i)=>[k,i]));const rows=X.data.rows.filter(r=>r[0]>=a&&r[0]<=b&&pass(r));
+const tot={};for(const r of rows){const k=keyOf(r);tot[k]=(tot[k]||0)+r[3]}const order=Object.keys(tot).sort((x,y)=>tot[y]-tot[x]),top=order.slice(0,9),rest=order.length>9;
+const series=[...top,...(rest?["Others"]:[])].map((k,i)=>({k,color:k==="Others"?OTHER:PAL[i%PAL.length],v:bk.map(()=>0)}));const si=Object.fromEntries(series.map((x,i)=>[x.k,i]));
+for(const r of rows){const k=keyOf(r),s2=series[si[top.includes(k)?k:"Others"]],i=idx[bucketOf(r[0])];if(s2&&i!=null)s2.v[i]+=r[3]}
+let prev=null;if(X.st.compare){const len=(D(b)-D(a))/864e5+1,pa=add(a,-len),pb=add(a,-1),pbk=buckets(pa,pb),pidx=Object.fromEntries(pbk.map((k,i)=>[k,i]));prev=pbk.map(()=>0);for(const r of X.data.rows)if(r[0]>=pa&&r[0]<=pb&&pass(r)){const i=pidx[bucketOf(r[0])];if(i!=null)prev[i]+=r[3]}prev={v:prev,a:pa,b:pb}}
+return {a,b,bk,series,tot,order,prev,total:Object.values(tot).reduce((x,y)=>x+y,0)}}
+function nice(m){if(m<=0)return 1;const p=Math.pow(10,Math.floor(Math.log10(m))),f=m/p;return(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p}
+function draw(){const R=root();if(!R||!X.data)return;const s=X.st,c=compute(),box=R.querySelector(".cx-chart"),W=Math.max(320,box.clientWidth),H=340,L=48,B=34,T=12,Rt=8,iw=W-L-Rt,ih=H-T-B,n=c.bk.length;
+const totals=c.bk.map((_,i)=>c.series.reduce((t,x)=>t+x.v[i],0));const mx=Math.max(...(s.mode==="line"?c.series.flatMap(x=>x.v):totals),...(c.prev?c.prev.v.slice(0,n):[]),0);const top=nice(mx*1.08),step=top/5;
+const X0=i=>L+(i+.5)*iw/n,bw=Math.max(3,Math.min(46,iw/n*.62)),Y=v=>T+ih-(v/top)*ih;let g="";
+for(let j=0;j<=5;j++){const y=Y(j*step);g+='<line class="grid" x1="'+L+'" x2="'+(W-Rt)+'" y1="'+y+'" y2="'+y+'"/><text class="yl" x="'+(L-8)+'" y="'+(y+4)+'">'+(step*j>=1000?Math.round(step*j/100)/10+"k":+(step*j).toFixed(step<1?2:0))+"</text>"}
+const every=Math.ceil(n/Math.max(1,Math.floor(iw/72)));c.bk.forEach((k,i)=>{if(i%every===every-1||n<=8)g+='<text class="xl" x="'+X0(i)+'" y="'+(H-10)+'">'+label(k)+"</text>"});
+c.bk.forEach((k,i)=>{let col='<g class="col" data-i="'+i+'">';
+if(s.mode==="stacked"){let y0=0;c.series.forEach(x=>{const v=x.v[i];if(v>0){col+='<rect x="'+(X0(i)-bw/2)+'" y="'+Y(y0+v)+'" width="'+bw+'" height="'+Math.max(.5,Y(y0)-Y(y0+v))+'" fill="'+x.color+'"/>';y0+=v}});if(y0>0)col+='<rect class="cap" x="'+(X0(i)-bw/2)+'" y="'+Y(y0)+'" width="'+bw+'" height="2" rx="1"/>'}
+else if(s.mode==="bar"){const v=totals[i];if(v>0)col+='<rect x="'+(X0(i)-bw/2)+'" y="'+Y(v)+'" width="'+bw+'" height="'+(Y(0)-Y(v))+'" fill="#688ae8" rx="2"/>'}
+col+='<rect class="hit" x="'+(L+i*iw/n)+'" y="'+T+'" width="'+(iw/n)+'" height="'+ih+'"/></g>';g+=col});
+if(s.mode==="line")c.series.forEach(x=>{g+='<polyline class="ln" stroke="'+x.color+'" points="'+x.v.map((v,i)=>X0(i)+","+Y(v)).join(" ")+'"/>'+x.v.map((v,i)=>'<circle class="pt" data-i="'+i+'" cx="'+X0(i)+'" cy="'+Y(v)+'" r="2.6" fill="'+x.color+'"/>').join("")});
+if(c.prev)g+='<polyline class="prev" points="'+c.prev.v.slice(0,n).map((v,i)=>X0(i)+","+Y(v)).join(" ")+'"/>';
+g+='<line class="axis0" x1="'+L+'" x2="'+(W-Rt)+'" y1="'+Y(0)+'" y2="'+Y(0)+'"/>';
+box.innerHTML='<svg class="cx-svg" viewBox="0 0 '+W+" "+H+'" width="'+W+'" height="'+H+'"><text class="yt" x="'+L+'" y="'+(T-2)+'"></text>'+g+'</svg><div class="cx-tip" hidden></div>';
+const tip=box.querySelector(".cx-tip"),svg=box.querySelector("svg");
+svg.addEventListener("mousemove",ev=>{const r=svg.getBoundingClientRect(),i=Math.floor((ev.clientX-r.left-L)/(iw/n));if(i<0||i>=n){tip.hidden=true;svg.classList.remove("hov");return}
+svg.classList.add("hov");svg.querySelectorAll(".col,.pt").forEach(el=>el.classList.toggle("on",+el.dataset.i===i));
+const items=c.series.map(x=>[x,x.v[i]]).filter(([,v])=>v>0||s.group==="none").sort((p,q)=>(p[0].k==="Others")-(q[0].k==="Others")||q[1]-p[1]);
+tip.innerHTML='<b>'+label(c.bk[i])+(s.gran==="weekly"?" week":"")+"</b>"+items.map(([x,v])=>'<div class="tr"><i style="background:'+x.color+'"></i><span>'+e(x.k)+"</span><em>"+money(v)+"</em></div>").join("")+'<div class="tt"><span>Total costs</span><em>'+money(totals[i])+"</em></div>"+(c.prev?'<div class="tp"><span>Previous period</span><em>'+money(c.prev.v[i]||0)+(c.prev.v[i]?' <small>'+(totals[i]>=c.prev.v[i]?"+":"")+Math.round((totals[i]/c.prev.v[i]-1)*100)+"%</small>":"")+"</em></div>":"");
+tip.hidden=false;const bx=box.getBoundingClientRect(),x=X0(i)*(r.width/W),left=x+16+tip.offsetWidth>bx.width?x-16-tip.offsetWidth:x+16;tip.style.left=Math.max(4,left)+"px";tip.style.top="8px"});
+svg.addEventListener("mouseleave",()=>{tip.hidden=true;svg.classList.remove("hov")});
+R.querySelector(".cx-legend").innerHTML=c.series.map(x=>'<span><i style="background:'+x.color+'"></i>'+e(x.k)+"</span>").join("")+(c.prev?'<span><i class="dash"></i>Previous period</span>':"");
+const ptot=c.prev?c.prev.v.reduce((a2,b2)=>a2+b2,0):0;
+R.querySelector(".cx-sub").innerHTML="<b>"+money(c.total)+"</b> total · "+label(c.a)+" to "+label(c.b)+(s.gran==="daily"?" · "+money(c.total/Math.max(1,n))+" a day":"")+(c.prev?" · previous period "+money(ptot)+(ptot?" ("+(c.total>=ptot?"+":"")+Math.round((c.total/ptot-1)*100)+"%)":""):"");
+R.querySelector(".cx-table").innerHTML=c.order.length?'<table><thead><tr><th>'+(s.group==="provider"?"Provider":s.group==="none"?"":"Service")+"</th><th>Total</th><th>Share</th></tr></thead><tbody>"+c.order.slice(0,25).map(k=>'<tr><td>'+e(k)+"</td><td>"+money(c.tot[k])+'</td><td><span class="bar"><i style="width:'+(c.tot[k]/c.total*100).toFixed(1)+'%"></i></span>'+(c.tot[k]/c.total*100).toFixed(1)+"%</td></tr>").join("")+"</tbody></table>":'<p class="cx-note">No costs match these filters.</p>';
+panel(c)}
+function panel(c){const R=root(),s=X.st;R.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===s.mode));R.querySelectorAll("[data-time]").forEach(b=>b.classList.toggle("on",(b.dataset.time==="compare")===s.compare));
+for(const k of ["range","gran","group","from","to"]){const el=R.querySelector('[data-k="'+k+'"]');if(el&&document.activeElement!==el)el.value=s[k]||(k==="from"?c.a:k==="to"?c.b:el.value)}
+R.querySelector(".cx-custom").hidden=s.range!=="custom";R.querySelector('[data-note="range"]').textContent="Displaying "+label(c.a)+" to "+label(c.b);
+const all=[...new Set(X.data.rows.map(r=>r[2]))].sort(),provs=[...new Set(X.data.rows.map(r=>r[1]))].sort();const q=(R.querySelector(".ms-q")||{}).value||"";
+R.querySelector('[data-list="services"]').innerHTML=all.filter(x=>x.toLowerCase().includes(q.toLowerCase())).map(x=>'<label><input type="checkbox" data-svc="'+e(x)+'"'+(s.services.includes(x)?" checked":"")+"><span>"+e(x)+"</span></label>").join("")||'<p class="cx-note">No match.</p>';
+R.querySelector('[data-list="providers"]').innerHTML=provs.map(x=>'<label><input type="checkbox" data-prov="'+e(x)+'"'+(s.providers.includes(x)?" checked":"")+"><span>"+e(NAMES[x]||x)+"</span></label>").join("");
+R.querySelector(".ms-btn span").textContent=s.services.length?s.services.length===1?s.services[0]:s.services.length+" services":"Choose services";
+R.querySelector('[data-note="nfilters"]').textContent=(s.services.length?1:0)+(s.providers.length?1:0)}
+function set(p){Object.assign(X.st,p);save();draw()}
+async function fetchData(){const R=root();if(!R)return;try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/costs",{credentials:"same-origin"});if(r.ok){X.data=await r.json();X.at=Date.now();draw()}}catch(x){}}
+document.addEventListener("click",ev=>{const R=root();if(!R||!R.contains(ev.target)){document.querySelectorAll(".ms-pop").forEach(p=>p.hidden=true);return}
+const m=ev.target.closest("[data-mode]");if(m)return set({mode:m.dataset.mode});const t=ev.target.closest("[data-time]");if(t)return set({compare:t.dataset.time==="compare"});
+const cl=ev.target.closest("[data-clear]");if(cl){ev.preventDefault();const k=cl.dataset.clear;return set(k==="group"?{group:"service"}:k==="services"?{services:[]}:k==="providers"?{providers:[]}:{services:[],providers:[]})}
+const mb=ev.target.closest(".ms-btn");if(mb){const p=R.querySelector(".ms-pop");p.hidden=!p.hidden;if(!p.hidden)R.querySelector(".ms-q").focus();return}
+if(!ev.target.closest(".ms"))R.querySelector(".ms-pop").hidden=true});
+document.addEventListener("change",ev=>{const R=root();if(!R||!R.contains(ev.target))return;const el=ev.target;
+if(el.dataset.k){const p={[el.dataset.k]:el.value};if(el.dataset.k==="range"&&el.value==="custom"){const [a,b]=period();p.from=X.st.from||a;p.to=X.st.to||b}return set(p)}
+if(el.dataset.svc!=null){const v=el.dataset.svc,l=X.st.services.filter(x=>x!==v);if(el.checked)l.push(v);return set({services:l})}
+if(el.dataset.prov!=null){const v=el.dataset.prov,l=X.st.providers.filter(x=>x!==v);if(el.checked)l.push(v);return set({providers:l})}});
+document.addEventListener("input",ev=>{if(ev.target.classList&&ev.target.classList.contains("ms-q")&&X.data)panel(compute())});
+addEventListener("resize",()=>{clearTimeout(X.rt);X.rt=setTimeout(draw,120)});
+addEventListener("hashchange",()=>{if(location.hash==="#costs")draw()});
+document.addEventListener("hush:swap",()=>{if(Date.now()-X.at>12e4)fetchData();else draw()});
+if(X.data)draw();else fetchData()})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx"') ? CX_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1526,10 +1642,32 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="stat"><b>${usd(C.yesterday)}</b><span>Yesterday</span><small>${usd(C.avg7)} a day over the last 7</small></div>
       <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud session${C.sessions_30d === 1 ? "" : "s"} in ${WINDOW} days</small></div>
       <div class="stat"><b>${C.sessions_30d ? tk(C.tokens_30d / C.sessions_30d) : "–"}</b><span>Tokens per session</span><small>average</small></div>
-      <div class="chart" aria-label="Spend per day">
-        <div class="cols">${C.per_day.map((p) => `<div title="${p.d} · ${usd(p.total)}${Object.keys(p.by).length ? " · " + Object.entries(p.by).map(([k, v]) => `${srcName(k)} ${usd(v)}`).join(", ") : ""}${p.tokens ? ` · ${tk(p.tokens)} tokens` : ""}"><i class="stack" style="height:${(p.total / maxCost) * 100}%">${C.sources.filter((k) => p.by[k]).map((k) => `<em style="flex:${p.by[k]};background:${srcColor(k)}"></em>`).join("")}</i></div>`).join("")}</div>
-        <div class="axis"><span>Spend per day</span><span class="rule"></span>${C.sources.map((k) => `<span><span class="key" style="background:${srcColor(k)}"></span> ${srcName(k)}</span>`).join("")}</div>
-      </div>
+    </div>
+    <div class="cx" id="cx" data-repo="${esc(s.repo)}">
+      <section class="cx-main"><div class="cx-head"><h2>Cost and usage</h2><div class="seg" role="group" aria-label="Chart type">
+        <button type="button" data-mode="bar" title="Bar: total per period"><svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 12V7M7 12V4M10 12V8M13 12V6"/></svg></button>
+        <button type="button" data-mode="line" title="Line"><svg viewBox="0 0 16 16"><path d="M2 12l4-4 3 2 5-6"/><circle cx="2" cy="12" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="9" cy="10" r="1"/><circle cx="14" cy="4" r="1"/></svg></button>
+        <button type="button" data-mode="stacked" title="Stacked"><svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 12V9M4 9V7M7 12V8M7 8V4M10 12V10M10 10V7M13 12V9"/></svg></button></div></div>
+        <div class="cx-sub"></div><div class="cx-chart" role="img" aria-label="Spend over time"><div class="cx-loading">Loading cost data…</div></div><div class="cx-legend"></div><div class="cx-table"></div></section>
+      <aside class="cx-panel" aria-label="Report parameters">
+        <details open><summary>Time</summary>
+          <div class="seg wide" role="group"><button type="button" data-time="standard">Standard</button><button type="button" data-time="compare">Compare</button></div>
+          <label>Date range<select data-k="range"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90">Last 90 days</option><option value="mtd">Month to date</option><option value="custom">Custom</option></select></label>
+          <div class="cx-custom"><label>From<input type="date" data-k="from"></label><label>To<input type="date" data-k="to"></label></div>
+          <p class="cx-note" data-note="range"></p>
+          <label>Granularity<select data-k="gran"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+        </details>
+        <details open><summary>Group by</summary>
+          <label><span class="lab">Dimension <a href="#" data-clear="group">Clear</a></span><select data-k="group"><option value="service">Service</option><option value="provider">Provider</option><option value="none">No grouping</option></select></label>
+        </details>
+        <details open><summary>Filters</summary>
+          <div class="lab"><span>Applied filters (<span data-note="nfilters">0</span>)</span><a href="#" data-clear="all">Clear all</a></div>
+          <div class="lab">Service <a href="#" data-clear="services">Clear</a></div>
+          <div class="ms"><button type="button" class="ms-btn" aria-haspopup="listbox"><span>Choose services</span><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg></button><div class="ms-pop" hidden><input type="search" placeholder="Find a service" class="ms-q"><div class="ms-list" data-list="services"></div></div></div>
+          <div class="lab">Provider <a href="#" data-clear="providers">Clear</a></div>
+          <div class="cx-checks" data-list="providers"></div>
+        </details>
+      </aside>
     </div>
     ${C.sessions.length ? `<h2>Last ${C.sessions.length === 1 ? "Claude Code session" : `${C.sessions.length} Claude Code sessions`}</h2><div><div class="group" style="margin-bottom:0">${C.sessions.map((x) => `<div class="line"><span class="name"><code>/${esc(x.name)}</code><span class="sub">${ago(x.at)} · ${esc(x.models.join(", "))}${x.turns ? ` · ${x.turns} turns` : ""}</span></span><span class="meta"><b>${tk(x.tokens.total)}</b> tokens <span class="sub">${tk(x.tokens.input + x.tokens.cache_write)} in · ${tk(x.tokens.cache_read)} cached · ${tk(x.tokens.output)} out${x.usd != null ? ` · ~${usd(x.usd)}` : ""}</span></span></div>`).join("")}</div><div class="cost-note">Dollars are estimated at API list prices. On a Claude subscription they show what the same tokens would cost, not what you pay. A model with no known price shows tokens only; set it under <code>prices</code> in <code>.claude/factory.json</code>.</div></div>` : ""}`;
   const prTabs = [
@@ -2094,7 +2232,7 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
     if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
@@ -2104,6 +2242,19 @@ createServer(async (req, res) => {
       const row = await ensureRepo(seen, user);
       if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: (await db.one("SELECT COUNT(*)::int AS n FROM heartbeats WHERE repo_id = $1", row.id)).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
+      if (m[2] === "/costs") {
+        // every cost row of the last 120 days, one [day, provider, service, usd] per breakdown key
+        const since = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+        const rows = [];
+        for (const r of await db.all("SELECT source, day, usd, body FROM costs WHERE repo_id = $1 AND day >= $2", row.id, since)) {
+          const b = JSON.parse(r.body);
+          if (r.source === "claude-code") { const v = r.usd ?? sessionUsd(b.models, {}); if (v != null) rows.push([r.day, "claude-code", "Claude Code sessions", Math.round(v * 100) / 100]); continue; }
+          if (r.usd == null) continue;
+          const parts = b.breakdown && Object.keys(b.breakdown).length ? Object.entries(b.breakdown) : [[srcLabel(r.source), r.usd]];
+          for (const [name, v] of parts) if (Number(v)) rows.push([r.day, r.source, svcShort(name), Math.round(Number(v) * 100) / 100]);
+        }
+        return json(res, 200, { today: new Date().toISOString().slice(0, 10), rows });
+      }
       if (m[2]?.startsWith("/rules")) {
         if (req.method !== "POST") return json(res, 200, await evalRules(row.id));
         const [, id, act] = m[2].match(/^\/rules(?:\/(\d+)(?:\/(delete|toggle))?)?$/) || [];

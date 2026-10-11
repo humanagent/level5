@@ -61,6 +61,21 @@ authorization: Bearer <ingest-key>
 The natural sender is the job that already reads the bill. For example, a daily cost monitor that
 queries AWS Cost Explorer ends by posting the last 3 days with `hush.sh cost aws`.
 
+## Cost explorer
+
+Under Costs, after AWS Cost Explorer: a chart (stacked by group, total bars, or lines) with a hover
+column and a tooltip listing every group for that period with its amount and the total, a table of
+totals and shares, and a parameters panel:
+
+- **Time**: Standard, or Compare to overlay the previous period of the same length (dashed line, % change).
+- **Date range**: last 7, 14, 30, 60 or 90 days, month to date, or custom from/to.
+- **Granularity**: daily, weekly (from Monday) or monthly.
+- **Group by**: service, provider, or none. The top 9 keep their own color; the rest are "Others".
+- **Filters**: services (searchable multi-select) and providers.
+
+Data comes once from `GET /r/<owner>/<repo>/costs` (120 days, one row per day, provider and
+service); everything else runs in the browser and the choices are remembered per browser.
+
 ## On the page
 
 A **Costs** section: 30-day total by source, yesterday, the 7-day daily average, Claude Code tokens

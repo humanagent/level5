@@ -317,13 +317,14 @@ async function readQueue(token, repo) {
         const c = await gh(token, `repos/${repo}/commits/${p.head.sha}/check-runs?per_page=100`).catch(() => null);
         const runs = c?.check_runs || [];
         const ci = runs.some((x) => ["failure", "timed_out"].includes(x.conclusion)) ? "red" : runs.some((x) => x.status !== "completed") ? "running" : runs.length ? "green" : "none";
-        return { number: p.number, title: p.title, branch: p.head.ref, draft: p.draft, ci, url: p.html_url };
+        return { number: p.number, title: p.title, branch: p.head.ref, draft: p.draft, ci, url: p.html_url, author: p.user?.login || "", created_at: p.created_at, updated_at: p.updated_at };
       }),
     );
-    const merged = (closedRaw || []).filter((p) => p.merged_at).map((p) => ({ number: p.number, title: p.title, branch: p.head.ref, merged_at: p.merged_at, url: p.html_url })).sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1));
+    const merged = (closedRaw || []).filter((p) => p.merged_at).map((p) => ({ number: p.number, title: p.title, branch: p.head.ref, merged_at: p.merged_at, url: p.html_url, author: p.user?.login || "", created_at: p.created_at })).sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1));
+    const closed = (closedRaw || []).filter((p) => !p.merged_at).map((p) => ({ number: p.number, title: p.title, branch: p.head.ref, closed_at: p.closed_at, url: p.html_url, author: p.user?.login || "", created_at: p.created_at })).sort((a, b) => (a.closed_at < b.closed_at ? 1 : -1));
     const runs = [];
     for (const r of runsRaw?.workflow_runs || []) if (!runs.some((x) => x.name === r.name)) runs.push({ name: r.name, status: r.status, conclusion: r.conclusion, at: r.updated_at, event: r.event, url: r.html_url });
-    return { issues, prs, merged, runs };
+    return { issues, prs, merged, closed, runs };
   });
 }
 
@@ -491,7 +492,7 @@ function refresh(row) {
 }
 const FRESH_MS = 60e3;
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 2;
+const SNAP_V = 3;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -599,6 +600,19 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}
 .grid2>.row{background:var(--bg);border-top:0}.grid2>.row:last-child:nth-child(odd){grid-column:1/-1}
 @media(max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.tabs{margin-bottom:32px}.tabs>input{position:absolute;opacity:0;pointer-events:none}
+.tabs>label{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;margin:0 4px 10px 0;border:1px solid var(--line);border-radius:999px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+.tabs>label:hover{color:var(--ink)}.tabs>label .count{color:var(--faint);font-variant-numeric:tabular-nums}
+.tabs>input:checked+label{color:var(--ink);border-color:var(--ink);font-weight:500}
+.tabs>input:focus-visible+label{outline:2px solid var(--ink);outline-offset:2px}
+.tabs .tab-panel{display:none;margin-bottom:0}
+#prtab-open:checked~.tab-panel[data-tab=open],#prtab-merged:checked~.tab-panel[data-tab=merged],#prtab-closed:checked~.tab-panel[data-tab=closed]{display:block}
+.line.pr{text-decoration:none;color:var(--ink);align-items:center}.line.pr:hover{background:#fafafb}
+.line.pr .name{display:flex;align-items:flex-start;gap:10px}.line.pr .name .gi{margin-top:3px}
+.pr-title{font-weight:500}
+.line.pr .meta{display:flex;align-items:center;gap:8px}
+.agent-tag{font:500 11px var(--f);color:#fff;background:var(--ink);border-radius:6px;padding:1px 6px}
+@media(max-width:520px){.line.pr .meta code.branch{display:none}}
 #ci-live{margin-bottom:32px}#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
 .live-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}.live-head h2{margin:0}
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--empty)}.live-dot[data-on="0"]{background:var(--ok)}.live-dot[data-on="1"]{background:var(--warn);box-shadow:0 0 0 0 rgba(240,169,44,.6)}
@@ -639,7 +653,7 @@ const LIVE = `<script>(()=>{const u=location.pathname+"?partial=1";let busy=0;
 const pull=async()=>{if(busy)return;busy=1;const w=document.querySelector(".wrap");w.dataset.loading="1";
 try{const r=await fetch(u,{credentials:"same-origin"});if(r.status===401){location.href="/auth/login";return}
 const d=new DOMParser().parseFromString(await r.text(),"text/html");const n=d.querySelector(".wrap");if(!n)throw 0;
-if(!r.ok)throw 0;const open=[...w.querySelectorAll("details")].map(x=>x.open);w.replaceWith(n);
+if(!r.ok)throw 0;const open=[...w.querySelectorAll("details")].map(x=>x.open),on=[...w.querySelectorAll("input[type=radio]:checked")].map(x=>x.id);w.replaceWith(n);on.forEach(id=>{const x=document.getElementById(id);if(x)x.checked=true});
 n.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true});document.title=d.title;document.dispatchEvent(new Event("hush:swap"))}catch(e){w.dataset.loading="";w.dataset.failed="1"}finally{busy=0}};
 window.hushPull=pull;if(document.body.dataset.stale)pull();setInterval(()=>{if(!document.hidden)pull()},120e3);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()})})()</script>`;
@@ -777,7 +791,21 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     </summary><div class="detail"><div><code>${esc(w.path)}</code></div>${w.last ? `<div>Last run <a href="${esc(w.last.url)}" target="_blank" rel="noopener">${ago(w.last.at)}</a> on <code>${esc(w.last.branch)}</code>, ${esc(w.last.conclusion || w.last.status)}</div>` : ""}<div>Green day: every run passed. Amber: some failed. Red: all failed.</div></div></details>`;
   }).join("");
 
-  const prs = s.queue.prs.map((p) => `<div class="line"><span class="name"><a href="${esc(p.url)}" target="_blank" rel="noopener" style="text-decoration:none">${esc(p.title)}</a><span class="sub">#${p.number} · ${esc(p.branch)}</span></span><span class="meta"><span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}"${p.ci === "running" ? " data-run" : ""}>${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span></span></div>`).join("");
+  const PR_ICON = {
+    open: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#1a7f37" d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>`,
+    draft: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#9a9ea5" d="M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 14a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM14 7.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm0-4.25a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z"/></svg>`,
+    merged: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#8250df" d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z"/></svg>`,
+    closed: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#cf222e" d="M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 5.5a.75.75 0 0 1 .75.75v3.378a2.251 2.251 0 1 1-1.5 0V7.25a.75.75 0 0 1 .75-.75Zm-2.03-5.273a.75.75 0 0 1 1.06 0l.97.97.97-.97a.748.748 0 0 1 1.265.332.75.75 0 0 1-.205.729l-.97.97.97.97a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-.97-.97-.97.97a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l.97-.97-.97-.97a.75.75 0 0 1 0-1.06ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>`,
+  };
+  const prLine = (p, kind, when, right = "") => `<a class="line pr" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="name">${PR_ICON[kind]}<span><span class="pr-title">${esc(p.title)}</span><span class="sub">#${p.number}${p.author ? ` · ${esc(p.author)}` : ""} · ${when}</span></span></span><span class="meta"><code class="branch">${esc(p.branch)}</code>${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}${right}</span></a>`;
+  const ciTag = (p) => `<span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}"${p.ci === "running" ? " data-run" : ""}>${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span>`;
+  const prTabs = [
+    ["open", "Open", s.queue.prs.map((p) => prLine(p, p.draft ? "draft" : "open", `opened ${ago(p.created_at)}${p.draft ? " · draft" : ""}`, ciTag(p)))],
+    ["merged", "Merged", (s.queue.merged || []).slice(0, 15).map((p) => prLine(p, "merged", `merged ${ago(p.merged_at)}`))],
+    ["closed", "Closed", (s.queue.closed || []).slice(0, 15).map((p) => prLine(p, "closed", `closed ${ago(p.closed_at)}`))],
+  ];
+  const prSection = `<div class="tabs">${prTabs.map(([k, label, rows], i) => `<input type="radio" name="prtab" id="prtab-${k}"${i === 0 ? " checked" : ""}><label for="prtab-${k}">${PR_ICON[k]}${label} <span class="count">${k === "open" ? rows.length : rows.length + (rows.length === 15 ? "+" : "")}</span></label>`).join("")}
+    ${prTabs.map(([k, , rows]) => `<div class="group tab-panel" data-tab="${k}">${rows.join("") || `<div class="line"><span class="hint">No ${k} pull requests${k === "open" ? "" : " recently"}.</span></div>`}</div>`).join("")}</div>`;
   const incidents = s.queue.issues.length
     ? s.queue.issues.map((i) => `<div class="incident"><h3><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3><p>${i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("")}#${i.number} · opened ${ago(i.created_at)}</p></div>`).join("")
     : `<p class="none">No open issues.</p>`;
@@ -820,7 +848,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}
 
     ${ci ? `<h2>CI · GitHub Actions</h2><div class="group grid2">${ci}</div>` : ""}
-    ${prs ? `<h2>Open pull requests</h2><div class="group">${prs}</div>` : ""}
+    <h2>Pull requests</h2>
+    ${prSection}
 
     <h2>Open issues</h2>
     <div class="incidents">${incidents}</div>

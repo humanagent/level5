@@ -592,14 +592,14 @@ function until(ts) {
   return `in ${Math.round(s / 86400)} days`;
 }
 
-const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">`;
+const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">`;
 const MARK = (color = "currentColor") => `<svg viewBox="0 0 40 40" width="22" height="22" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="${color}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const LOGO = `<a class="logo" href="/">${MARK()}<span>hush</span></a>`;
 
 const CSS = `
 :root{--bg:#fff;--ink:#14161c;--muted:#666a73;--faint:#9a9ea5;--line:#ebecef;--ok:#2fb36b;--warn:#f0a92c;--bad:#e5484d;--empty:#e9eaed;
 --night:#070b1c;--dusk:#1b2350;--dawn:#c4532a;--glow:#f0a35e;
---f:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:light}
+--f:"Open Sans","Helvetica Neue",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:light}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f);-webkit-font-smoothing:antialiased}
 ::selection{background:var(--dusk);color:#fff}
 a{color:var(--ink)}a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:3px}
@@ -704,11 +704,11 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .repo-name{display:block;font:500 13px var(--mono);color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.repo-name:hover{text-decoration:underline}
 .repo-state{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:4px}
 .repo-state i{width:7px;height:7px;border-radius:50%;background:var(--ok)}.repo-state[data-s=degraded] i{background:var(--warn)}.repo-state[data-s=down] i{background:var(--bad)}
-.nav{display:flex;flex-direction:column;gap:2px}
-.nav a,.side-foot a{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:14px}
-.nav a:hover,.side-foot a:hover{background:var(--sel);color:var(--ink)}
+.snav{display:flex;flex-direction:column;gap:2px}
+.snav a,.side-foot a{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:14px}
+.snav a:hover,.side-foot a:hover{background:var(--sel);color:var(--ink)}
 .ni{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
-.nav a span:first-of-type,.side-foot a span:first-of-type{flex:1}
+.snav a span:first-of-type,.side-foot a span:first-of-type{flex:1}
 .nc{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
 .nb{font:600 11px var(--f);color:#fff;background:var(--bad);border-radius:999px;min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center}.nb[data-t=warn]{background:var(--warn)}
 .side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding-top:12px}
@@ -728,8 +728,8 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
   .app{grid-template-columns:minmax(0,1fr)}
   .side{position:sticky;top:0;z-index:5;height:auto;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto}
   .side .logo span,.repo-box,.side-foot .updated{display:none}
-  .nav{flex-direction:row}.nav a span:first-of-type,.side-foot a span:first-of-type{flex:none}
-  .nav a,.side-foot a{white-space:nowrap;padding:6px 10px}
+  .snav{flex-direction:row}.snav a span:first-of-type,.side-foot a span:first-of-type{flex:none}
+  .snav a,.side-foot a{white-space:nowrap;padding:6px 10px}
   .side-foot{margin:0;flex-direction:row;border:0;padding:0}
   .main{padding:24px 16px 64px}
 }#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
@@ -762,6 +762,37 @@ code.branch{font:500 11.5px var(--mono);color:#0969da;background:#ddf4ff;border-
 @media (prefers-reduced-motion:no-preference){.state[data-run]::before{animation:spin .9s linear infinite}}
 @media(max-width:520px){.run-head{padding-inline:14px;flex-wrap:wrap}.run-side{flex-direction:row;align-items:center;width:100%;padding-left:28px;justify-content:space-between}.jobs{padding:0 14px 12px 42px}.recent .meta code.branch{display:none}}
 @media(max-width:520px){.wrap{padding-block:24px 56px}.row,.line{padding-inline:14px}.name small{display:block;margin-left:0}.bars{gap:1px}}
+`;
+// Loaded after every other rule so it wins over the page's own styles.
+const THEME = `
+/* Console theme: the feel of a cloud console (dark top bar, grey canvas, white containers, blue
+   links, orange accent). Palette and type only; no third-party names or marks. */
+:root{--ink:#16191f;--muted:#545b64;--faint:#879596;--line:#e9ebed;--ok:#1d8102;--warn:#ff9900;--bad:#d13212;--empty:#e9ebed;
+--canvas:#f2f3f3;--link:#0073bb;--accent:#ec7211;--squid:#232f3e;--sel:#f2f3f3;--warn-ink:#8d6605;
+--shadow:0 1px 1px 0 rgba(0,28,36,.3),1px 1px 1px 0 rgba(0,28,36,.15),-1px 1px 1px 0 rgba(0,28,36,.15)}
+body{font-size:14px}
+html[data-view] body{background:var(--canvas)}
+h2{font-size:14px;font-weight:700;color:var(--ink)}
+.state[data-s=warn],.card .cap.warn{color:var(--warn-ink)}
+.banner{border-radius:8px;font-size:16px}.banner[data-s=degraded]{color:var(--ink)}.banner[data-s=degraded] svg circle:first-child{fill:var(--ink);fill-opacity:.15}.banner[data-s=degraded] svg path,.banner[data-s=degraded] svg circle+circle{stroke:var(--ink);fill:var(--ink)}.banner[data-s=degraded] svg path{fill:none}
+button,.btn{background:var(--accent);border-radius:20px;font-weight:700}button:hover,.btn:hover{background:#eb5f07}
+.btn.ghost{background:none}.btn.ghost:hover{background:none;color:var(--ink)}
+html[data-view] .group,html[data-view] .card,html[data-view] .onboard{background:var(--bg);border-color:transparent;border-radius:8px;box-shadow:var(--shadow)}
+html[data-view] .tabs>label{background:var(--bg)}
+.vh h1{font-size:28px;font-weight:700;letter-spacing:-.01em}
+.stat b,.card .big{font-weight:700}
+.main a:not([class]),.detail a,.cap a,.hint a,.ob a{color:var(--link)}
+.topbar{grid-column:1/-1;position:sticky;top:0;z-index:6;height:40px;display:flex;align-items:center;gap:18px;padding:0 20px;background:var(--squid);color:#d5dbdb;font-size:14px}
+.topbar .logo{color:#fff;font-size:16px}.topbar .logo svg{color:var(--warn);width:20px;height:20px}
+.crumbs{display:flex;align-items:center;gap:8px;min-width:0}.crumbs a{color:#d5dbdb;text-decoration:none}.crumbs a:hover{color:#fff;text-decoration:underline}.crumbs span{color:#879596}.crumbs b{color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:14px}.tb-user{color:#d5dbdb}
+.app{grid-template-rows:auto 1fr}
+.side{top:40px;height:calc(100vh - 40px);background:var(--bg);padding-top:18px}
+.repo-box{border:0;padding:4px 10px 10px;border-bottom:1px solid var(--line);border-radius:0}
+.snav a,.side-foot a{border-radius:0;color:var(--muted)}.snav a:hover,.side-foot a:hover{background:none;color:var(--accent)}
+.copy{border-radius:20px}
+@media(max-width:820px){.side{top:40px;height:auto}.topbar .logo span{display:none}}
+html[data-view] .grid2{background:var(--line)}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ALERT = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg>`;
@@ -807,11 +838,11 @@ setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
 const VIEWS = ["overview", "monitors", "automations", "ci", "prs", "issues", "costs", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
-const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:var(--sel);color:var(--ink);font-weight:500}`).join("");
+const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{color:var(--accent);font-weight:700;box-shadow:inset 3px 0 var(--accent)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
 addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1024,13 +1055,17 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
   return page(`${s.repo} · hush`, `<div class="app">
-    <aside class="side">
+    <header class="topbar">
       <a class="logo" href="/">${MARK()}<span>hush</span></a>
+      <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
+      <span class="tb-right">${user ? `<span class="tb-user">${esc(user.login)}</span>` : ""}</span>
+    </header>
+    <aside class="side">
       <div class="repo-box">
         <a class="repo-name" href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a>
         <span class="repo-state" data-s="${s.overall}"><i></i>${s.overall === "ok" ? "Operational" : s.overall === "degraded" ? "Degraded" : "Needs attention"}</span>
       </div>
-      <nav class="nav" aria-label="Sections">${NAV.map(navLink).join("")}</nav>
+      <nav class="snav" aria-label="Sections">${NAV.map(navLink).join("")}</nav>
       <div class="side-foot">
         <a href="#setup" data-nav="setup">${ico("setup")}<span>Setup</span>${onboarding ? badge("!", "warn") : ""}</a>
         ${user ? `<a href="/">${ico("overview")}<span>All repos</span></a>` : ""}
@@ -1068,7 +1103,7 @@ function homePage(user, repos = [], msg = "") {
       <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) return landingPage({ install, msg, esc, css: CSS, fonts: FONTS, icon: ICON, mark: MARK });
+  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK });
   return page("hush", `
     <header class="top">${LOGO}<form method="post" action="/logout" style="margin:0"><button class="btn ghost">Sign out (${esc(user.login)})</button></form></header>
     <h2>Your repos</h2>

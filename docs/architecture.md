@@ -39,6 +39,7 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | `heartbeats` | Every heartbeat. Unique on `(repo_id, monitor, ts)`. |
 | `costs` | Daily provider spend and per-session Claude Code tokens. Unique on `(repo_id, source, key)`. |
 | `snapshots` | The last full snapshot per repo, so a page opens instantly. Versioned by `SNAP_V`. |
+| `events` | Notifications: one row per change (monitor state, late routine, CI broken or fixed, PR opened or merged, issue opened, spend jump). Unique on `(repo_id, dedupe)`. |
 | `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed. |
 
 ## Loading a repo page
@@ -62,6 +63,7 @@ of the page refreshes.
 | `GET /` | Landing when signed out; signed in, every repo they can see, grouped by account, with its state, monitors, PRs merged, CI pass rate and spend. |
 | `GET /r/<owner>/<repo>` | The status page. `?partial=1` is the page's own background refresh. |
 | `GET /r/<owner>/<repo>.json` | The snapshot as JSON. |
+| `GET /api/notifications`, `POST` | The signed-in person's notifications; POST marks them read. |
 | `GET /r/<owner>/<repo>/live` | Live Actions plus the heartbeat count. |
 | `GET /r/<owner>/<repo>/setup` | Heartbeat setup for the repo. |
 | `POST /r/<owner>/<repo>/ask` | The assistant: streams an answer as plain text. |
@@ -81,6 +83,21 @@ of the page refreshes.
 - **A user sees a repo only if one of their installations covers it.**
 - **Ingest keys can only write heartbeats** for their one repo.
 - Secrets at rest are sealed with `SECRET`. Losing `SECRET` means re-creating the app via `/setup`.
+
+## Notifications
+
+The bell in the top bar. Every time a repo's snapshot is refreshed, Hush compares it with the
+previous one and records what changed as events. A background job refreshes every repo opened in
+the last 7 days every 10 minutes, so events accrue between visits (while the machine is awake).
+Each person sees the events of every repo their installations cover; opening the panel marks them
+read. An entry links to the repo and opens the entity's window.
+
+## Floating windows
+
+Clicking a monitor, routine, workflow, pull request or issue opens it in its own window, after the
+admin's PanelHost: one window per entity, drag by the title bar, resize from any edge, cascade from
+the right, focus on click, minimize to a dock, no zoom, no scrim. Windows survive section changes
+and background refreshes, and the open set is in the URL (`?w=`).
 
 ## Assistant
 

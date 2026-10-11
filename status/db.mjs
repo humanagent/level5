@@ -36,6 +36,11 @@ const SCHEMA = (pg) => `
   CREATE TABLE IF NOT EXISTS snapshots (
     repo_id BIGINT PRIMARY KEY, at BIGINT NOT NULL, body TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS events (
+    id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, repo_id BIGINT NOT NULL, at TEXT NOT NULL, level TEXT NOT NULL,
+    kind TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL, entity TEXT NOT NULL, dedupe TEXT NOT NULL);
+  CREATE UNIQUE INDEX IF NOT EXISTS events_dedupe ON events(repo_id, dedupe);
+  CREATE INDEX IF NOT EXISTS events_repo_at ON events(repo_id, at);
 `;
 
 export async function openDb({ url, dataDir }) {

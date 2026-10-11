@@ -582,6 +582,8 @@ function refresh(row) {
   if (!inflight.has(row.id)) {
     const p = snapshot(row)
       .then(async (s) => {
+        const prev = await db.one("SELECT body FROM snapshots WHERE repo_id = $1", row.id);
+        if (prev) await recordEvents(row.id, JSON.parse(prev.body), s).catch((e) => console.error("events:", e.message));
         await db.run("INSERT INTO snapshots (repo_id, at, body) VALUES ($1, $2, $3) ON CONFLICT(repo_id) DO UPDATE SET at = excluded.at, body = excluded.body", row.id, Date.now(), JSON.stringify(s));
         return s;
       })
@@ -591,6 +593,61 @@ function refresh(row) {
   return inflight.get(row.id);
 }
 const FRESH_MS = 60e3;
+
+// --- notifications ------------------------------------------------------------------------
+// Events come from comparing a repo's new snapshot with the one before it, so they need no extra
+// GitHub reads. Each has a dedupe key: the same change is never recorded twice.
+const MON_LABEL = { alive: "is operational again", warn: "is degraded", degraded: "is chronically degraded", lying: "said ok but read nothing", dead: "is down", retired: "was retired" };
+function diffEvents(prev, s) {
+  const out = [];
+  const add = (level, kind, title, detail, entity, dedupe) => out.push({ level, kind, title, detail: detail || "", entity: entity || "", dedupe });
+  const pm = Object.fromEntries((prev.monitors || []).map((m) => [m.id, m]));
+  for (const m of s.monitors || []) {
+    const p = pm[m.id];
+    if (!p || p.state === m.state || m.state === "retired") continue;
+    const level = m.state === "alive" ? "ok" : m.state === "warn" ? "warn" : "bad";
+    add(level, "monitor", `${m.id} ${MON_LABEL[m.state] || m.state}`, m.why || m.last?.note || "", `monitor:${m.id}`, `mon:${m.id}:${m.state}:${m.last?.ts || ""}`);
+  }
+  const late = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
+  const pr = Object.fromEntries((prev.routines || []).map((r) => [r.name, r]));
+  for (const r of s.routines || []) {
+    const p = pr[r.name];
+    if (!p) continue;
+    const name = r.name.replace(/^App: /, "");
+    if (late(r) && !late(p)) add("bad", "routine", `${name} is late`, `Last run ${r.last_seen}. Expected every ${Math.round(r.period_h)} h.`, `routine:${encodeURIComponent(r.name)}`, `late:${r.name}:${r.last_seen}`);
+    if (!late(r) && late(p)) add("ok", "routine", `${name} ran again`, "", `routine:${encodeURIComponent(r.name)}`, `ontime:${r.name}:${r.last_seen}`);
+  }
+  const pw = Object.fromEntries((prev.ci || []).map((w) => [w.path, w]));
+  for (const w of s.ci || []) {
+    const p = pw[w.path], c = w.last?.status === "completed" ? w.last.conclusion : null, pc = p?.last?.status === "completed" ? p.last.conclusion : null;
+    if (!p || !c || c === pc || !w.last?.at) continue;
+    if (c === "failure") add("bad", "ci", `${w.name} is failing`, `On ${w.last.branch}.`, `workflow:${encodeURIComponent(w.path)}`, `ci:${w.path}:${w.last.at}`);
+    else if (c === "success" && pc === "failure") add("ok", "ci", `${w.name} is passing again`, `On ${w.last.branch}.`, `workflow:${encodeURIComponent(w.path)}`, `ci:${w.path}:${w.last.at}`);
+  }
+  const agent = (b) => AGENT_BRANCH.test(b || "");
+  const prevOpen = new Set((prev.queue?.prs || []).map((x) => x.number)), prevMerged = new Set((prev.queue?.merged || []).map((x) => x.number)), prevIssues = new Set((prev.queue?.issues || []).map((x) => x.number));
+  for (const x of s.queue?.prs || []) if (!prevOpen.has(x.number)) add("info", "pr", `${agent(x.branch) ? "An agent opened" : `${x.author || "Someone"} opened`} PR #${x.number}`, x.title, `pr:${x.number}`, `pr-open:${x.number}`);
+  for (const x of s.queue?.merged || []) if (!prevMerged.has(x.number)) add("info", "pr", `PR #${x.number} merged${agent(x.branch) ? " (agent)" : ""}`, x.title, `pr:${x.number}`, `pr-merged:${x.number}`);
+  for (const x of s.queue?.issues || []) if (!prevIssues.has(x.number)) add(x.labels?.includes("risky") ? "warn" : "info", "issue", `Issue #${x.number} opened`, x.title, `issue:${x.number}`, `issue:${x.number}`);
+  const C = s.costs;
+  if (C && C.yesterday > 5 && C.avg7 > 0 && C.yesterday > C.avg7 * 1.5) {
+    const day = C.per_day[C.per_day.length - 2]?.d;
+    add("warn", "cost", `Spend jumped to $${C.yesterday.toFixed(2)}`, `${(C.yesterday / C.avg7).toFixed(1)}× the 7-day average of $${C.avg7.toFixed(2)}.`, "", `cost-spike:${day}`);
+  }
+  return out;
+}
+async function recordEvents(repoId, prev, s) {
+  const now = new Date().toISOString();
+  for (const e of diffEvents(prev, s)) await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", repoId, now, e.level, e.kind, e.title.slice(0, 200), e.detail.slice(0, 400), e.entity, e.dedupe.slice(0, 300));
+}
+// Keep active repos current without anyone watching: every 10 minutes, refresh the repos whose
+// page was opened in the last 7 days (one at a time, gently on GitHub). This is what produces
+// notifications between visits.
+async function backgroundRefresh() {
+  const rows = await db.all("SELECT r.* FROM repos r JOIN snapshots s ON s.repo_id = r.id WHERE s.at > $1", Date.now() - 7 * 864e5);
+  for (const row of rows) await refresh(row).catch((e) => console.error(`refresh ${row.full_name}:`, e.message));
+}
+setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
 const SNAP_V = 6;
 
@@ -788,6 +845,17 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .w-note{background:#f9fafa;border-left:3px solid var(--line);padding:8px 12px;margin:0 0 12px;font-size:13px;color:var(--muted)}
 .w-title{font-size:16px;font-weight:600;margin:0 0 4px}
 @media(max-width:820px){.win{inset:40px 0 0 0!important;width:auto!important;height:auto!important;border-radius:12px 12px 0 0;min-width:0}.win-rz{display:none}.win-bar{cursor:default}}
+.tb-bell{position:relative;display:grid;place-items:center;width:32px;height:32px;border-radius:6px;background:none;border:0;padding:0;color:#d5dbdb;cursor:pointer}.tb-bell:hover,.tb-bell[aria-expanded=true]{background:rgba(255,255,255,.1);color:#fff}
+.tb-bell svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.tb-count{position:absolute;top:2px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--accent,#ec7211);color:#fff;font:700 10px/16px var(--f);text-align:center}
+.notif{position:fixed;top:44px;right:12px;z-index:220;width:min(400px,calc(100vw - 24px));max-height:min(560px,calc(100vh - 60px));display:flex;flex-direction:column;background:var(--bg);border-radius:10px;box-shadow:0 0 0 1px rgba(0,28,36,.12),0 16px 40px -10px rgba(0,28,36,.4);overflow:hidden}
+.notif-h{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);font-size:14px}.notif-h .faint{font-size:12px}
+.notif-list{overflow-y:auto}
+.notif-i{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:11px 16px;border-top:1px solid var(--line);text-decoration:none;color:var(--ink);font-size:13px}.notif-i:first-child{border-top:0}.notif-i:hover{background:#f9fafa}
+.notif-i.unread{background:#f2f8fd}.notif-i.unread:hover{background:#e9f3fb}
+.notif-i>i{width:8px;height:8px;border-radius:50%;margin-top:5px;background:var(--faint)}.notif-i[data-lvl=bad]>i{background:var(--bad)}.notif-i[data-lvl=warn]>i{background:var(--warn)}.notif-i[data-lvl=ok]>i{background:var(--ok)}.notif-i[data-lvl=info]>i{background:var(--link,#0073bb)}
+.notif-i b{font-weight:600;display:block}.notif-i .nd{display:block;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.notif-i .nm{display:block;color:var(--faint);font-size:12px;margin-top:2px}
+.notif-empty{padding:28px 20px;color:var(--muted);font-size:13px;line-height:1.5}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -975,9 +1043,26 @@ const inner=ev.target.closest("a,button");if(inner&&inner!==o&&!inner.hasAttribu
 document.addEventListener("keydown",ev=>{if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches&&ev.target.matches("[data-open][tabindex]")){ev.preventDefault();open(ev.target.dataset.open)}
 if(ev.key==="Escape"&&!ev.target.closest("input,textarea")){const top=W.list.filter(w=>!w.min).at(-1);if(top)close(top)}});
 document.addEventListener("hush:swap",()=>W.list.forEach(fill));addEventListener("resize",()=>W.list.forEach(place));
-if(!W.started){W.started=true;(new URL(location.href).searchParams.get("w")||"").split(",").filter(Boolean).forEach(k=>open(k,true));syncUrl()}})()</script>`;
+window.hushOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href).searchParams.get("w")||"").split(",").filter(Boolean).forEach(k=>open(k,true));syncUrl()}})()</script>`;
+// The bell: polls /api/notifications every minute; opening the panel marks everything read. The
+// panel lives on <body> so background refreshes do not close it. A click on an entry goes to the
+// repo and opens the entity's window (in place when it is the repo on screen).
+const NOTIF_JS = `<script>(()=>{const N=window.hushNotif||(window.hushNotif={data:null});
+const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
+const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs"};
+function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
+function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
+function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b><span class="faint">'+(d&&d.items.length?d.items.length+" latest":"")+"</span></div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
+async function load(){try{const r=await fetch("/api/notifications",{credentials:"same-origin"});if(r.ok){N.data=await r.json();badge();if(!panel().hidden)draw()}}catch(x){}}
+function toggle(show){const p=panel(),b=document.getElementById("tb-bell");if(show===undefined)show=p.hidden;p.hidden=!show;if(b)b.setAttribute("aria-expanded",show);if(show){draw();if(N.data&&N.data.unread){fetch("/api/notifications",{method:"POST",credentials:"same-origin"});N.data.unread=0;badge()}}}
+document.addEventListener("click",ev=>{if(ev.target.closest("#tb-bell")){ev.preventDefault();toggle();return}
+const a=ev.target.closest(".notif-i");if(a){const here=location.pathname.replace(/[/]$/,"")==="/r/"+a.dataset.repo;if(here&&window.hushOpen&&!ev.metaKey&&!ev.ctrlKey){ev.preventDefault();toggle(false);location.hash=a.hash.slice(1);if(a.dataset.entity)window.hushOpen(a.dataset.entity)}return}
+if(!ev.target.closest("#notif-panel"))toggle(false)});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape")toggle(false)});
+document.addEventListener("hush:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1250,7 +1335,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <header class="topbar">
       <a class="logo" href="/">${MARK()}<span>hush</span></a>
       <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
-      <span class="tb-right">${user ? `<span class="tb-user">${esc(user.login)}</span>` : ""}</span>
+      <span class="tb-right">${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><span class="tb-user">${esc(user.login)}</span>` : ""}</span>
     </header>
     <aside class="side">
       <div class="repo-box">
@@ -1321,7 +1406,7 @@ function homePage(user, repos = [], msg = "", snaps = {}) {
       <span class="go">Open →</span></a>`;
   };
   return page("Repositories · hush", `<div class="app solo">
-    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><span class="tb-user">${esc(user.login)}</span><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
+    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><span class="tb-user">${esc(user.login)}</span><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
     <main class="main">
       <header class="vh"><h1>Repositories</h1><p>Every repo Hush is installed on that your GitHub account can see. Numbers are the last ${WINDOW} days.</p></header>
       ${repos.length ? accounts.map((a) => `<h2>${esc(a.login)}</h2><div class="group repos-t">
@@ -1602,6 +1687,21 @@ createServer(async (req, res) => {
       return redirect(res, "/", { "set-cookie": [sessionCookie(me.login), "fs_state=; Path=/; Max-Age=0"] });
     }
 
+    if (url.pathname === "/api/notifications" && user) {
+      const repos = await userRepos(user).catch(() => []);
+      const ids = repos.map((r) => r.id);
+      const seenKey = `notif_seen:${user.login}`;
+      if (req.method === "POST") {
+        await setSetting(seenKey, new Date().toISOString());
+        return json(res, 200, { ok: true });
+      }
+      if (!ids.length) return json(res, 200, { unread: 0, items: [] });
+      const ph = ids.map((_, i) => "$" + (i + 1)).join(",");
+      const items = await db.all(`SELECT e.id, e.repo_id, e.at, e.level, e.kind, e.title, e.detail, e.entity FROM events e WHERE e.repo_id IN (${ph}) ORDER BY e.at DESC, e.id DESC LIMIT 60`, ...ids);
+      const seen = (await db.one("SELECT v FROM settings WHERE k = $1", seenKey))?.v || "";
+      const names = Object.fromEntries(repos.map((r) => [r.id, r.full_name]));
+      return json(res, 200, { unread: items.filter((e) => e.at > seen).length, items: items.map((e) => ({ ...e, repo: names[Number(e.repo_id)], unread: e.at > seen })) });
+    }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
     const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask)?$/);

@@ -63,9 +63,9 @@ queries AWS Cost Explorer ends by posting the last 3 days with `hush.sh cost aws
 
 ## Cost explorer
 
-Under Costs, after AWS Cost Explorer: a chart (stacked by group, total bars, or lines) with a hover
-column and a tooltip listing every group for that period with its amount and the total, a table of
-totals and shares, and a parameters panel:
+Under Costs: a chart (stacked by group, total bars, or lines) with a hover column and a tooltip
+listing every group for that period with its amount and the total, a table of totals and shares,
+and a toolbar of chips above it (applied filters show as removable chips under the toolbar):
 
 - **Time**: Standard, or Compare to overlay the previous period of the same length (dashed line, % change).
 - **Date range**: last 7, 14, 30, 60 or 90 days, month to date, or custom from/to.

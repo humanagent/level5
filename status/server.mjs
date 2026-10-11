@@ -876,7 +876,7 @@ function until(ts) {
   return `in ${Math.round(s / 86400)} days`;
 }
 
-const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">`;
+const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">`;
 const MARK = (color = "currentColor") => `<svg viewBox="0 0 40 40" width="22" height="22" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="${color}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const LOGO = `<a class="logo" href="/">${MARK()}<span>hush</span></a>`;
 
@@ -1098,7 +1098,7 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .cx-sub{color:var(--muted);font-size:13px;margin:6px 0 10px}.cx-sub b{color:var(--ink);font-size:15px}
 .cx-chart{position:relative;min-height:340px}.cx-loading,.cx-note{color:var(--faint);font-size:13px}.cx-loading{padding:140px 0;text-align:center}
 .cx-svg{display:block;max-width:100%;height:auto;font:12px var(--f)}
-.cx-svg .grid{stroke:#e9ebed}.cx-svg .axis0{stroke:#aab7b8}.cx-svg .yl{fill:var(--muted);text-anchor:end}.cx-svg .xl{fill:var(--muted);text-anchor:middle;font-size:12.5px}
+.cx-svg .grid{stroke:#ececf0;stroke-dasharray:3 4}.cx-svg .axis0{stroke:#aab7b8}.cx-svg .yl{fill:var(--muted);text-anchor:end}.cx-svg .xl{fill:var(--muted);text-anchor:middle;font-size:12.5px}
 .cx-svg .hit{fill:transparent}.cx-svg .cap{fill:#fff;opacity:.5}
 .cx-svg.hov .col:not(.on) rect:not(.hit){opacity:.32}.cx-svg .col rect{transition:opacity .12s}
 .cx-svg .ln{fill:none;stroke-width:2}.cx-svg .pt{opacity:0}.cx-svg .pt.on{opacity:1}
@@ -1181,36 +1181,112 @@ code.branch{font:500 11.5px var(--mono);color:#0969da;background:#ddf4ff;border-
 @media(max-width:520px){.wrap{padding-block:24px 56px}.row,.line{padding-inline:14px}.name small{display:block;margin-left:0}.bars{gap:1px}}
 `;
 // Loaded after every other rule so it wins over the page's own styles.
+// The Linear-style layer, loaded after everything else: light, dense, thin borders, almost no
+// shadow, Inter, black primary buttons, indigo only for links and focus. Hush's orange stays in the
+// logo. Palette and type only; layout lives in the base styles.
 const THEME = `
-/* Console theme: the feel of a cloud console (dark top bar, grey canvas, white containers, blue
-   links, orange accent). Palette and type only; no third-party names or marks. */
-:root{--ink:#16191f;--muted:#545b64;--faint:#879596;--line:#e9ebed;--ok:#1d8102;--warn:#ff9900;--bad:#d13212;--empty:#e9ebed;
---canvas:#f2f3f3;--link:#0073bb;--accent:#ec7211;--squid:#232f3e;--sel:#f2f3f3;--warn-ink:#8d6605;
---shadow:0 1px 1px 0 rgba(0,28,36,.3),1px 1px 1px 0 rgba(0,28,36,.15),-1px 1px 1px 0 rgba(0,28,36,.15)}
-body{font-size:14px}
+:root{--bg:#fff;--canvas:#fbfbfc;--ink:#1b1c1f;--ink2:#3c3f45;--muted:#6b6f76;--faint:#9a9ea6;--line:#ebebef;--line2:#f3f3f5;
+--ok:#2f9e5b;--warn:#e8913a;--bad:#e5484d;--empty:#ececf0;--link:#5e6ad2;--accent:#1b1c1f;--squid:#1b1c1f;--sel:rgba(15,16,20,.05);--warn-ink:#b5651d;
+--shadow:0 0 0 1px var(--line),0 1px 2px rgba(15,16,20,.04);
+--f:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+body{font-size:13.5px;letter-spacing:-.006em;font-feature-settings:"cv11","ss01"}
 html[data-view] body{background:var(--canvas)}
-h2{font-size:14px;font-weight:700;color:var(--ink)}
-.state[data-s=warn],.card .cap.warn{color:var(--warn-ink)}
-.banner{border-radius:8px;font-size:16px}.banner[data-s=degraded]{color:var(--ink)}.banner[data-s=degraded] svg circle:first-child{fill:var(--ink);fill-opacity:.15}.banner[data-s=degraded] svg path,.banner[data-s=degraded] svg circle+circle{stroke:var(--ink);fill:var(--ink)}.banner[data-s=degraded] svg path{fill:none}
-button,.btn{background:var(--accent);border-radius:20px;font-weight:700}button:hover,.btn:hover{background:#eb5f07}
-.btn.ghost{background:none}.btn.ghost:hover{background:none;color:var(--ink)}
-html[data-view] .group,html[data-view] .card,html[data-view] .onboard{background:var(--bg);border-color:transparent;border-radius:8px;box-shadow:var(--shadow)}
-html[data-view] .tabs>label{background:var(--bg)}
-.vh h1{font-size:28px;font-weight:700;letter-spacing:-.01em}
-.stat b,.card .big{font-weight:700}
-.main a:not([class]),.detail a,.cap a,.hint a,.ob a{color:var(--link)}
-.topbar{grid-column:1/-1;position:sticky;top:0;z-index:6;height:40px;display:flex;align-items:center;gap:18px;padding:0 20px;background:var(--squid);color:#d5dbdb;font-size:14px}
-.topbar .logo{color:#fff;font-size:16px}.topbar .logo svg{color:var(--warn);width:20px;height:20px}
-.crumbs{display:flex;align-items:center;gap:8px;min-width:0}.crumbs a{color:#d5dbdb;text-decoration:none}.crumbs a:hover{color:#fff;text-decoration:underline}.crumbs span{color:#879596}.crumbs b{color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tb-right{margin-left:auto;display:flex;align-items:center;gap:14px}.tb-user{color:#d5dbdb}
-.app{grid-template-rows:auto 1fr}
-.side{top:40px;height:calc(100vh - 40px);background:var(--bg);padding-top:18px}
-.repo-box{border:0;padding:4px 10px 10px;border-bottom:1px solid var(--line);border-radius:0}
-.snav a,.side-foot a{border-radius:0;color:var(--muted)}.snav a:hover,.side-foot a:hover{background:none;color:var(--accent)}
-.copy{border-radius:20px}
-@media(max-width:820px){.side{top:40px;height:auto}.topbar .logo span{display:none}}
-html[data-view] .grid2{background:var(--line)}
+a{color:var(--ink)}::selection{background:#dcdff7;color:var(--ink)}
+a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--link);outline-offset:1px;border-radius:4px}
+h2{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:0;margin-bottom:8px}
+.vh{margin-bottom:20px}.vh h1{font-size:19px;font-weight:600;letter-spacing:-.015em;margin-bottom:4px}.vh p{font-size:13.5px;color:var(--muted)}
+/* chrome */
+.app{grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto 1fr}
+.topbar{grid-column:1/-1;position:sticky;top:0;z-index:6;height:44px;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bg);color:var(--ink);border-bottom:1px solid var(--line);font-size:13px}
+.topbar .logo{color:var(--ink);font-size:14px;font-weight:600;gap:7px}.topbar .logo svg{color:#f2702c;width:18px;height:18px}
+.crumbs{display:flex;align-items:center;gap:6px;min-width:0}.crumbs a{color:var(--muted);text-decoration:none}.crumbs a:hover{color:var(--ink)}.crumbs span{color:var(--faint)}.crumbs b{color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}.tb-user{color:var(--muted);font-size:12.5px}.tb-btn{background:none;border:0;color:var(--muted);font:inherit;padding:0;cursor:pointer}.tb-btn:hover{color:var(--ink);background:none}
+.tb-bell{position:relative;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;background:none;border:0;padding:0;color:var(--muted);cursor:pointer}.tb-bell:hover,.tb-bell[aria-expanded=true]{background:var(--sel);color:var(--ink)}
+.tb-bell svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
+.tb-count{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:var(--link);color:#fff;font:600 10px/15px var(--f);text-align:center}
+.side{position:sticky;top:44px;height:calc(100vh - 44px);background:#f7f7f8;border-right:1px solid var(--line);padding:12px 8px;display:flex;flex-direction:column;gap:14px}
+.repo-box{border:0;border-radius:0;background:none;padding:2px 10px 10px;border-bottom:1px solid var(--line)}
+.repo-name{font:500 12.5px var(--mono);color:var(--ink)}.repo-state{font-size:12px;color:var(--muted)}
+.snav a,.side-foot a{display:flex;align-items:center;gap:9px;height:30px;padding:0 10px;border-radius:6px;color:var(--ink2);text-decoration:none;font-size:13px;margin:0}
+.snav a:hover,.side-foot a:hover{background:rgba(15,16,20,.04);color:var(--ink)}
+.ni{width:16px;height:16px;color:var(--faint)}
+.nc{font-size:11.5px;color:var(--faint)}
+.nb{background:var(--bad);font-size:10.5px;min-width:17px;height:17px}.nb[data-t=warn]{background:var(--warn)}
+.side-foot{border-top:1px solid var(--line);padding-top:10px}.side-foot .updated{font-size:11.5px;color:var(--faint)}
+.main{padding:28px 40px 72px;max-width:1180px}
+/* surfaces */
+.group,.card,.onboard,html[data-view] .group,html[data-view] .card,html[data-view] .onboard{background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 1px 2px rgba(15,16,20,.03)}
+.grid2,html[data-view] .grid2{background:var(--line);border:1px solid var(--line)}.grid2>.row,html[data-view] .grid2>.row{background:var(--bg)}
+.row{padding:14px 16px;border-top:1px solid var(--line2)}.line{padding:10px 16px;border-top:1px solid var(--line2)}
+.row.openable:hover,.line.openable:hover,.mini li.openable:hover,a.line:hover,.recent .rrow:hover,.run-head:hover{background:#fafafb}
+.name{font-weight:500}.mon-id{font:500 12.5px var(--mono)}.sub{color:var(--faint);font-size:12px}
+.state{font-size:12.5px;font-weight:500}.state[data-s=warn]{color:var(--warn-ink)}
+.bars{gap:2px;height:26px}.bars i{border-radius:2px}.axis{font-size:11.5px;color:var(--faint)}
+.banner{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:12px 16px;font-size:14px;font-weight:500;box-shadow:0 1px 2px rgba(15,16,20,.03)}
+.banner svg{width:16px;height:16px}.banner svg circle:first-child{fill:var(--ok);fill-opacity:1}
+.banner[data-s=degraded],.banner[data-s=down]{color:var(--ink)}.banner[data-s=degraded] svg circle:first-child{fill:var(--warn)}.banner[data-s=down] svg circle:first-child{fill:var(--bad)}
+.banner svg path{stroke:#fff}.banner svg circle+circle{fill:#fff}
+.banner-sub{font-size:12.5px;color:var(--muted);margin:8px 0 28px}
+.stat{padding:14px 16px}.stat b,.card .big{font-size:22px;font-weight:600;letter-spacing:-.02em}.stat span{font-size:12.5px;color:var(--ink2)}.stat small{font-size:11.5px;color:var(--faint)}
+.card{padding:14px 16px}.card-h h3{font-size:12.5px;font-weight:500;color:var(--muted)}.card-h a{font-size:12px;color:var(--faint)}
+.cards{gap:12px}
+code{font-size:12px}code.branch{font:500 11px var(--mono);color:var(--ink2);background:#f2f2f4;border-radius:4px;padding:1px 6px}code.branch.prod{color:#1f7a45;background:#e8f5ec}
+.agent-tag{background:#eef0fb;color:var(--link);font-weight:600;border-radius:4px}
+.pill{font-weight:500;font-size:11.5px;padding:2px 8px;border-radius:999px}
+/* controls */
+button,.btn{background:var(--ink);color:#fff;border-radius:6px;font:500 13px var(--f);padding:7px 12px;border:0}button:hover,.btn:hover{background:#000}
+.btn.ghost,.btn-plain{background:none;color:var(--link)}.btn.ghost:hover,.btn-plain:hover{background:none}
+.btn-sm{font:500 12.5px var(--f);padding:5px 10px}
+.chip{background:var(--bg);color:var(--ink2);border:1px solid var(--line);border-radius:999px;font:500 12.5px var(--f);padding:5px 11px}.chip:hover{background:#f7f7f8;border-color:#dcdce1}
+.copy{border-radius:6px;border-color:var(--line);font-size:12px}
+.tabs>label{border-radius:6px;font-size:12.5px;padding:5px 10px;background:var(--bg)}.tabs>input:checked+label{border-color:var(--ink2);background:var(--bg)}
+.rule-form input,.rule-form select,.cx-panel select,.cx-panel input[type=date],.cx-panel input[type=search],.ms-btn{border:1px solid #e2e2e6;border-radius:6px;font-size:13px;padding:6px 9px;background:var(--bg)}
+.dow-i span{border-radius:6px;font-size:12.5px}.dow-i input:checked+span{background:var(--ink);border-color:var(--ink)}
+.seg{border:1px solid var(--line);border-radius:7px;padding:2px;background:#f7f7f8}.seg button{border-radius:5px;padding:4px 10px;color:var(--muted);font-weight:500;background:none}.seg button:hover{background:rgba(15,16,20,.04);color:var(--ink)}.seg button.on{background:var(--bg);color:var(--ink);box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(15,16,20,.06)}
+.ms-btn{font-style:normal;color:var(--muted)}.ms-btn svg{stroke:var(--muted)}
+.cx{border:1px solid var(--line);border-radius:8px;box-shadow:0 1px 2px rgba(15,16,20,.03)}.cx-head h2{font-size:14px;color:var(--ink);font-weight:600}
+.cx-panel summary{font-size:13px;font-weight:600}.cx-panel summary::before{border-top-color:var(--muted)}.cx-panel label,.cx-panel .lab{font-size:12.5px;font-weight:500;color:var(--ink2)}.cx-panel .lab a{color:var(--link)}
+.cx-tip{border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 32px -10px rgba(15,16,20,.22);font-size:12.5px}
+/* windows, dock, notifications, map */
+.win{border-radius:10px;box-shadow:0 0 0 1px rgba(15,16,20,.08),0 18px 48px -14px rgba(15,16,20,.28)}
+.win-bar{height:40px;background:var(--bg);border-bottom:1px solid var(--line);cursor:grab}.win-kind{font-size:11px;letter-spacing:.02em;color:var(--faint)}.win-title{font-size:13px;font-weight:500}
+.win-btn{color:var(--faint)}.win-btn:hover{background:var(--sel);color:var(--ink)}
+.win-dock{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px -12px rgba(15,16,20,.25)}.win-chip{background:#f4f4f6;color:var(--ink);border-radius:6px;font-size:12.5px}.win-chip:hover{background:#ececf0}.win-chip span{color:var(--faint)}
+.notif{top:48px;border:1px solid var(--line);border-radius:10px;box-shadow:0 18px 48px -14px rgba(15,16,20,.28)}.notif-h{font-size:13px}.notif-i{font-size:12.5px}.notif-i.unread{background:#f6f7fe}.notif-i.unread:hover{background:#eef0fb}
+.notif-i[data-lvl=info]>i{background:var(--link)}
+.msg.user{background:var(--ink)}.msg.assistant{border:1px solid var(--line);box-shadow:none}
+.ask{border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,16,20,.04);border-radius:10px}
+.svc-map{border:1px solid var(--line);border-radius:8px;box-shadow:none}
+.map-tip{background:var(--ink)}
+.promo-open{border-left:3px solid var(--ok)}
+.onboard>h2{color:var(--ink);font-size:14px}.ob-n{border-color:var(--ink2)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:rgba(15,16,20,.14);border-radius:10px;border:2px solid transparent;background-clip:padding-box}::-webkit-scrollbar-track{background:transparent}
+.banner,.banner[data-s=degraded],.banner[data-s=down]{background:var(--bg)}
+/* cost explorer: a toolbar of chips over the chart */
+.cx{display:block;padding:0;margin:16px 0 28px;background:var(--bg)}
+.cx-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.cx-bar .seg svg{width:15px;height:15px}
+.pick{position:relative;display:inline-flex;flex-direction:row;align-items:center;gap:6px;height:28px;margin:0;padding:0 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink);background:var(--bg)}
+.pick:hover{background:#f9f9fa}.pick-l{color:var(--faint);font-weight:400}
+.pick select{border:0;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.5l3.5 3.5 3.5-3.5' fill='none' stroke='%239a9ea6' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right center/14px;font:500 12.5px var(--f);color:var(--ink);padding:0 18px 0 0;appearance:none;-webkit-appearance:none;cursor:pointer;outline-offset:3px}
+.toggle{display:inline-flex;align-items:center;height:28px;padding:0 10px;background:var(--bg);color:var(--ink2);border:1px solid var(--line);border-radius:6px;font:500 12.5px var(--f)}.toggle:hover{background:#f9f9fa}.toggle.on{background:#eef0fb;color:var(--link);border-color:#d7dbf6}
+.cx-spacer{flex:1}
+.cx-custom{display:inline-flex;gap:6px;align-items:center}.cx-custom[hidden]{display:none}.cx-custom input{height:28px;border:1px solid var(--line);border-radius:6px;font:12.5px var(--f);padding:0 6px;color:var(--ink)}
+.cx .ms{margin:0;position:relative}
+.cx .ms-btn{display:inline-flex;align-items:center;gap:6px;width:auto;height:28px;padding:0 10px;background:var(--bg);color:var(--muted);border:1px dashed #d6d6dc;border-radius:6px;font:500 12.5px var(--f)}.cx .ms-btn:hover{background:#f9f9fa;color:var(--ink)}
+.cx .ms-btn.on{border-style:solid;color:var(--link);background:#eef0fb;border-color:#d7dbf6}.cx .ms-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.cx .ms-pop{left:auto;right:0;width:280px;border:1px solid var(--line);border-radius:8px;box-shadow:0 16px 40px -12px rgba(15,16,20,.25)}
+.cx .ms-list label,.cx .cx-checks label{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:400;padding:5px 4px;border-radius:5px;cursor:pointer}.cx .ms-list label:hover{background:#f6f6f8}
+.cx-filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}.cx-filters[hidden]{display:none}
+.fchip{display:inline-flex;gap:6px;align-items:center;height:24px;padding:0 6px 0 8px;background:#f4f4f6;color:var(--ink2);border:0;border-radius:5px;font:400 12px var(--f)}.fchip b{font-weight:600;color:var(--ink)}.fchip span{color:var(--faint);font-size:14px;line-height:1}.fchip:hover{background:#ececf0}
+.cx-clear{font-size:12px;color:var(--muted);text-decoration:none;margin-left:4px}.cx-clear:hover{color:var(--ink)}
+.cx-main{padding:14px 18px 16px}.cx-sub{font-size:12.5px}.cx-sub b{font-size:20px;font-weight:600;letter-spacing:-.02em;margin-right:4px}
+.cx-svg .yl,.cx-svg .xl{fill:var(--faint);font-size:11.5px}.cx-svg .axis0{stroke:#dedee3}
+.cx-legend{font-size:12px;color:var(--ink2)}.cx-legend i{border-radius:3px}
+.cx-table th{font-size:11.5px;font-weight:500;color:var(--faint)}.cx-table td{font-size:13px;border-bottom:1px solid var(--line2)}.cx-table .bar i{background:var(--link)}
+.cx-tip{border-radius:8px;padding:10px 12px;width:260px}.cx-tip b{font-size:12.5px}.cx-tip .tt{font-weight:600}
 .notif[hidden],.win-dock[hidden],.win[hidden]{display:none!important}
+@media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ALERT = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg>`;
@@ -1256,7 +1332,7 @@ setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
 const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
-const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{color:var(--accent);font-weight:700;box-shadow:inset 3px 0 var(--accent)}`).join("");
+const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
 addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
 const ASK_MODEL = process.env.HUSH_MODEL || "openai/gpt-6.1-sol";
@@ -1284,7 +1360,7 @@ document.addEventListener("hush:swap",draw);draw()})()</script>`;
 // their contents come from the page's <template>s and are refreshed with it. The open set is in
 // the URL (?w=), so a link reopens them. On a phone each window is a full-screen sheet.
 const WIN_JS = `<script>(()=>{const W=window.hushWin||(window.hushWin={list:[],frames:{}});
-const MINW=380,MINH=280,STEP=28,TOP=52;
+const MINW=380,MINH=280,STEP=28,TOP=56;
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const tpl=k=>[...document.querySelectorAll("#win-tpl template")].find(t=>t.dataset.key===k);
 const phone=()=>matchMedia("(max-width:820px)").matches;
@@ -1501,7 +1577,7 @@ addEventListener("hashchange", build); document.addEventListener("hush:swap", ()
 // provider filters). Data comes once from /r/<repo>/costs; all filtering runs in the browser, and the
 // state survives background refreshes and reloads (localStorage).
 const CX_JS = `<script>(()=>{const X=window.hushCx||(window.hushCx={data:null,at:0,st:null});
-const PAL=["#688ae8","#c33d69","#2ea597","#8456ce","#e07941","#3759ce","#962249","#096f64","#6237a7"],OTHER="#a84401";
+const PAL=["#5e6ad2","#26b5ce","#4cb782","#f2c94c","#f2994a","#eb5757","#bb87fc","#4ea7fc","#d4669a"],OTHER="#c4c6cc";
 const NAMES={aws:"AWS",vercel:"Vercel",neon:"Neon",anthropic:"Anthropic API","claude-code":"Claude Code",openai:"OpenAI",fly:"Fly",cloudflare:"Cloudflare"};
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money=v=>"$"+(Math.abs(v)>=1000?Math.round(v).toLocaleString("en-US"):v.toFixed(2));
@@ -1551,21 +1627,25 @@ const ptot=c.prev?c.prev.v.reduce((a2,b2)=>a2+b2,0):0;
 R.querySelector(".cx-sub").innerHTML="<b>"+money(c.total)+"</b> total · "+label(c.a)+" to "+label(c.b)+(s.gran==="daily"?" · "+money(c.total/Math.max(1,n))+" a day":"")+(c.prev?" · previous period "+money(ptot)+(ptot?" ("+(c.total>=ptot?"+":"")+Math.round((c.total/ptot-1)*100)+"%)":""):"");
 R.querySelector(".cx-table").innerHTML=c.order.length?'<table><thead><tr><th>'+(s.group==="provider"?"Provider":s.group==="none"?"":"Service")+"</th><th>Total</th><th>Share</th></tr></thead><tbody>"+c.order.slice(0,25).map(k=>'<tr><td>'+e(k)+"</td><td>"+money(c.tot[k])+'</td><td><span class="bar"><i style="width:'+(c.tot[k]/c.total*100).toFixed(1)+'%"></i></span>'+(c.tot[k]/c.total*100).toFixed(1)+"%</td></tr>").join("")+"</tbody></table>":'<p class="cx-note">No costs match these filters.</p>';
 panel(c)}
-function panel(c){const R=root(),s=X.st;R.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===s.mode));R.querySelectorAll("[data-time]").forEach(b=>b.classList.toggle("on",(b.dataset.time==="compare")===s.compare));
+function panel(c){const R=root(),s=X.st;R.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===s.mode));R.querySelectorAll("[data-time]").forEach(b=>{b.classList.toggle("on",s.compare);b.setAttribute("aria-pressed",s.compare)});
 for(const k of ["range","gran","group","from","to"]){const el=R.querySelector('[data-k="'+k+'"]');if(el&&document.activeElement!==el)el.value=s[k]||(k==="from"?c.a:k==="to"?c.b:el.value)}
 R.querySelector(".cx-custom").hidden=s.range!=="custom";R.querySelector('[data-note="range"]').textContent="Displaying "+label(c.a)+" to "+label(c.b);
 const all=[...new Set(X.data.rows.map(r=>r[2]))].sort(),provs=[...new Set(X.data.rows.map(r=>r[1]))].sort();const q=(R.querySelector(".ms-q")||{}).value||"";
 R.querySelector('[data-list="services"]').innerHTML=all.filter(x=>x.toLowerCase().includes(q.toLowerCase())).map(x=>'<label><input type="checkbox" data-svc="'+e(x)+'"'+(s.services.includes(x)?" checked":"")+"><span>"+e(x)+"</span></label>").join("")||'<p class="cx-note">No match.</p>';
 R.querySelector('[data-list="providers"]').innerHTML=provs.map(x=>'<label><input type="checkbox" data-prov="'+e(x)+'"'+(s.providers.includes(x)?" checked":"")+"><span>"+e(NAMES[x]||x)+"</span></label>").join("");
-R.querySelector(".ms-btn span").textContent=s.services.length?s.services.length===1?s.services[0]:s.services.length+" services":"Choose services";
-R.querySelector('[data-note="nfilters"]').textContent=(s.services.length?1:0)+(s.providers.length?1:0)}
+R.querySelector(".ms-btn:not(.ms-prov) span").textContent=s.services.length?"Service · "+s.services.length:"Service";R.querySelector(".ms-prov span").textContent=s.providers.length?"Provider · "+s.providers.length:"Provider";
+R.querySelectorAll(".ms-btn").forEach(b=>b.classList.toggle("on",b.classList.contains("ms-prov")?s.providers.length>0:s.services.length>0));
+const chips=[...s.services.map(v=>["svc",v,v]),...s.providers.map(v=>["prov",v,NAMES[v]||v])];
+R.querySelector(".cx-fchips").innerHTML=chips.map(([t,v,l])=>'<button type="button" class="fchip" data-rm="'+t+'" data-v="'+e(v)+'">'+(t==="svc"?"Service":"Provider")+" is <b>"+e(l)+'</b><span aria-hidden="true">×</span></button>').join("");
+R.querySelector(".cx-clear").hidden=!chips.length;R.querySelector(".cx-filters").hidden=!chips.length}
 function set(p){Object.assign(X.st,p);save();draw()}
 async function fetchData(){const R=root();if(!R)return;try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/costs",{credentials:"same-origin"});if(r.ok){X.data=await r.json();X.at=Date.now();draw()}}catch(x){}}
 document.addEventListener("click",ev=>{const R=root();if(!R||!R.contains(ev.target)){document.querySelectorAll(".ms-pop").forEach(p=>p.hidden=true);return}
-const m=ev.target.closest("[data-mode]");if(m)return set({mode:m.dataset.mode});const t=ev.target.closest("[data-time]");if(t)return set({compare:t.dataset.time==="compare"});
+const m=ev.target.closest("[data-mode]");if(m)return set({mode:m.dataset.mode});const t=ev.target.closest("[data-time]");if(t)return set({compare:!X.st.compare});
+const rm=ev.target.closest("[data-rm]");if(rm){const v=rm.dataset.v;return set(rm.dataset.rm==="svc"?{services:X.st.services.filter(x=>x!==v)}:{providers:X.st.providers.filter(x=>x!==v)})}
 const cl=ev.target.closest("[data-clear]");if(cl){ev.preventDefault();const k=cl.dataset.clear;return set(k==="group"?{group:"service"}:k==="services"?{services:[]}:k==="providers"?{providers:[]}:{services:[],providers:[]})}
-const mb=ev.target.closest(".ms-btn");if(mb){const p=R.querySelector(".ms-pop");p.hidden=!p.hidden;if(!p.hidden)R.querySelector(".ms-q").focus();return}
-if(!ev.target.closest(".ms"))R.querySelector(".ms-pop").hidden=true});
+const mb=ev.target.closest(".ms-btn");if(mb){const p=mb.parentNode.querySelector(".ms-pop");R.querySelectorAll(".ms-pop").forEach(x=>{if(x!==p)x.hidden=true});p.hidden=!p.hidden;const q=p.querySelector(".ms-q");if(!p.hidden&&q)q.focus();return}
+if(!ev.target.closest(".ms"))R.querySelectorAll(".ms-pop").forEach(x=>x.hidden=true)});
 document.addEventListener("change",ev=>{const R=root();if(!R||!R.contains(ev.target))return;const el=ev.target;
 if(el.dataset.k){const p={[el.dataset.k]:el.value};if(el.dataset.k==="range"&&el.value==="custom"){const [a,b]=period();p.from=X.st.from||a;p.to=X.st.to||b}return set(p)}
 if(el.dataset.svc!=null){const v=el.dataset.svc,l=X.st.services.filter(x=>x!==v);if(el.checked)l.push(v);return set({services:l})}
@@ -1716,30 +1796,23 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="stat"><b>${C.sessions_30d ? tk(C.tokens_30d / C.sessions_30d) : "–"}</b><span>Tokens per session</span><small>average</small></div>
     </div>
     <div class="cx" id="cx" data-repo="${esc(s.repo)}">
-      <section class="cx-main"><div class="cx-head"><h2>Cost and usage</h2><div class="seg" role="group" aria-label="Chart type">
-        <button type="button" data-mode="bar" title="Bar: total per period"><svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 12V7M7 12V4M10 12V8M13 12V6"/></svg></button>
-        <button type="button" data-mode="line" title="Line"><svg viewBox="0 0 16 16"><path d="M2 12l4-4 3 2 5-6"/><circle cx="2" cy="12" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="9" cy="10" r="1"/><circle cx="14" cy="4" r="1"/></svg></button>
-        <button type="button" data-mode="stacked" title="Stacked"><svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 12V9M4 9V7M7 12V8M7 8V4M10 12V10M10 10V7M13 12V9"/></svg></button></div></div>
-        <div class="cx-sub"></div><div class="cx-chart" role="img" aria-label="Spend over time"><div class="cx-loading">Loading cost data…</div></div><div class="cx-legend"></div><div class="cx-table"></div></section>
-      <aside class="cx-panel" aria-label="Report parameters">
-        <details open><summary>Time</summary>
-          <div class="seg wide" role="group"><button type="button" data-time="standard">Standard</button><button type="button" data-time="compare">Compare</button></div>
-          <label>Date range<select data-k="range"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90">Last 90 days</option><option value="mtd">Month to date</option><option value="custom">Custom</option></select></label>
-          <div class="cx-custom"><label>From<input type="date" data-k="from"></label><label>To<input type="date" data-k="to"></label></div>
-          <p class="cx-note" data-note="range"></p>
-          <label>Granularity<select data-k="gran"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
-        </details>
-        <details open><summary>Group by</summary>
-          <label><span class="lab">Dimension <a href="#" data-clear="group">Clear</a></span><select data-k="group"><option value="service">Service</option><option value="provider">Provider</option><option value="none">No grouping</option></select></label>
-        </details>
-        <details open><summary>Filters</summary>
-          <div class="lab"><span>Applied filters (<span data-note="nfilters">0</span>)</span><a href="#" data-clear="all">Clear all</a></div>
-          <div class="lab">Service <a href="#" data-clear="services">Clear</a></div>
-          <div class="ms"><button type="button" class="ms-btn" aria-haspopup="listbox"><span>Choose services</span><svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg></button><div class="ms-pop" hidden><input type="search" placeholder="Find a service" class="ms-q"><div class="ms-list" data-list="services"></div></div></div>
-          <div class="lab">Provider <a href="#" data-clear="providers">Clear</a></div>
-          <div class="cx-checks" data-list="providers"></div>
-        </details>
-      </aside>
+      <div class="cx-bar">
+        <div class="seg" role="group" aria-label="Chart type">
+          <button type="button" data-mode="stacked" title="Stacked by group"><svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 12V9M4 9V7M7 12V8M7 8V4M10 12V10M10 10V7M13 12V9"/></svg></button>
+          <button type="button" data-mode="bar" title="Total"><svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 12V7M7 12V4M10 12V8M13 12V6"/></svg></button>
+          <button type="button" data-mode="line" title="Lines"><svg viewBox="0 0 16 16"><path d="M2 12l4-4 3 2 5-6"/></svg></button>
+        </div>
+        <label class="pick"><select data-k="range" aria-label="Date range"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90">Last 90 days</option><option value="mtd">Month to date</option><option value="custom">Custom…</option></select></label>
+        <span class="cx-custom"><input type="date" data-k="from" aria-label="From"><span class="faint">–</span><input type="date" data-k="to" aria-label="To"></span>
+        <label class="pick"><select data-k="gran" aria-label="Granularity"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+        <label class="pick"><span class="pick-l">Group</span><select data-k="group" aria-label="Group by"><option value="service">Service</option><option value="provider">Provider</option><option value="none">None</option></select></label>
+        <button type="button" class="toggle" data-time="compare" title="Compare with the previous period">Compare</button>
+        <span class="cx-spacer"></span>
+        <div class="ms"><button type="button" class="ms-btn" aria-haspopup="listbox"><svg viewBox="0 0 16 16"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></svg><span>Service</span></button><div class="ms-pop" hidden><input type="search" placeholder="Find a service" class="ms-q"><div class="ms-list" data-list="services"></div></div></div>
+        <div class="ms"><button type="button" class="ms-btn ms-prov" aria-haspopup="listbox"><svg viewBox="0 0 16 16"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></svg><span>Provider</span></button><div class="ms-pop" hidden><div class="ms-list cx-checks" data-list="providers"></div></div></div>
+      </div>
+      <div class="cx-filters"><span data-note="nfilters" hidden>0</span><span class="cx-fchips"></span><a href="#" data-clear="all" class="cx-clear" hidden>Clear filters</a></div>
+      <section class="cx-main"><div class="cx-sub"></div><p class="cx-note" data-note="range" hidden></p><div class="cx-chart" role="img" aria-label="Spend over time"><div class="cx-loading">Loading cost data…</div></div><div class="cx-legend"></div><div class="cx-table"></div></section>
     </div>
     ${C.sessions.length ? `<h2>Last ${C.sessions.length === 1 ? "Claude Code session" : `${C.sessions.length} Claude Code sessions`}</h2><div><div class="group" style="margin-bottom:0">${C.sessions.map((x) => `<div class="line"><span class="name"><code>/${esc(x.name)}</code><span class="sub">${ago(x.at)} · ${esc(x.models.join(", "))}${x.turns ? ` · ${x.turns} turns` : ""}</span></span><span class="meta"><b>${tk(x.tokens.total)}</b> tokens <span class="sub">${tk(x.tokens.input + x.tokens.cache_write)} in · ${tk(x.tokens.cache_read)} cached · ${tk(x.tokens.output)} out${x.usd != null ? ` · ~${usd(x.usd)}` : ""}</span></span></div>`).join("")}</div><div class="cost-note">Dollars are estimated at API list prices. On a Claude subscription they show what the same tokens would cost, not what you pay. A model with no known price shows tokens only; set it under <code>prices</code> in <code>.claude/factory.json</code>.</div></div>` : ""}`;
   const prTabs = [

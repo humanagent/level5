@@ -863,6 +863,9 @@ function heartbeatSetup(origin, key, waiting) {
   -H "authorization: Bearer ${esc(key)}" \\
   -H "content-type: application/json" \\
   -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details></div></li>
+    <li>${n(4)}<div><b>Report costs</b> <small>optional</small><span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model. For provider spend, the job that already reads your bill ends with one line per day:</span>
+      <div class="cmd"><pre>.claude/hooks/hush.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"S3":0.4}}'</pre>${COPY}</div>
+      <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Hush never asks for billing credentials.</span></div></li>
     ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/hush.sh beat install-test ok</code></span></div></li>` : ""}
   </ol>`;
 }

@@ -171,13 +171,15 @@ function cronPeriodHours(cron) {
 async function readFactory(token, repo) {
   return cached(`factory:${repo}`, 10 * 60e3, async () => {
     const notes = [];
-    const [meta, skillDirs, factoryJson, roster, routineDoc, workflowsList] = await Promise.all([
+    const [meta, skillDirs, factoryJson, roster, routineDoc, workflowsList, hushSh, settingsJson] = await Promise.all([
       gh(token, `repos/${repo}`),
       gh(token, `repos/${repo}/contents/.claude/skills`).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/factory.json`, true).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/skills/monitor-meta/roster.json`, true).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/skills/cloud-routine.md`, true).catch(() => null),
       gh(token, `repos/${repo}/actions/workflows?per_page=100`).catch(() => null),
+      gh(token, `repos/${repo}/contents/.claude/hooks/hush.sh`, true).catch(() => null),
+      gh(token, `repos/${repo}/contents/.claude/settings.json`, true).catch(() => null),
     ]);
 
     // skills
@@ -230,7 +232,7 @@ async function readFactory(token, repo) {
     );
     routines = routines.concat(scheduled.flat());
 
-    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
+    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, client: { hush_sh: !!hushSh, cost_cmd: /\bcost\)/.test(hushSh || ""), hook: /hush\.sh session-end/.test(settingsJson || "") }, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
   });
 }
 
@@ -550,6 +552,7 @@ async function snapshot(repoRow) {
     ci,
     metrics,
     costs: readCosts(repo, factory.prices),
+    setup: { ...(factory.client || {}), skill_beats: monitors.filter((m) => m.last && m.last.source !== "session").length },
     notes: factory.notes,
   };
 }
@@ -571,7 +574,7 @@ function refresh(row) {
 }
 const FRESH_MS = 60e3;
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 4;
+const SNAP_V = 5;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -869,15 +872,24 @@ const STATE = { alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degrad
 // left is the heartbeat. Shown at the top of the repo page until the first heartbeat arrives,
 // and at /r/<repo>/setup after that.
 const COPY = `<button class="copy" type="button" onclick="navigator.clipboard.writeText(this.parentNode.querySelector('pre').textContent).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>`;
-function heartbeatSetup(origin, key, waiting) {
+function heartbeatSetup(origin, key, waiting, st = null) {
   const DONE = `<svg class="gi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--ok)"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const n = (i) => `<span class="ob-n">${i}</span>`;
+  // A finished step shows what is in place and keeps its instructions folded away.
+  const step = (i, done, title, optional, summary, body) =>
+    done
+      ? `<li class="done">${DONE}<div><b>${title}</b><span>${summary}</span><details class="more"><summary>Show how</summary>${body}</details></div></li>`
+      : `<li>${n(i)}<div><b>${title}</b>${optional ? " <small>optional</small>" : ""}${body}</div></li>`;
+  const installed = !!(st?.hush_sh && st?.hook);
+  const beats = (st?.skill_beats || 0) > 0;
+  const providers = (st?.cost_sources || []).filter((x) => x !== "claude-code");
+  const costsOn = providers.length > 0 || (st?.sessions || 0) > 0;
   return `<ol class="ob">
-    <li class="done">${DONE}<div><b>Hush can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue below come from it.</span></div></li>
-    <li>${n(2)}<div><b>Install the heartbeat</b><span>At the repo root, then commit <code>.claude/</code> and push.</span>
+    <li class="done">${DONE}<div><b>Hush can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue come from it.</span></div></li>
+    ${step(2, installed, "Install the heartbeat", false, `<code>.claude/hooks/hush.sh</code> and the SessionEnd hook are in the repo. Every cloud routine reports itself when it ends.`, `<span>At the repo root, then commit <code>.claude/</code> and push.</span>
       <div class="cmd"><pre>curl -fsSL ${esc(origin)}/install.sh | sh -s -- ${esc(key)}</pre>${COPY}</div>
-      <span>It adds a SessionEnd hook, so every Claude Code routine that runs a slash command reports itself when it ends. No change to your skills.</span></div></li>
-    <li>${n(3)}<div><b>Say how each run went</b> <small>optional</small><span>A skill ends with this to send its status and how much it read. A monitor that says ok after reading nothing gets flagged.</span>
+      <span>It adds a SessionEnd hook, so every Claude Code routine that runs a slash command reports itself when it ends. No change to your skills.</span>${st && st.hush_sh && !st.hook ? `<span class="err">Found <code>hush.sh</code> but not the SessionEnd hook in <code>.claude/settings.json</code>. Run the installer again.</span>` : ""}`)}
+    ${step(3, beats, "Say how each run went", true, `${st?.skill_beats} monitor${st?.skill_beats === 1 ? "" : "s"} send their own status and volume.`, `<span>A skill ends with this to send its status and how much it read. A monitor that says ok after reading nothing gets flagged.</span>
       <div class="cmd"><pre>.claude/hooks/hush.sh beat errors ok '{"swept":{"events":120}}'</pre>${COPY}</div>
       <details class="more"><summary>Declare your monitors and routines, or post from somewhere else</summary>
       <span>In <code>.claude/factory.json</code>. Routines show their next run and get marked late when they miss one.</span>
@@ -893,10 +905,10 @@ function heartbeatSetup(origin, key, waiting) {
 <pre>curl -sS -X POST ${esc(origin)}/api/heartbeat \\
   -H "authorization: Bearer ${esc(key)}" \\
   -H "content-type: application/json" \\
-  -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details></div></li>
-    <li>${n(4)}<div><b>Report costs</b> <small>optional</small><span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model. For provider spend, the job that already reads your bill ends with one line per day:</span>
+  -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details>`)}
+    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.hush_sh && !st.cost_cmd ? " Your <code>hush.sh</code> predates this: run the installer again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
       <div class="cmd"><pre>.claude/hooks/hush.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"S3":0.4}}'</pre>${COPY}</div>
-      <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Hush never asks for billing credentials.</span></div></li>
+      <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Hush never asks for billing credentials.</span>`)}
     ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/hush.sh beat install-test ok</code></span></div></li>` : ""}
   </ol>`;
 }
@@ -1006,6 +1018,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     </div>`;
 
   const onboarding = repoRow && s.counts.heartbeats === 0;
+  const setupState = { ...(s.setup || {}), cost_sources: s.costs?.sources || [], sessions: s.costs?.sessions_30d || 0 };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
@@ -1076,7 +1089,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("overview", `
         <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
         <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
-        ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true)}</section>` : ""}
+        ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true, setupState)}</section>` : ""}
         ${cards}
         ${liveBox(true)}
         ${metrics}`)}
@@ -1090,7 +1103,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
       ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
-      ${view("setup", `${vh("Setup", "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding)}</section>` : ""}
+      ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
   </div>`, { live: true, stale, app: true });

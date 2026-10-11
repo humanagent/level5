@@ -570,6 +570,7 @@ async function snapshot(repoRow) {
     ci,
     metrics,
     costs: await readCosts(repoRow.id, factory.prices),
+    rules: await evalRules(repoRow.id, { fire: true, prices: factory.prices }),
     setup: { ...(factory.client || {}), skill_beats: monitors.filter((m) => m.last && m.last.source !== "session").length },
     notes: factory.notes,
   };
@@ -636,6 +637,110 @@ function diffEvents(prev, s) {
   }
   return out;
 }
+// --- price rules: cost alarms ------------------------------------------------------------
+// A rule measures one number over one period and fires a notification when it crosses its limit:
+//   source   any | aws | vercel | neon | claude-code | ...      which cost rows count
+//   measure  usd | tokens | session_tokens                      spend, Claude Code tokens, or one session's tokens
+//   period   day | week | month | forecast | session            last day with data, rolling 7 days,
+//                                                               month to date, month-end projection, each session
+//   cond     above | spike                                      over `amount`, or `pct`% over the average of
+//                                                               the `days` days before the window
+//   service  substring of a breakdown key (AWS service), optional
+//   dow      [0..6] days of the week it applies to (UTC, Sunday = 0); empty = every day
+//   from/to  dates it is active, optional;  severity  warn | bad
+// It fires at most once per period (dedupe key per rule and period).
+const RULE_DEFAULT = { source: "any", measure: "usd", period: "day", cond: "above", amount: 50, pct: 50, days: 7, service: "", dow: [], from: "", to: "", severity: "warn" };
+function ruleConfig(raw) {
+  const c = { ...RULE_DEFAULT, ...(raw || {}) };
+  c.source = String(c.source).toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40) || "any";
+  c.measure = ["usd", "tokens", "session_tokens"].includes(c.measure) ? c.measure : "usd";
+  c.period = c.measure === "session_tokens" ? "session" : ["day", "week", "month", "forecast"].includes(c.period) ? c.period : "day";
+  c.cond = c.period === "session" || c.period === "forecast" ? "above" : c.cond === "spike" ? "spike" : "above";
+  c.amount = Math.max(0, Number(c.amount) || 0);
+  c.pct = Math.max(1, Math.min(1000, Number(c.pct) || 50));
+  c.days = Math.max(1, Math.min(60, Math.round(Number(c.days) || 7)));
+  c.service = String(c.service || "").slice(0, 80);
+  c.dow = (Array.isArray(c.dow) ? c.dow : []).map(Number).filter((d) => d >= 0 && d <= 6);
+  c.from = /^\d{4}-\d{2}-\d{2}$/.test(c.from) ? c.from : "";
+  c.to = /^\d{4}-\d{2}-\d{2}$/.test(c.to) ? c.to : "";
+  c.severity = c.severity === "bad" ? "bad" : "warn";
+  return c;
+}
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function ruleSummary(c) {
+  const what = { usd: "spend", tokens: "Claude Code tokens", session_tokens: "tokens in one session" }[c.measure];
+  const per = { day: "a day", week: "over 7 days", month: "this month", forecast: "forecast for the month", session: "" }[c.period];
+  const src = c.source === "any" ? "All providers" : c.source === "claude-code" ? "Claude Code" : c.source.toUpperCase().length <= 4 ? c.source.toUpperCase() : c.source;
+  const lim = c.cond === "spike" ? `${c.pct}% above the ${c.days}-day average` : c.measure === "usd" ? `$${c.amount}` : `${Number(c.amount).toLocaleString("en-US")} tokens`;
+  const days = c.dow.length && c.dow.length < 7 ? ` · ${c.dow.map((d) => DOW[d]).join(", ")}` : "";
+  const dates = c.from || c.to ? ` · ${c.from || "…"} to ${c.to || "…"}` : "";
+  const src2 = c.measure === "usd" ? src : "Claude Code";
+  return `${src2}${c.service && c.measure === "usd" ? ` (${c.service})` : ""} · ${[what, per].filter(Boolean).join(" ")} over ${lim}${days}${dates}`;
+}
+// value of a cost row for this rule: dollars (optionally one service) or tokens
+function rowValue(r, c) {
+  if (c.measure === "usd") {
+    if (r.source === "claude-code") return r.usd ?? null;
+    if (!c.service) return r.usd;
+    if (!r.breakdown) return 0;
+    return Object.entries(r.breakdown).filter(([k]) => k.toLowerCase().includes(c.service.toLowerCase())).reduce((a, [, v]) => a + v, 0);
+  }
+  if (r.source !== "claude-code") return null;
+  return Object.values(r.models || {}).reduce((a, t) => a + (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0), 0);
+}
+async function evalRules(repoId, { fire = false, prices = {} } = {}) {
+  const rules = await db.all("SELECT * FROM price_rules WHERE repo_id = $1 ORDER BY id", repoId);
+  if (!rules.length) return [];
+  const since = new Date(Date.now() - 70 * 864e5).toISOString().slice(0, 10);
+  const rows = (await db.all("SELECT source, key, day, usd, body, at FROM costs WHERE repo_id = $1 AND day >= $2", repoId, since)).map((r) => {
+    const b = JSON.parse(r.body);
+    return { ...r, ...b, usd: r.usd ?? (r.source === "claude-code" ? sessionUsd(b.models, prices) : null) };
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  const dayAdd = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+  const out = [];
+  for (const rule of rules) {
+    const c = ruleConfig(JSON.parse(rule.config));
+    const mine = rows.filter((r) => (c.source === "any" || r.source === c.source) && rowValue(r, c) != null);
+    const sumDays = (a, b) => mine.filter((r) => r.day >= a && r.day <= b).reduce((t, r) => t + (rowValue(r, c) || 0), 0);
+    const lastDay = mine.map((r) => r.day).sort().pop() || today;
+    let value = 0, limit = c.amount, ref = lastDay, key = lastDay, hits = [];
+    if (c.period === "session") {
+      const recent = mine.filter((r) => r.source === "claude-code" && r.day >= dayAdd(today, -2));
+      value = Math.max(0, ...recent.map((r) => rowValue(r, c)));
+      hits = recent.filter((r) => rowValue(r, c) > c.amount).map((r) => ({ key: r.key, value: rowValue(r, c), day: r.day, name: r.name }));
+    } else {
+      const len = { day: 1, week: 7, month: 0, forecast: 0 }[c.period];
+      let a, b = lastDay;
+      if (c.period === "day" || c.period === "week") { a = dayAdd(b, 1 - len); key = c.period === "day" ? b : `${a}..${b}`; }
+      else { a = today.slice(0, 8) + "01"; b = today; key = today.slice(0, 7); ref = today; }
+      value = sumDays(a, b);
+      if (c.period === "forecast") {
+        const d = new Date(), dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate(), elapsed = Math.max(1, Number(lastDay.slice(8, 10)) || d.getUTCDate());
+        value = (value / elapsed) * dim;
+      }
+      if (c.cond === "spike") {
+        const base = sumDays(dayAdd(a, -c.days), dayAdd(a, -1)) / c.days * (len || 1);
+        limit = base * (1 + c.pct / 100);
+        if (!base) limit = Infinity;
+      }
+      if (value > limit) hits = [{ key, value, day: ref }];
+    }
+    const active = !!rule.enabled && (!c.from || ref >= c.from) && (!c.to || ref <= c.to);
+    const dowOk = (d) => !c.dow.length || c.dow.includes(new Date(d + "T12:00:00Z").getUTCDay());
+    const firing = active ? hits.filter((h) => dowOk(h.day)) : [];
+    const fmt = (v) => (c.measure === "usd" ? `$${v.toFixed(2)}` : `${Math.round(v).toLocaleString("en-US")} tokens`);
+    if (fire) for (const h of firing) {
+      const r = await db.one("SELECT 1 AS x FROM events WHERE repo_id = $1 AND dedupe = $2", repoId, `rule:${rule.id}:${h.key}`);
+      if (r) continue;
+      await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", repoId, new Date().toISOString(), c.severity, "cost", `${rule.name}: ${fmt(h.value)}`.slice(0, 200), `${ruleSummary(c)}.${h.name ? ` Session /${h.name}.` : ""}${Number.isFinite(limit) && c.cond === "spike" ? ` Limit today ${fmt(limit)}.` : ""}`.slice(0, 400), `rule:${rule.id}`, `rule:${rule.id}:${h.key}`);
+      await db.run("UPDATE price_rules SET last_fired_at = $1 WHERE id = $2", new Date().toISOString(), rule.id);
+    }
+    out.push({ id: Number(rule.id), name: rule.name, enabled: !!rule.enabled, config: c, summary: ruleSummary(c), value, limit: Number.isFinite(limit) ? limit : null, over: value > limit, active, firing: firing.length > 0, last_fired_at: rule.last_fired_at, period_key: key });
+  }
+  return out;
+}
+
 async function recordEvents(repoId, prev, s) {
   const now = new Date().toISOString();
   for (const e of diffEvents(prev, s)) await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", repoId, now, e.level, e.kind, e.title.slice(0, 200), e.detail.slice(0, 400), e.entity, e.dedupe.slice(0, 300));
@@ -649,7 +754,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 6;
+const SNAP_V = 7;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -856,6 +961,21 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .notif-i>i{width:8px;height:8px;border-radius:50%;margin-top:5px;background:var(--faint)}.notif-i[data-lvl=bad]>i{background:var(--bad)}.notif-i[data-lvl=warn]>i{background:var(--warn)}.notif-i[data-lvl=ok]>i{background:var(--ok)}.notif-i[data-lvl=info]>i{background:var(--link,#0073bb)}
 .notif-i b{font-weight:600;display:block}.notif-i .nd{display:block;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.notif-i .nm{display:block;color:var(--faint);font-size:12px;margin-top:2px}
 .notif-empty{padding:28px 20px;color:var(--muted);font-size:13px;line-height:1.5}
+.rules-h{display:flex;align-items:center;justify-content:space-between;margin-top:32px}.rules-h h2{margin:0}
+.btn-sm{font:700 13px var(--f);padding:6px 14px}
+.btn-plain{background:none;border:0;color:var(--link,#0073bb);font:500 13px var(--f);padding:2px 0;cursor:pointer}.btn-plain:hover{background:none;text-decoration:underline}.btn-plain.danger{color:var(--bad)}
+.line.rule{align-items:center}.line.rule .meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.meter{display:block;height:4px;border-radius:2px;background:var(--empty);margin-top:8px;max-width:360px;overflow:hidden}.meter i{display:block;height:100%;background:var(--ok)}.meter[data-s=warn] i{background:var(--warn)}.meter[data-s=bad] i{background:var(--bad)}.meter[data-s=none] i{background:var(--faint)}
+.rule-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
+.rule-form label,.rule-form fieldset{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:var(--muted);margin:0;min-width:0}
+.rule-form label small,.rule-form legend small{font-weight:400;color:var(--faint)}
+.rule-form .f-wide{grid-column:1/-1}.rule-form [hidden]{display:none}
+.rule-form input,.rule-form select{font:14px var(--f);color:var(--ink);padding:7px 9px;border:1px solid #aab7b8;border-radius:6px;background:var(--bg);min-width:0}
+.rule-form input:focus,.rule-form select:focus{outline:2px solid var(--link,#0073bb);outline-offset:-1px;border-color:transparent}
+.rule-form fieldset{border:0;padding:0}.rule-form legend{padding:0;margin-bottom:4px}
+.dow{display:flex;gap:6px;flex-wrap:wrap}.dow-i{flex-direction:row!important;align-items:center}.dow-i input{position:absolute;opacity:0;pointer-events:none}
+.dow-i span{display:inline-block;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-weight:500;color:var(--ink);cursor:pointer;user-select:none}.dow-i input:checked+span{background:var(--squid,#232f3e);border-color:var(--squid,#232f3e);color:#fff}.dow-i input:focus-visible+span{outline:2px solid var(--link,#0073bb)}
+.f-actions{display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:6px}.f-msg{flex:1;font-size:13px;font-weight:400;color:var(--muted)}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -1051,7 +1171,7 @@ window.hushOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href)
 const NOTIF_JS = `<script>(()=>{const N=window.hushNotif||(window.hushNotif={data:null});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
-const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs"};
+const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
 function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b><span class="faint">'+(d&&d.items.length?d.items.length+" latest":"")+"</span></div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
@@ -1062,8 +1182,22 @@ const a=ev.target.closest(".notif-i");if(a){const here=location.pathname.replace
 if(!ev.target.closest("#notif-panel"))toggle(false)});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")toggle(false)});
 document.addEventListener("hush:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
+const RULES_JS = `<script>(()=>{if(window.hushRules)return;window.hushRules=1;
+const base=()=>location.pathname.replace(/[/]$/,"")+"/rules";
+function deps(f){const v=n=>f.elements[n]&&f.elements[n].value;const sess=v("measure")==="session_tokens",fc=v("period")==="forecast",spike=!sess&&!fc&&v("cond")==="spike";
+f.querySelectorAll("[data-show]").forEach(l=>{const k=l.dataset.show;l.hidden=k==="period"?sess:k==="cond"?(sess||fc):k==="amount"?spike:k==="spike"?!spike:k==="service"?v("measure")!=="usd":false})}
+const sync=()=>document.querySelectorAll(".rule-form").forEach(deps);
+document.addEventListener("change",ev=>{const f=ev.target.closest&&ev.target.closest(".rule-form");if(f)deps(f)});
+const obs=new MutationObserver(sync);obs.observe(document.body,{childList:true,subtree:true});sync();
+async function post(url,body){const r=await fetch(url,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:body?JSON.stringify(body):"{}"});if(!r.ok)throw new Error(await r.text());if(window.hushPull)await window.hushPull()}
+document.addEventListener("submit",async ev=>{const f=ev.target.closest(".rule-form");if(!f)return;ev.preventDefault();const fd=new FormData(f),b={};for(const [k,v] of fd)if(k!=="dow")b[k]=v;b.dow=fd.getAll("dow").map(Number);
+const msg=f.querySelector(".f-msg"),btn=f.querySelector("[type=submit]");btn.disabled=true;msg.textContent="Saving…";
+try{await post(base()+(f.dataset.ruleId?"/"+f.dataset.ruleId:""),b);msg.textContent="Saved.";if(!f.dataset.ruleId){const w=f.closest(".win");w&&w.querySelector('[data-act="close"]').click()}}catch(x){msg.textContent="Could not save: "+x.message}btn.disabled=false});
+document.addEventListener("click",async ev=>{const b=ev.target.closest("[data-rule-act]");if(!b)return;ev.preventDefault();ev.stopPropagation();const act=b.dataset.ruleAct,id=b.dataset.id;
+if(act==="delete"&&!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to delete";return}b.disabled=true;
+try{await post(base()+"/"+id+"/"+act);if(act==="delete"){const w=b.closest(".win");w&&w.querySelector('[data-act="close"]').click()}}catch(x){b.textContent="Failed"}b.disabled=false},true)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1258,6 +1392,41 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   for (const i of s.queue.issues) wins.push({ key: `issue:${i.number}`, kind: "Issue", title: `#${i.number} ${i.title}`, href: i.url, body: `
       <p class="w-title">${esc(i.title)}</p>
       ${kv([["Labels", i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("") || "none"], ["Opened", when2(i.created_at)]])}` });
+  // price rules: a form per rule (and one blank) as window contents
+  const RULES = s.rules || [];
+  const knownSources = [...new Set(["aws", "vercel", "neon", "anthropic", "claude-code", ...((C?.sources) || [])])];
+  const opt = (v, label, cur) => `<option value="${esc(v)}"${String(cur) === String(v) ? " selected" : ""}>${esc(label)}</option>`;
+  const ruleForm = (r) => {
+    const c = r ? r.config : { source: "any", measure: "usd", period: "day", cond: "above", amount: 50, pct: 50, days: 7, service: "", dow: [], from: "", to: "", severity: "warn" };
+    return `<form class="rule-form" data-rule-id="${r ? r.id : ""}">
+      <label class="f-wide">Name<input name="name" required maxlength="80" value="${esc(r?.name || "")}" placeholder="AWS over $50 a day"></label>
+      <label>Provider<select name="source">${opt("any", "Any provider", c.source)}${knownSources.map((x) => opt(x, srcName(x), c.source)).join("")}</select></label>
+      <label>Measure<select name="measure" data-dep>${opt("usd", "Spend (USD)", c.measure)}${opt("tokens", "Claude Code tokens", c.measure)}${opt("session_tokens", "Tokens in one session", c.measure)}</select></label>
+      <label data-show="period">Period<select name="period" data-dep>${opt("day", "Per day", c.period)}${opt("week", "Rolling 7 days", c.period)}${opt("month", "Month to date", c.period)}${opt("forecast", "Month-end forecast", c.period)}</select></label>
+      <label data-show="cond">Condition<select name="cond" data-dep>${opt("above", "Above a fixed amount", c.cond)}${opt("spike", "Above the recent average", c.cond)}</select></label>
+      <label data-show="amount">Limit<input name="amount" type="number" min="0" step="any" value="${esc(c.amount)}"></label>
+      <label data-show="spike">% above average<input name="pct" type="number" min="1" max="1000" value="${esc(c.pct)}"></label>
+      <label data-show="spike">Average of the last (days)<input name="days" type="number" min="1" max="60" value="${esc(c.days)}"></label>
+      <label data-show="service"><span>Service contains <small>optional</small></span><input name="service" value="${esc(c.service)}" placeholder="Elastic Container Service"></label>
+      <fieldset class="f-wide"><legend>Days it applies <small>none = every day, UTC</small></legend><div class="dow">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => `<label class="dow-i"><input type="checkbox" name="dow" value="${i}"${c.dow.includes(i) ? " checked" : ""}><span>${d}</span></label>`).join("")}</div></fieldset>
+      <label><span>Active from <small>optional</small></span><input name="from" type="date" value="${esc(c.from)}"></label>
+      <label><span>Active until <small>optional</small></span><input name="to" type="date" value="${esc(c.to)}"></label>
+      <label>Severity<select name="severity">${opt("warn", "Warning", c.severity)}${opt("bad", "Critical", c.severity)}</select></label>
+      <div class="f-wide f-actions">${r ? `<button type="button" class="btn-plain danger" data-rule-act="delete" data-id="${r.id}">Delete</button>` : ""}<span class="f-msg" role="status"></span><button type="submit">${r ? "Save rule" : "Create rule"}</button></div>
+    </form>`;
+  };
+  wins.push({ key: "rule:new", kind: "Price rule", title: "New price rule", body: `<p class="faint" style="margin-top:0">A notification when spend or tokens cross a limit. It fires at most once per period.</p>${ruleForm(null)}` });
+  for (const r of RULES) wins.push({ key: `rule:${r.id}`, kind: "Price rule", title: r.name, body: `<p class="faint" style="margin-top:0">${esc(r.summary)}</p>${ruleForm(r)}` });
+  const fmtRule = (r, v) => (v == null ? "–" : r.config.measure === "usd" ? usd(v) : tk(v));
+  const rulesSection = `<div class="rules-h"><h2>Price rules</h2><button type="button" class="btn-sm" data-open="rule:new">New rule</button></div>
+    <p class="hint" style="margin:-4px 0 12px">Alarms on spend and tokens. Crossing a limit sends a notification, once per period.</p>
+    <div class="group">${RULES.length ? RULES.map((r) => {
+      const pct = r.limit ? Math.min(100, (r.value / r.limit) * 100) : 0;
+      const st = !r.enabled ? ["none", "Paused"] : !r.active ? ["none", "Not active now"] : r.over ? [r.config.severity === "bad" ? "bad" : "warn", "Over the limit"] : ["ok", "Within the limit"];
+      return `<div class="line rule openable" data-open="rule:${r.id}" role="button" tabindex="0"><span class="name">${esc(r.name)}<span class="sub">${esc(r.summary)}${r.last_fired_at ? ` · last fired ${ago(r.last_fired_at)}` : ""}</span>
+        <span class="meter" data-s="${st[0]}"><i style="width:${pct.toFixed(1)}%"></i></span></span>
+        <span class="meta"><span class="state" data-s="${st[0]}">${st[1]}</span><span class="sub">${fmtRule(r, r.value)} of ${r.limit == null ? "no baseline yet" : fmtRule(r, r.limit)}</span><button type="button" class="btn-plain" data-rule-act="toggle" data-id="${r.id}">${r.enabled ? "Pause" : "Resume"}</button></span></div>`;
+    }).join("") : `<div class="line"><span class="hint">No price rules yet. For example: AWS above $50 a day, Claude Code tokens 50% above the 7-day average, or a month-end forecast above $1,500.</span></div>`}</div>`;
   const winTemplates = `<div id="win-tpl" hidden>${wins.map((w) => `<template data-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-title="${esc(w.title)}" data-href="${esc(w.href || "")}">${w.body}</template>`).join("")}</div>`;
 
   const incidents = s.queue.issues.length
@@ -1368,7 +1537,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${ci ? `<h2>Workflows</h2><div class="group grid2">${ci}</div>` : ""}`)}
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
       ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
-      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
+      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
       ${view("assistant", `${vh("Assistant", "Ask anything about this repo. It reads everything Hush has: monitors and their heartbeats, routines, CI, pull requests, issues and costs.")}
         <div class="chat" id="chat" data-repo="${esc(s.repo)}">
           <div class="chat-log" id="chat-log"></div>
@@ -1625,6 +1794,7 @@ createServer(async (req, res) => {
       const list = Array.isArray(body) ? body : [body];
       if (list.length > 500) return json(res, 413, { error: "at most 500 per request" });
       for (const c of list) await insertCost(repo.id, c);
+      await evalRules(repo.id, { fire: true }).catch((e) => console.error("rules:", e.message));
       return json(res, 200, { ok: true, stored: list.length });
     }
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
@@ -1705,8 +1875,8 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask)?$/);
-    if (m && (req.method === "GET" || (req.method === "POST" && m[2] === "/ask"))) {
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
@@ -1715,6 +1885,22 @@ createServer(async (req, res) => {
       const row = await ensureRepo(seen, user);
       if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: (await db.one("SELECT COUNT(*)::int AS n FROM heartbeats WHERE repo_id = $1", row.id)).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
+      if (m[2]?.startsWith("/rules")) {
+        if (req.method !== "POST") return json(res, 200, await evalRules(row.id));
+        const [, id, act] = m[2].match(/^\/rules(?:\/(\d+)(?:\/(delete|toggle))?)?$/) || [];
+        // a rule id is only ever used together with this repo's id: one tenant cannot touch another's rules
+        if (act === "delete") await db.run("DELETE FROM price_rules WHERE id = $1 AND repo_id = $2", Number(id), row.id);
+        else if (act === "toggle") await db.run("UPDATE price_rules SET enabled = 1 - enabled WHERE id = $1 AND repo_id = $2", Number(id), row.id);
+        else {
+          const b = JSON.parse((await readBody(req, 2e4)) || "{}");
+          const name = String(b.name || "").trim().slice(0, 80) || "Price rule";
+          const cfg = JSON.stringify(ruleConfig(b));
+          if (id) await db.run("UPDATE price_rules SET name = $1, config = $2 WHERE id = $3 AND repo_id = $4", name, cfg, Number(id), row.id);
+          else await db.run("INSERT INTO price_rules (repo_id, name, config, enabled, created_by, created_at) VALUES ($1, $2, $3, 1, $4, $5)", row.id, name, cfg, user.login, new Date().toISOString());
+        }
+        await refresh(row).catch(() => {});
+        return json(res, 200, { ok: true });
+      }
       if (m[2] === "/ask") {
         if (req.method !== "POST") return send(res, 405, "POST only");
         if (!askAllowed(user.login)) return send(res, 429, "That's 40 questions in the last hour. Try again later.", { "content-type": "text/plain; charset=utf-8" });

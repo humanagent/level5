@@ -39,6 +39,7 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | `heartbeats` | Every heartbeat. Unique on `(repo_id, monitor, ts)`. |
 | `costs` | Daily provider spend and per-session Claude Code tokens. Unique on `(repo_id, source, key)`. |
 | `snapshots` | The last full snapshot per repo, so a page opens instantly. Versioned by `SNAP_V`. |
+| `price_rules` | Cost alarms per repo: name, config (provider, measure, period, condition, limits, days, dates, severity), enabled. |
 | `events` | Notifications: one row per change (monitor state, late routine, CI broken or fixed, PR opened or merged, issue opened, spend jump). Unique on `(repo_id, dedupe)`. |
 | `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed. |
 

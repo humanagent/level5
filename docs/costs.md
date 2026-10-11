@@ -66,3 +66,23 @@ queries AWS Cost Explorer ends by posting the last 3 days with `hush.sh cost aws
 A **Costs** section: 30-day total by source, yesterday, the 7-day daily average, Claude Code tokens
 in 30 days and per session, a stacked spend-per-day chart, and the last 20 sessions with their
 tokens (input, cached, output) and estimated dollars.
+
+## Price rules
+
+Alarms on spend and tokens, under Costs. Each rule measures one number over one period and sends a
+notification (the bell) when it crosses its limit, at most once per period.
+
+| Field | Options |
+| --- | --- |
+| Provider | any, or one source (`aws`, `vercel`, `neon`, `claude-code`…) |
+| Measure | spend in USD, Claude Code tokens, or tokens in one session |
+| Period | per day (the last day with data), rolling 7 days, month to date, month-end forecast, each session |
+| Condition | above a fixed amount, or N% above the average of the previous D days |
+| Service | optional: only breakdown keys containing this text (an AWS service, say) |
+| Days | days of the week it applies to (UTC); none = every day |
+| Active from / until | optional dates |
+| Severity | warning or critical |
+
+Rules are checked every time the repo refreshes and every time costs are posted. Each shows its
+current value against its limit. They belong to the repo: a rule id is only accepted together with
+the repo it was created on.

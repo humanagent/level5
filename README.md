@@ -18,6 +18,9 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 - **Costs**: daily spend per provider (AWS, Vercel, Neon...) and tokens per Claude Code session.
 - **Pull requests**: open (with CI), merged and closed, and open issues.
 
+- **Assistant**: ask anything about the repo; answers come from all of the above.
+- **Repositories**: every repo you can see, by account, with its numbers side by side.
+
 ## How the data gets in
 
 - **GitHub**: a read-only GitHub App (contents, issues, pull requests, actions, checks, metadata).
@@ -45,7 +48,8 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 
 | Path | What |
 | --- | --- |
-| `status/server.mjs` | The whole app: GitHub App auth, readers, judging rules, HTML, routes. Node 24, `node:sqlite`, no dependencies. |
+| `status/server.mjs` | The app: GitHub App auth, readers, judging rules, assistant, HTML, routes. |
+| `status/db.mjs` | Storage: Postgres (Neon) with `DATABASE_URL`, local SQLite otherwise. Multi-tenant schema. |
 | `status/landing.mjs` | The public landing at `/`. |
 | `status/install.sh` | The one-line installer, served at `/install.sh` with the origin filled in. |
 | `status/Dockerfile`, `status/fly.toml` | Fly app `factory-status`, region `gru`, volume `factory_data` on `/data`. |
@@ -55,7 +59,9 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 
 ```sh
 cd status
-DATA_DIR=./data SECRET=dev SETUP_TOKEN=dev node server.mjs   # http://localhost:8080
+npm install
+DATA_DIR=./data SECRET=dev SETUP_TOKEN=dev node server.mjs   # http://localhost:8080, SQLite
+# DATABASE_URL=postgres://... for Neon, OPENROUTER_API_KEY=... for the assistant
 fly deploy -a factory-status
 ```
 

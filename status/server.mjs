@@ -15,6 +15,8 @@
 
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
+import { existsSync } from "node:fs";
+import { openDb } from "./db.mjs";
 import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,20 +31,9 @@ const INSTALL = readFileSync(new URL("./install.sh", import.meta.url), "utf8");
 mkdirSync(DATA, { recursive: true });
 
 // --- storage --------------------------------------------------------------
-const db = new DatabaseSync(join(DATA, "factory.db"));
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  CREATE TABLE IF NOT EXISTS users (login TEXT PRIMARY KEY, token TEXT NOT NULL, created_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS repos (full_name TEXT PRIMARY KEY, owner_login TEXT NOT NULL, ingest_key TEXT NOT NULL, public INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS heartbeats (id INTEGER PRIMARY KEY, repo TEXT NOT NULL, monitor TEXT NOT NULL, ts TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL);
-  CREATE UNIQUE INDEX IF NOT EXISTS hb_unique ON heartbeats(repo, monitor, ts);
-  CREATE TABLE IF NOT EXISTS costs (id INTEGER PRIMARY KEY, repo TEXT NOT NULL, source TEXT NOT NULL, key TEXT NOT NULL, day TEXT NOT NULL, usd REAL, body TEXT NOT NULL, at TEXT NOT NULL);
-  CREATE UNIQUE INDEX IF NOT EXISTS cost_unique ON costs(repo, source, key);
-  CREATE INDEX IF NOT EXISTS hb_repo_ts ON heartbeats(repo, ts);
-  CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS snapshots (repo TEXT PRIMARY KEY, at INTEGER NOT NULL, body TEXT NOT NULL);
-`);
-try { db.exec("ALTER TABLE repos ADD COLUMN installation_id INTEGER"); } catch {}
+// Postgres on Neon when DATABASE_URL is set, else a local SQLite file (db.mjs).
+const db = await openDb({ url: process.env.DATABASE_URL, dataDir: DATA });
+console.log(`storage: ${db.kind}`);
 
 const seal = (text) => {
   const iv = randomBytes(12);
@@ -63,7 +54,7 @@ function sessionCookie(login) {
   const v = `${login}.${Date.now() + 30 * 864e5}`;
   return `fs=${v}.${sign(v)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 86400}`;
 }
-function sessionUser(req) {
+async function sessionUser(req) {
   const m = (req.headers.cookie || "").match(/(?:^|;\s*)fs=([^;]+)/);
   if (!m) return null;
   const parts = m[1].split(".");
@@ -73,7 +64,7 @@ function sessionUser(req) {
   if (good.length !== Buffer.from(sig).length || !timingSafeEqual(good, Buffer.from(sig))) return null;
   const [login, exp] = [parts.slice(0, -1).join("."), Number(parts.at(-1))];
   if (Date.now() > exp) return null;
-  return db.prepare("SELECT login, token FROM users WHERE login = ?").get(login) || null;
+  return (await db.one("SELECT login, token FROM users WHERE login = $1", login)) || null;
 }
 
 // --- GitHub ---------------------------------------------------------------------
@@ -87,11 +78,19 @@ async function gh(token, path, raw = false) {
 }
 
 // --- the GitHub App -----------------------------------------------------------------
-const getSetting = (k) => db.prepare("SELECT v FROM settings WHERE k = ?").get(k)?.v;
-const setSetting = (k, v) => db.prepare("INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").run(k, v);
+// The app's credentials live sealed in settings and are cached here (loaded at start-up).
+let APP = null;
+const setSetting = (k, v) => db.run("INSERT INTO settings (k, v) VALUES ($1, $2) ON CONFLICT(k) DO UPDATE SET v = excluded.v", k, v);
+async function loadApp() {
+  const r = await db.one("SELECT v FROM settings WHERE k = $1", "app");
+  APP = r ? JSON.parse(open(r.v)) : null;
+}
+async function saveApp(app) {
+  await setSetting("app", seal(JSON.stringify(app)));
+  APP = app;
+}
 function appConfig() {
-  const raw = getSetting("app");
-  return raw ? JSON.parse(open(raw)) : null;
+  return APP;
 }
 // The app's name and slug can be changed on GitHub at any time (Settings → Developer settings →
 // GitHub Apps → Edit). The install link uses the slug, so keep the stored copy in step.
@@ -102,11 +101,11 @@ async function syncAppSlug() {
   if (!r?.ok) return;
   const a = await r.json();
   if (a.slug && (a.slug !== app.slug || a.name !== app.name)) {
-    setSetting("app", seal(JSON.stringify({ ...app, slug: a.slug, name: a.name })));
+    await saveApp({ ...app, slug: a.slug, name: a.name });
     console.log(`app renamed: ${app.slug} -> ${a.slug}`);
   }
 }
-setTimeout(() => syncAppSlug().catch(() => {}), 2000);
+setTimeout(() => syncAppSlug().catch(() => {}), 5000);
 setInterval(() => syncAppSlug().catch(() => {}), 5 * 60e3);
 
 function appJwt(app) {
@@ -136,8 +135,11 @@ async function userRepos(user) {
     if (!inst) throw new Error("The GitHub session expired");
     const out = [];
     for (const i of inst.installations || []) {
-      const r = await gh(token, `user/installations/${i.id}/repositories?per_page=100`);
-      for (const repo of r?.repositories || []) out.push({ full_name: repo.full_name, private: repo.private, installation_id: i.id });
+      for (let pg = 1; pg <= 10; pg++) {
+        const r = await gh(token, `user/installations/${i.id}/repositories?per_page=100&page=${pg}`);
+        for (const repo of r?.repositories || []) out.push({ id: repo.id, full_name: repo.full_name, private: repo.private, installation_id: i.id, account: { id: i.account.id, login: i.account.login, type: i.account.type } });
+        if (!r || (r.repositories || []).length < 100) break;
+      }
     }
     return out;
   });
@@ -396,9 +398,9 @@ function sessionUsd(models, overrides) {
   }
   return Math.round(usd * 100) / 100;
 }
-function readCosts(repo, prices) {
+async function readCosts(repoId, prices) {
   const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
-  const rows = db.prepare("SELECT source, key, day, usd, body, at FROM costs WHERE repo = ? AND day >= ? ORDER BY day").all(repo, days[0]).map((r) => ({ ...r, ...JSON.parse(r.body) }));
+  const rows = (await db.all("SELECT source, key, day, usd, body, at FROM costs WHERE repo_id = $1 AND day >= $2 ORDER BY day", repoId, days[0])).map((r) => ({ ...r, ...JSON.parse(r.body) }));
   if (!rows.length) return null;
   const sessions = rows.filter((r) => r.source === "claude-code").map((r) => ({ ...r, usd: r.usd ?? sessionUsd(r.models, prices) }));
   const tok = (t) => (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0);
@@ -433,7 +435,7 @@ function readCosts(repo, prices) {
   };
 }
 
-function insertCost(repo, c) {
+async function insertCost(repoId, c) {
   const source = String(c.source || "").toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40);
   if (!source) throw new Error("source is required (aws, vercel, neon, anthropic, claude-code, ...)");
   const day = c.day && /^\d{4}-\d{2}-\d{2}$/.test(c.day) ? c.day : new Date().toISOString().slice(0, 10);
@@ -444,15 +446,15 @@ function insertCost(repo, c) {
   for (const [m, t] of Object.entries(c.models || {})) models[String(m).slice(0, 60)] = Object.fromEntries(["input", "output", "cache_write_5m", "cache_write_1h", "cache_read"].map((k) => [k, Math.max(0, Number(t?.[k]) || 0)]));
   const breakdown = c.breakdown && typeof c.breakdown === "object" ? Object.fromEntries(Object.entries(c.breakdown).slice(0, 40).map(([k, v]) => [String(k).slice(0, 60), Math.round(Number(v) * 100) / 100])) : null;
   const body = JSON.stringify({ name: String(c.name || "").slice(0, 80), models, breakdown, turns: Number(c.turns) || null, note: String(c.note || "").slice(0, 300) });
-  db.prepare("INSERT INTO costs (repo, source, key, day, usd, body, at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(repo, source, key) DO UPDATE SET day = excluded.day, usd = excluded.usd, body = excluded.body, at = excluded.at").run(repo, source, key, day, usd, body, new Date().toISOString());
+  await db.run("INSERT INTO costs (repo_id, source, key, day, usd, body, at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(repo_id, source, key) DO UPDATE SET day = excluded.day, usd = excluded.usd, body = excluded.body, at = excluded.at", repoId, source, key, day, usd, body, new Date().toISOString());
 }
 
 // --- judging monitors (the /monitor-meta rules, plus the chronic ratio) -------------------
 const AGENT_BRANCH = /^(claude\/|codex\/|fix\/pr-sweep|audit|fix-issues|fix\/issue-|agent\/)/;
-function judge(factory, repo) {
+async function judge(factory, repoId) {
   const WEEKS = 12;
   const since = new Date(Date.now() - WEEKS * 7 * 864e5).toISOString();
-  const beats = db.prepare("SELECT monitor, ts, status, body FROM heartbeats WHERE repo = ? AND ts >= ? ORDER BY ts DESC").all(repo, since).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
+  const beats = (await db.all("SELECT monitor, ts, status, body FROM heartbeats WHERE repo_id = $1 AND ts >= $2 ORDER BY ts DESC", repoId, since)).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
   const roster = [...factory.monitors];
   // A SessionEnd beat named after a declared routine's slash command is evidence for that
   // routine, not a monitor of its own. Anything else unknown still shows, marked unlisted.
@@ -543,7 +545,7 @@ async function snapshot(repoRow) {
   const [factory, queue] = await Promise.all([readFactory(token, repo), readQueue(token, repo)]);
   const ci = await readCi(token, repo, factory.workflows || []);
   const metrics = await readMetrics(token, repo, ci, queue.issues);
-  const { monitors, beats, sessions } = judge(factory, repo);
+  const { monitors, beats, sessions } = await judge(factory, repoRow.id);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged, sessions));
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
   for (const r of routines) if (r.source === "GitHub Actions" && runsByName[r.name]) [r.last_seen, r.evidence] = [runsByName[r.name].at, "Actions run"];
@@ -567,26 +569,26 @@ async function snapshot(repoRow) {
     skills: factory.skills,
     ci,
     metrics,
-    costs: readCosts(repo, factory.prices),
+    costs: await readCosts(repoRow.id, factory.prices),
     setup: { ...(factory.client || {}), skill_beats: monitors.filter((m) => m.last && m.last.source !== "session").length },
     notes: factory.notes,
   };
 }
 
-// One GitHub read per repo at a time. The result is kept in SQLite so a page can render
+// One GitHub read per repo at a time. The result is kept in the database so a page can render
 // the last snapshot instantly, even right after the machine wakes up, and refresh behind it.
 const inflight = new Map();
 function refresh(row) {
-  if (!inflight.has(row.full_name)) {
+  if (!inflight.has(row.id)) {
     const p = snapshot(row)
-      .then((s) => {
-        db.prepare("INSERT INTO snapshots (repo, at, body) VALUES (?, ?, ?) ON CONFLICT(repo) DO UPDATE SET at = excluded.at, body = excluded.body").run(row.full_name, Date.now(), JSON.stringify(s));
+      .then(async (s) => {
+        await db.run("INSERT INTO snapshots (repo_id, at, body) VALUES ($1, $2, $3) ON CONFLICT(repo_id) DO UPDATE SET at = excluded.at, body = excluded.body", row.id, Date.now(), JSON.stringify(s));
         return s;
       })
-      .finally(() => inflight.delete(row.full_name));
-    inflight.set(row.full_name, p);
+      .finally(() => inflight.delete(row.id));
+    inflight.set(row.id, p);
   }
-  return inflight.get(row.full_name);
+  return inflight.get(row.id);
 }
 const FRESH_MS = 60e3;
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
@@ -734,6 +736,31 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .side-foot .updated{padding:6px 10px 0;font-size:12px;color:var(--faint)}
 .main{padding:36px 48px 80px;max-width:1120px;width:100%}
 .vh{margin-bottom:24px}.vh h1{font-size:24px;letter-spacing:-.02em;margin:0 0 4px;font-weight:600}.vh p{color:var(--muted);margin:0;max-width:70ch}
+.solo{grid-template-columns:minmax(0,1fr)}.solo .main{margin:0 auto}
+.tb-btn{background:none;border:0;color:#d5dbdb;font:inherit;padding:0;cursor:pointer}.tb-btn:hover{color:#fff;background:none}
+.repos-t{margin-bottom:28px}
+.rrow2{display:grid;grid-template-columns:minmax(0,2.4fr) repeat(4,minmax(0,1fr)) 70px;gap:12px;align-items:center;padding:12px 20px;border-top:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.rrow2:first-child{border-top:0}a.rrow2:hover{background:#f9fafa}
+.rrow2.head{font-size:12px;color:var(--muted);font-weight:600;padding-block:10px}
+.rrow2 .rn{display:flex;align-items:flex-start;gap:10px;min-width:0}.rrow2 .rn b{font-weight:600}.rrow2 small{color:var(--faint);font-weight:400}
+.rrow2 .dot{width:9px;height:9px;border-radius:50%;background:var(--empty);margin-top:6px;flex:none}.rrow2 .dot[data-s=ok]{background:var(--ok)}.rrow2 .dot[data-s=degraded]{background:var(--warn)}.rrow2 .dot[data-s=down]{background:var(--bad)}
+.rrow2 .num{text-align:right;font-variant-numeric:tabular-nums}.rrow2 .num i{font-style:normal;color:var(--faint)}
+.rrow2 .go{text-align:right;color:var(--link);font-size:13px}
+@media(max-width:820px){.rrow2{grid-template-columns:minmax(0,1fr) auto}.rrow2>span:nth-child(n+2):not(.go){display:none}.rrow2.head{display:none}}
+.chat{display:flex;flex-direction:column;gap:12px;max-width:820px}
+.chat-log{display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 360px);min-height:180px;overflow-y:auto;padding:4px 2px}
+.chat-empty{color:var(--faint);font-size:14px;padding:24px 0}
+.msg{padding:12px 16px;border-radius:12px;line-height:1.55;max-width:92%;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--squid,#232f3e);color:#fff;border-bottom-right-radius:4px;white-space:pre-wrap}
+.msg.assistant{align-self:flex-start;background:var(--bg);box-shadow:var(--shadow,0 0 0 1px var(--line));border-bottom-left-radius:4px}
+.msg.err{color:var(--bad)}.msg ul{margin:6px 0;padding-left:20px}.msg pre{margin:8px 0;white-space:pre-wrap}.msg code{background:#f2f3f3;padding:1px 5px;border-radius:4px}
+.typing{display:inline-flex;gap:4px}.typing i{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+@media (prefers-reduced-motion:no-preference){.typing i{animation:beat 1s ease-in-out infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font:500 13px var(--f);cursor:pointer}.chip:hover{border-color:var(--ink);background:var(--bg)}
+.ask{display:flex;gap:8px;align-items:flex-end;margin:0;background:var(--bg);border-radius:12px;padding:8px;box-shadow:var(--shadow,0 0 0 1px var(--line))}
+.ask textarea{flex:1;border:0;resize:none;font:15px/1.45 var(--f);color:var(--ink);padding:6px 8px;background:transparent;outline:none}
+.ask button{flex:none}.ask button:disabled{opacity:.5;cursor:default}
+.chat-note{font-size:12px;color:var(--faint)}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -855,13 +882,30 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["overview", "monitors", "automations", "ci", "prs", "issues", "costs", "setup"];
+const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{color:var(--accent);font-weight:700;box-shadow:inset 3px 0 var(--accent)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
 addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
+const ASK_MODEL = process.env.HUSH_MODEL || "openai/gpt-6.1-sol";
+const ASK_JS = `<script>(()=>{const S=window.hushChat||(window.hushChat={msgs:[],busy:false,draft:""});
+const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const md=t=>e(t).replace(/\x60\x60\x60([\\s\\S]*?)\x60\x60\x60/g,(m,c)=>"<pre>"+c.replace(/^\\w*\\n/,"")+"</pre>").replace(/\x60([^\x60\\n]+)\x60/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/^#{1,4} (.+)$/gm,"<b>$1</b>").replace(/^[-*] (.+)$/gm,"<li>$1</li>").replace(/(<li>.*<\\/li>\\n?)+/g,m=>"<ul>"+m.replace(/\\n/g,"")+"</ul>").replace(/\\n{2,}/g,"<br><br>").replace(/\\n/g,"<br>");
+function draw(){const log=document.getElementById("chat-log");if(!log)return;
+log.innerHTML=S.msgs.length?S.msgs.map(m=>'<div class="msg '+m.role+(m.err?" err":"")+'">'+(m.role==="user"?e(m.content):md(m.content)||'<span class="typing"><i></i><i></i><i></i></span>')+"</div>").join(""):'<div class="chat-empty">Ask about monitors, routines, CI, pull requests, issues or costs.</div>';
+log.scrollTop=log.scrollHeight;const inp=document.getElementById("ask-input");if(inp&&!inp.value&&S.draft)inp.value=S.draft;
+document.querySelectorAll("#chat .chip").forEach(c=>c.hidden=S.msgs.length>0);const b=document.querySelector("#ask-form button");if(b)b.disabled=S.busy}
+async function ask(q){if(S.busy||!q.trim())return;S.busy=true;S.draft="";S.msgs.push({role:"user",content:q.trim()});const a={role:"assistant",content:""};S.msgs.push(a);draw();
+try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/ask",{method:"POST",headers:{"content-type":"application/json"},credentials:"same-origin",body:JSON.stringify({messages:S.msgs.filter(m=>m!==a&&!m.err).map(({role,content})=>({role,content}))})});
+if(!r.ok||!r.body){a.content=(await r.text())||"The assistant did not answer.";a.err=true}else{const rd=r.body.getReader(),dec=new TextDecoder();for(;;){const {done,value}=await rd.read();if(done)break;a.content+=dec.decode(value,{stream:true});draw()}}
+}catch(x){a.content="Could not reach the assistant.";a.err=true}S.busy=false;draw()}
+document.addEventListener("submit",ev=>{if(ev.target.id!=="ask-form")return;ev.preventDefault();const i=document.getElementById("ask-input");const q=i.value;i.value="";ask(q)});
+document.addEventListener("keydown",ev=>{if(ev.target.id==="ask-input"&&ev.key==="Enter"&&!ev.shiftKey){ev.preventDefault();ev.target.form.requestSubmit()}});
+document.addEventListener("input",ev=>{if(ev.target.id==="ask-input")S.draft=ev.target.value});
+document.addEventListener("click",ev=>{const c=ev.target.closest&&ev.target.closest(".chip");if(c){location.hash="assistant";ask(c.dataset.q)}});
+document.addEventListener("hush:swap",draw);draw()})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1039,6 +1083,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
 
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
   const NAV_ICON = {
+    assistant: `<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/>`,
     overview: `<path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z"/>`,
     monitors: `<path d="M1.5 8.5h3l1.8-4.5 3.4 8.5 1.8-4h3"/>`,
     automations: `<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>`,
@@ -1058,6 +1103,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const count = (n) => (n ? `<span class="nc">${n}</span>` : "");
   const NAV = [
     ["overview", "Overview", ""],
+    ["assistant", "Assistant", ""],
     ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(s.monitors.length)],
     ["automations", "Automations", lateN ? badge(lateN, "bad") : count(s.routines.length)],
     ["ci", "CI", failingCi ? badge(failingCi, "bad") : count((s.ci || []).length)],
@@ -1119,13 +1165,20 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
       ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
+      ${view("assistant", `${vh("Assistant", "Ask anything about this repo. It reads everything Hush has: monitors and their heartbeats, routines, CI, pull requests, issues and costs.")}
+        <div class="chat" id="chat" data-repo="${esc(s.repo)}">
+          <div class="chat-log" id="chat-log"></div>
+          <div class="chips">${["What needs my attention?", "Which routines are late, and why?", "Why did spend change this week?", "Summarize the last 7 days"].map((q) => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+          <form class="ask" id="ask-form"><textarea id="ask-input" rows="2" placeholder="Ask about ${esc(s.repo)}…"></textarea><button type="submit">Ask</button></form>
+          <div class="chat-note">Answers come from ${esc(ASK_MODEL)} on OpenRouter, from this page's data. They can be wrong; check the source.</div>
+        </div>`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
   </div>`, { live: true, stale, app: true });
 }
 
-function homePage(user, repos = [], msg = "") {
+function homePage(user, repos = [], msg = "", snaps = {}) {
   const app = appConfig();
   if (!app) {
     return page("hush", `<header class="top">${LOGO}</header>
@@ -1133,12 +1186,32 @@ function homePage(user, repos = [], msg = "") {
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
   if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK });
-  return page("hush", `
-    <header class="top">${LOGO}<form method="post" action="/logout" style="margin:0"><button class="btn ghost">Sign out (${esc(user.login)})</button></form></header>
-    <h2>Your repos</h2>
-    <div class="group">${repos.length ? repos.map((r) => `<div class="line"><a class="name" href="/r/${esc(r.full_name)}" style="text-decoration:none">${esc(r.full_name)}${r.private ? "<small>private</small>" : ""}</a><span class="meta"><a href="/r/${esc(r.full_name)}">View status →</a></span></div>`).join("") : `<div class="line"><span class="hint">Hush is not installed on any of your repos yet.</span></div>`}</div>
-    <p><a class="btn" href="${install}">${repos.length ? "Add or remove repos" : "Install on your repos"}</a></p>
-    ${msg ? `<p class="err">${esc(msg)}</p>` : ""}`);
+  // Every repo the person can see, grouped by account, with the numbers from its last snapshot.
+  const usdF = (n) => (n == null ? "–" : "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2)));
+  const STATE_LABEL = { ok: "Operational", degraded: "Degraded", down: "Needs attention" };
+  const accounts = [...new Map(repos.map((r) => [r.account.login, r.account])).values()];
+  const row = (r) => {
+    const s = snaps[r.id];
+    if (!s) return `<a class="rrow2" href="/r/${esc(r.full_name)}"><span class="rn"><span class="dot"></span><span><b>${esc(r.full_name.split("/")[1])}</b>${r.private ? " <small>private</small>" : ""}<span class="sub">Not read yet. Open it to start.</span></span></span><span></span><span></span><span></span><span></span><span class="go">Open →</span></a>`;
+    const mons = s.monitors || [], ok = mons.filter((m) => m.state === "alive").length;
+    const M = s.metrics, C = s.costs;
+    return `<a class="rrow2" href="/r/${esc(r.full_name)}"><span class="rn"><span class="dot" data-s="${s.overall}"></span><span><b>${esc(r.full_name.split("/")[1])}</b>${r.private ? " <small>private</small>" : ""}<span class="sub">${STATE_LABEL[s.overall] || ""} · updated ${ago(s.generated_at)}</span></span></span>
+      <span class="num">${mons.length ? `${ok}<i>/${mons.length}</i>` : "–"}</span>
+      <span class="num">${M?.prs?.merged ?? "–"}${M?.prs?.agent_share != null ? `<i> ${M.prs.agent_share}%</i>` : ""}</span>
+      <span class="num">${M?.ci?.pass_rate != null ? `${M.ci.pass_rate}%` : "–"}</span>
+      <span class="num">${C ? usdF(C.total_usd) : "–"}</span>
+      <span class="go">Open →</span></a>`;
+  };
+  return page("Repositories · hush", `<div class="app solo">
+    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><span class="tb-user">${esc(user.login)}</span><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
+    <main class="main">
+      <header class="vh"><h1>Repositories</h1><p>Every repo Hush is installed on that your GitHub account can see. Numbers are the last ${WINDOW} days.</p></header>
+      ${repos.length ? accounts.map((a) => `<h2>${esc(a.login)}</h2><div class="group repos-t">
+        <div class="rrow2 head"><span>Repository</span><span class="num">Monitors ok</span><span class="num">PRs merged · agents</span><span class="num">CI passing</span><span class="num">Spend</span><span></span></div>
+        ${repos.filter((r) => r.account.login === a.login).map(row).join("")}</div>`).join("") : `<div class="group"><div class="line"><span class="hint">Hush is not installed on any of your repos yet.</span></div></div>`}
+      <p><a class="btn" href="${install}">${repos.length ? "Add or remove repos" : "Install on your repos"}</a></p>
+      ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
+    </main></div>`, { app: true });
 }
 
 function setupPage(origin, t) {
@@ -1179,13 +1252,159 @@ const send = (res, code, body, headers = {}) => {
 const json = (res, code, obj) => send(res, code, JSON.stringify(obj), { "content-type": "application/json" });
 const redirect = (res, to, headers = {}) => send(res, 303, "", { location: to, ...headers });
 
-function insertBeat(repo, b) {
+async function insertBeat(repoId, b) {
   const status = ["ok", "degraded", "skipped"].includes(b.status) ? b.status : null;
   if (!b.monitor || !status) throw new Error("monitor and status (ok|degraded|skipped) are required");
   const ts = b.ts && !Number.isNaN(Date.parse(b.ts)) ? new Date(b.ts).toISOString() : new Date().toISOString();
   const body = JSON.stringify({ source: b.source === "session" ? "session" : "skill", window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500) });
-  db.prepare("INSERT OR IGNORE INTO heartbeats (repo, monitor, ts, status, body) VALUES (?, ?, ?, ?, ?)").run(repo, String(b.monitor).slice(0, 80), ts, status, body);
+  await db.run("INSERT INTO heartbeats (repo_id, monitor, ts, status, body) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", repoId, String(b.monitor).slice(0, 80), ts, status, body);
 }
+
+// --- assistant ---------------------------------------------------------------------------
+// One question = one OpenRouter call with everything Hush knows about the repo in the system
+// prompt: the snapshot, 30 days of heartbeats (with their notes and volumes), the cost rows,
+// and a one-line summary of every other repo the person can see. Answers stream back as text.
+const askLog = new Map();
+function askAllowed(login) {
+  const now = Date.now(), recent = (askLog.get(login) || []).filter((t) => now - t < 36e5);
+  if (recent.length >= 40) return false;
+  askLog.set(login, [...recent, now]);
+  return true;
+}
+async function askContext(row, snap, user, repos) {
+  const since = new Date(Date.now() - WINDOW * 864e5).toISOString();
+  const beats = await db.all("SELECT monitor, ts, status, body FROM heartbeats WHERE repo_id = $1 AND ts >= $2 ORDER BY ts DESC LIMIT 600", row.id, since);
+  const costs = await db.all("SELECT source, day, usd, body FROM costs WHERE repo_id = $1 AND day >= $2 ORDER BY day", row.id, since.slice(0, 10));
+  const others = repos.filter((r) => r.id !== row.id);
+  const ids = others.map((r) => r.id);
+  const snaps = ids.length ? await db.all(`SELECT repo_id, body FROM snapshots WHERE repo_id IN (${ids.map((_, i) => "$" + (i + 1)).join(",")})`, ...ids) : [];
+  const brief = snaps.map((r) => { const o = JSON.parse(r.body); return `${o.repo}: ${o.overall}; monitors ${o.monitors.filter((m) => m.state === "alive").length}/${o.monitors.length} ok; PRs merged 30d ${o.metrics?.prs?.merged ?? "?"}; CI pass ${o.metrics?.ci?.pass_rate ?? "?"}%; spend 30d ${o.costs ? "$" + o.costs.total_usd.toFixed(2) : "n/a"}`; });
+  const lean = { ...snap, skills: undefined, monitors: snap.monitors.map((m) => ({ ...m, buckets: m.buckets.map((b) => b.s || "-").join("") })), ci: (snap.ci || []).map((w) => ({ ...w, days: w.days.map((d) => d || "-").join(""), tips: undefined })) };
+  return `You are the assistant inside Hush, a status page for a software factory: a repo where AI agents (Claude Code routines) and GitHub Actions do scheduled work, and monitors report heartbeats.
+You are answering ${user.login} about the repo ${row.full_name}. Now: ${new Date().toISOString()} (UTC).
+
+Rules:
+- Answer only from the data below. If it does not say, say so, and say what would tell you.
+- Be specific: name monitors, routines, workflows, PR and issue numbers, dates and amounts.
+- Lead with the answer. Short paragraphs or a short list. No preamble.
+- Monitor states: alive = operational, warn = degraded (last run not ok), degraded = chronically degraded, lying = said ok but read nothing, dead = silent past its window, retired = gone from the roster.
+- Bars are oldest to newest, one char per day (or week for weekly monitors): ok, degraded, skipped, "-" = no run.
+- Costs: provider rows are real daily spend; Claude Code dollars are estimates at API list prices.
+
+## Snapshot of ${row.full_name}
+${JSON.stringify(lean)}
+
+## Heartbeats, last ${WINDOW} days (newest first)
+${beats.map((b) => { const x = JSON.parse(b.body); return `${b.ts} ${b.monitor} ${b.status}${x.source === "session" ? " (session)" : ""}${Object.keys(x.swept || {}).length ? " swept=" + JSON.stringify(x.swept) : ""}${x.filed?.length ? " filed=" + x.filed.join(",") : ""}${x.note ? " note: " + x.note : ""}`; }).join("\n") || "none"}
+
+## Cost rows, last ${WINDOW} days
+${costs.map((c) => { const x = JSON.parse(c.body); return `${c.day} ${c.source} ${c.usd == null ? "" : "$" + c.usd}${x.name ? " " + x.name : ""}${x.models && Object.keys(x.models).length ? " tokens=" + JSON.stringify(x.models) : ""}${x.breakdown ? " " + JSON.stringify(x.breakdown) : ""}`; }).join("\n") || "none"}
+
+## Other repos ${user.login} can see
+${brief.join("\n") || "none"}`;
+}
+async function askStream(res, system, messages, origin) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return send(res, 503, "The assistant is not configured on this Hush (OPENROUTER_API_KEY is missing).", { "content-type": "text/plain; charset=utf-8" });
+  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "http-referer": origin, "x-title": "Hush" },
+    body: JSON.stringify({ model: ASK_MODEL, stream: true, messages: [{ role: "system", content: system }, ...messages] }),
+  });
+  if (!r.ok || !r.body) return send(res, 502, `The model did not answer (${r.status}). ${(await r.text().catch(() => "")).slice(0, 300)}`, { "content-type": "text/plain; charset=utf-8" });
+  res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" });
+  const dec = new TextDecoder();
+  let buf = "";
+  for await (const chunk of r.body) {
+    buf += dec.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const d = JSON.parse(data);
+        const t = d.choices?.[0]?.delta?.content;
+        if (t) res.write(t);
+        if (d.error) res.write(`\n\n(${d.error.message || "the model stopped"})`);
+      } catch {}
+    }
+  }
+  res.end();
+}
+
+// A repo row is created the first time someone who can see it opens its page. It is keyed by the
+// GitHub repo id; name, account and installation are refreshed from GitHub on every visit, so a
+// rename, a transfer or a reinstall keeps its history and its ingest key.
+async function ensureRepo(seen, user) {
+  const now = new Date().toISOString();
+  await db.run("INSERT INTO accounts (id, login, type, installation_id, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT(id) DO UPDATE SET login = excluded.login, type = excluded.type, installation_id = excluded.installation_id", seen.account.id, seen.account.login, seen.account.type, seen.installation_id, now);
+  await db.run("INSERT INTO repos (id, account_id, full_name, installation_id, ingest_key, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(id) DO UPDATE SET account_id = excluded.account_id, full_name = excluded.full_name, installation_id = excluded.installation_id", seen.id, seen.account.id, seen.full_name, seen.installation_id, "fsk_" + randomBytes(24).toString("base64url"), user.login, now);
+  return db.one("SELECT * FROM repos WHERE id = $1", seen.id);
+}
+
+// One-time move from the first storage (factory.db on the Fly volume, keyed by repo name) into the
+// current database. Repo names are resolved to GitHub ids through the app; keys and history keep.
+async function migrateLegacy() {
+  const file = join(DATA, "factory.db");
+  if (!existsSync(file) || (await db.one("SELECT v FROM settings WHERE k = $1", "migrated_legacy"))) return;
+  const old = new DatabaseSync(file, { readOnly: true });
+  const has = (t) => old.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+  for (const r of old.prepare("SELECT k, v FROM settings").all()) await db.run("INSERT INTO settings (k, v) VALUES ($1, $2) ON CONFLICT(k) DO NOTHING", r.k, r.v);
+  await loadApp();
+  for (const u of old.prepare("SELECT login, token, created_at FROM users").all()) await db.run("INSERT INTO users (login, token, created_at) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING", u.login, u.token, u.created_at);
+  let moved = { repos: 0, heartbeats: 0, costs: 0 };
+  for (const r of old.prepare("SELECT * FROM repos").all()) {
+    if (!r.installation_id || !APP) continue;
+    const meta = await gh(await installationToken(r.installation_id), `repos/${r.full_name}`).catch(() => null);
+    if (!meta) { console.log(`migrate: skipped ${r.full_name}, not readable`); continue; }
+    const now = new Date().toISOString();
+    await db.run("INSERT INTO accounts (id, login, type, installation_id, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT(id) DO NOTHING", meta.owner.id, meta.owner.login, meta.owner.type, r.installation_id, now);
+    await db.run("INSERT INTO repos (id, account_id, full_name, installation_id, ingest_key, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(id) DO NOTHING", meta.id, meta.owner.id, meta.full_name, r.installation_id, r.ingest_key, r.owner_login, r.created_at);
+    moved.repos++;
+    for (const b of old.prepare("SELECT monitor, ts, status, body FROM heartbeats WHERE repo = ?").all(r.full_name)) {
+      await db.run("INSERT INTO heartbeats (repo_id, monitor, ts, status, body) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", meta.id, b.monitor, b.ts, b.status, b.body);
+      moved.heartbeats++;
+    }
+    if (has("costs")) for (const c of old.prepare("SELECT source, key, day, usd, body, at FROM costs WHERE repo = ?").all(r.full_name)) {
+      await db.run("INSERT INTO costs (repo_id, source, key, day, usd, body, at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(repo_id, source, key) DO NOTHING", meta.id, c.source, c.key, c.day, c.usd, c.body, c.at);
+      moved.costs++;
+    }
+  }
+  old.close();
+  await setSetting("migrated_legacy", new Date().toISOString());
+  console.log(`migrate: ${JSON.stringify(moved)}`);
+}
+
+// When the server moves to Postgres, bring over what the local SQLite (hush.db) collected in the
+// meantime. Same schema; newer cost rows win, everything else is insert-if-missing.
+async function migrateLocal() {
+  const file = join(DATA, "hush.db");
+  if (db.kind !== "postgres" || !existsSync(file) || (await db.one("SELECT v FROM settings WHERE k = $1", "migrated_local"))) return;
+  const lite = new DatabaseSync(file, { readOnly: true });
+  const all = (q) => lite.prepare(q).all();
+  const moved = {};
+  const copy = async (name, rows, q, cols) => {
+    for (const r of rows) await db.run(q, ...cols.map((c) => r[c]));
+    moved[name] = rows.length;
+  };
+  await copy("settings", all("SELECT * FROM settings"), "INSERT INTO settings (k, v) VALUES ($1, $2) ON CONFLICT(k) DO NOTHING", ["k", "v"]);
+  await copy("users", all("SELECT * FROM users"), "INSERT INTO users (login, token, created_at) VALUES ($1, $2, $3) ON CONFLICT(login) DO NOTHING", ["login", "token", "created_at"]);
+  await copy("accounts", all("SELECT * FROM accounts"), "INSERT INTO accounts (id, login, type, installation_id, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT(id) DO NOTHING", ["id", "login", "type", "installation_id", "created_at"]);
+  await copy("repos", all("SELECT * FROM repos"), "INSERT INTO repos (id, account_id, full_name, installation_id, ingest_key, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(id) DO NOTHING", ["id", "account_id", "full_name", "installation_id", "ingest_key", "created_by", "created_at"]);
+  await copy("heartbeats", all("SELECT * FROM heartbeats"), "INSERT INTO heartbeats (repo_id, monitor, ts, status, body) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", ["repo_id", "monitor", "ts", "status", "body"]);
+  await copy("costs", all("SELECT * FROM costs"), "INSERT INTO costs (repo_id, source, key, day, usd, body, at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(repo_id, source, key) DO UPDATE SET day = excluded.day, usd = excluded.usd, body = excluded.body, at = excluded.at WHERE costs.at < excluded.at", ["repo_id", "source", "key", "day", "usd", "body", "at"]);
+  lite.close();
+  await setSetting("migrated_local", new Date().toISOString());
+  console.log(`migrate local: ${JSON.stringify(moved)}`);
+}
+
+await loadApp();
+await migrateLegacy().catch((e) => console.error("migrate failed:", e));
+await migrateLocal().catch((e) => console.error("migrate local failed:", e));
+await loadApp();
 
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -1196,30 +1415,35 @@ createServer(async (req, res) => {
 
     if (url.pathname === "/api/cost" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      const repo = key && db.prepare("SELECT full_name FROM repos WHERE ingest_key = ?").get(key);
+      const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));
       if (!repo) return json(res, 401, { error: "invalid ingest key" });
       const body = JSON.parse((await readBody(req)) || "{}");
       const list = Array.isArray(body) ? body : [body];
-      for (const c of list) insertCost(repo.full_name, c);
+      if (list.length > 500) return json(res, 413, { error: "at most 500 per request" });
+      for (const c of list) await insertCost(repo.id, c);
       return json(res, 200, { ok: true, stored: list.length });
     }
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      const repo = key && db.prepare("SELECT full_name FROM repos WHERE ingest_key = ?").get(key);
+      const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));
       if (!repo) return json(res, 401, { error: "invalid ingest key" });
       const body = JSON.parse((await readBody(req)) || "{}");
       const list = Array.isArray(body) ? body : [body];
-      for (const b of list) insertBeat(repo.full_name, b);
+      if (list.length > 500) return json(res, 413, { error: "at most 500 per request" });
+      for (const b of list) await insertBeat(repo.id, b);
       return json(res, 200, { ok: true, stored: list.length });
     }
 
-    const user = sessionUser(req);
+    const user = await sessionUser(req);
 
     if (url.pathname === "/" && req.method === "GET") {
       if (!user) return send(res, 200, homePage(null));
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
-      return send(res, 200, homePage(user, repos));
+      const ids = repos.map((r) => r.id);
+      const rows = ids.length ? await db.all(`SELECT repo_id, body FROM snapshots WHERE repo_id IN (${ids.map((_, i) => "$" + (i + 1)).join(",")})`, ...ids) : [];
+      const snaps = Object.fromEntries(rows.map((r) => [Number(r.repo_id), JSON.parse(r.body)]));
+      return send(res, 200, homePage(user, repos, "", snaps));
     }
 
     const SETUP = process.env.SETUP_TOKEN;
@@ -1233,7 +1457,7 @@ createServer(async (req, res) => {
       const r = await fetch(`https://api.github.com/app-manifests/${encodeURIComponent(url.searchParams.get("code") || "")}/conversions`, { method: "POST", headers: { accept: "application/vnd.github+json", "user-agent": "factory-status" } });
       if (!r.ok) throw new Error(`GitHub ${r.status} converting the manifest`);
       const a = await r.json();
-      setSetting("app", seal(JSON.stringify({ id: a.id, slug: a.slug, pem: a.pem, client_id: a.client_id, client_secret: a.client_secret, webhook_secret: a.webhook_secret })));
+      await saveApp({ id: a.id, slug: a.slug, name: a.name, pem: a.pem, client_id: a.client_id, client_secret: a.client_secret, webhook_secret: a.webhook_secret });
       return redirect(res, `https://github.com/apps/${a.slug}/installations/new`);
     }
 
@@ -1255,29 +1479,37 @@ createServer(async (req, res) => {
       const tok = await r.json();
       const me = tok.access_token && (await gh(tok.access_token, "user"));
       if (!me?.login) return send(res, 401, homePage(null, [], "GitHub did not complete the sign-in."));
-      db.prepare("INSERT INTO users (login, token, created_at) VALUES (?, ?, ?) ON CONFLICT(login) DO UPDATE SET token = excluded.token").run(me.login, seal(tok.access_token), new Date().toISOString());
+      await db.run("INSERT INTO users (login, token, created_at) VALUES ($1, $2, $3) ON CONFLICT(login) DO UPDATE SET token = excluded.token", me.login, seal(tok.access_token), new Date().toISOString());
       cache.delete(`userrepos:${me.login}`);
       return redirect(res, "/", { "set-cookie": [sessionCookie(me.login), "fs_state=; Path=/; Max-Age=0"] });
     }
 
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup)?$/);
-    if (m && req.method === "GET") {
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask)?$/);
+    if (m && (req.method === "GET" || (req.method === "POST" && m[2] === "/ask"))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
       const seen = repos.find((r) => r.full_name.toLowerCase() === m[1].toLowerCase());
       if (!seen) return send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">Hush is not installed on that repo, or your account cannot see it.</p>`));
-      let row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
-      if (!row) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at, installation_id) VALUES (?, ?, ?, ?, ?)").run(seen.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString(), seen.installation_id);
-      else if (row.installation_id !== seen.installation_id) db.prepare("UPDATE repos SET installation_id = ? WHERE full_name = ?").run(seen.installation_id, seen.full_name);
-      row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
-      if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: db.prepare("SELECT COUNT(*) n FROM heartbeats WHERE repo = ?").get(row.full_name).n });
+      const row = await ensureRepo(seen, user);
+      if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: (await db.one("SELECT COUNT(*)::int AS n FROM heartbeats WHERE repo_id = $1", row.id)).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
-      let saved = db.prepare("SELECT at, body FROM snapshots WHERE repo = ?").get(row.full_name);
+      if (m[2] === "/ask") {
+        if (req.method !== "POST") return send(res, 405, "POST only");
+        if (!askAllowed(user.login)) return send(res, 429, "That's 40 questions in the last hour. Try again later.", { "content-type": "text/plain; charset=utf-8" });
+        const { messages = [] } = JSON.parse((await readBody(req, 2e5)) || "{}");
+        const clean = messages.filter((x) => ["user", "assistant"].includes(x?.role) && typeof x.content === "string").slice(-20).map((x) => ({ role: x.role, content: x.content.slice(0, 8000) }));
+        if (!clean.length || clean.at(-1).role !== "user") return send(res, 400, "Ask a question.");
+        const saved = await db.one("SELECT body FROM snapshots WHERE repo_id = $1", row.id);
+        let snap = saved && JSON.parse(saved.body);
+        if (!snap || snap.v !== SNAP_V) snap = await refresh(row);
+        return askStream(res, await askContext(row, snap, user, repos), clean, origin);
+      }
+      let saved = await db.one("SELECT at, body FROM snapshots WHERE repo_id = $1", row.id);
       if (saved && JSON.parse(saved.body).v !== SNAP_V) saved = null;
-      const fresh = saved && Date.now() - saved.at < FRESH_MS;
+      const fresh = saved && Date.now() - Number(saved.at) < FRESH_MS;
       if (m[2]) return json(res, 200, fresh ? JSON.parse(saved.body) : await refresh(row));
       // ?partial=1 is the page's own background fetch: always a fresh read (deduped, and
       // the readers keep their own short caches).

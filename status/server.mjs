@@ -999,10 +999,11 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .dow-i span{display:inline-block;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-weight:500;color:var(--ink);cursor:pointer;user-select:none}.dow-i input:checked+span{background:var(--squid,#232f3e);border-color:var(--squid,#232f3e);color:#fff}.dow-i input:focus-visible+span{outline:2px solid var(--link,#0073bb)}
 .f-actions{display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:6px}.f-msg{flex:1;font-size:13px;font-weight:400;color:var(--muted)}
 .map-wrap{position:relative}
-.svc-map{position:relative;height:min(560px,62vh);border-radius:10px;overflow:hidden;background:radial-gradient(120% 90% at 50% 0%,#ffffff 0,#eef1f4 60%,#e3e8ee 100%);box-shadow:var(--shadow,0 0 0 1px var(--line))}
+.svc-map{position:relative;height:min(600px,66vh);border-radius:10px;overflow:hidden;background:#fff;box-shadow:var(--shadow,0 0 0 1px var(--line))}
 .svc-map canvas{display:block;width:100%!important;height:100%!important;cursor:grab}.svc-map canvas:active{cursor:grabbing}
 .map-hint{position:absolute;left:14px;bottom:12px;font-size:12px;color:var(--faint);pointer-events:none;z-index:2}
 .map-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.city-label{position:absolute;left:0;top:0;white-space:nowrap;font:700 15px/1 Kalam,"Comic Sans MS",cursive;color:#1d1d1f;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 6px #fff}.city-label.alarm{color:var(--bad)}
 .map-label,.map-island{position:absolute;left:0;top:0;white-space:nowrap;font:600 11.5px var(--f);color:var(--ink);background:rgba(255,255,255,.88);padding:2px 7px;border-radius:5px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .map-label.alarm{background:var(--bad);color:#fff}
 .map-island{background:var(--squid,#232f3e);color:#fff;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
@@ -1229,11 +1230,27 @@ try{await post(base()+(f.dataset.ruleId?"/"+f.dataset.ruleId:""),b);msg.textCont
 document.addEventListener("click",async ev=>{const b=ev.target.closest("[data-rule-act]");if(!b)return;ev.preventDefault();ev.stopPropagation();const act=b.dataset.ruleAct,id=b.dataset.id;
 if(act==="delete"&&!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to delete";return}b.disabled=true;
 try{await post(base()+"/"+id+"/"+act);if(act==="delete"){const w=b.closest(".win");w&&w.querySelector('[data-act="close"]').click()}}catch(x){b.textContent="Failed"}b.disabled=false},true)})()</script>`;
-const MAP_JS = `<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+const MAP_JS = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@700&display=swap">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <script type="module">
+// The factory as a city, after the map in the "Build your own software factory" post: a tiled
+// board, one building per service (footprint and height from 30-day spend, the biggest on a
+// podium), colored by district, a short name on the roof, a road down the middle with traffic.
 const M = window.hushMap || (window.hushMap = {});
-const COLORS = { up: 0xec7211, flat: 0x5b6b7c, down: 0x2f7fc1, alarm: 0xd13212 };
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const DISTRICTS = [
+  ["run", 0x5f9e6e, /container|fargate|ec2|compute|lambda|app runner|batch|vercel|fly|lightsail|elastic beanstalk/i],
+  ["edge", 0x4f9a7a, /cloudfront|vpc|virtual private cloud|route ?53|load balanc|api gateway|nat|direct connect|global accelerator|cloudflare/i],
+  ["data", 0x5b8ab8, /s3|storage|rds|relational|aurora|dynamo|elasticache|neon|backup|efs|redshift|opensearch|database|supabase/i],
+  ["ai", 0x7d6bb4, /bedrock|transcribe|sagemaker|rekognition|polly|textract|comprehend|claude|anthropic|openai|translate/i],
+  ["ship", 0x5a7fa8, /codebuild|ecr|registry|codepipeline|codedeploy|amplify/i],
+  ["watch", 0xc9a447, /cloudwatch|cloudtrail|kms|key management|secrets|systems manager|iam|cost explorer|config|guardduty|security hub|x-ray/i],
+  ["talk", 0xb8665f, /ses|email|sns|notification|sqs|queue|eventbridge|pinpoint|twilio|chime/i],
+];
+const SHORT = [[/elastic container service/i,"ECS"],[/simple storage service/i,"S3"],[/relational database/i,"RDS"],[/simple email/i,"SES"],[/simple notification/i,"SNS"],[/simple queue/i,"SQS"],[/elastic compute cloud|ec2 - other|ec2-other/i,"EC2"],[/elastic load balancing/i,"ELB"],[/virtual private cloud/i,"VPC"],[/key management/i,"KMS"],[/container registry/i,"ECR"],[/systems manager/i,"SSM"],[/lambda/i,"λ"],[/route ?53/i,"R53"],[/cloudfront/i,"CF"],[/cloudwatch/i,"CW"],[/bedrock/i,"BR"],[/codebuild/i,"CB"],[/dynamo/i,"DDB"],[/aurora/i,"AU"],[/transcribe/i,"TR"],[/secrets/i,"SM"],[/api gateway/i,"API"],[/claude/i,"CC"],[/vercel/i,"▲"],[/neon/i,"N"]];
+const district = (s) => DISTRICTS.find(([, , re]) => re.test(s.name + " " + s.provider)) || ["other", 0x8a8f96];
+const short = (s) => (SHORT.find(([re]) => re.test(s.name)) || [null, s.name.replace(/^(Amazon|AWS) /, "").split(/\\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase()])[1];
+const nice = (s) => s.name.replace(/^(Amazon|AWS) /, "").replace(/Elastic Container Service/, "ECS").replace(/Simple Storage Service/, "S3").replace(/Relational Database Service/, "RDS").replace(/Simple Email Service/, "SES").replace(/Elastic Compute Cloud - Compute/, "EC2").replace(/Virtual Private Cloud/, "VPC").replace(/Key Management Service/, "KMS").replace(/Elastic Container Registry \\(ECR\\)/, "ECR").replace(/^AmazonCloudTrail$|^CloudTrail$/, "CloudTrail").replace(/^Amazon/, "").replace(/Systems Manager/, "Parameter Store").replace(/Claude Code sessions/, "Claude Code");
 async function build() {
   const host = document.getElementById("svc-map"), dataEl = document.getElementById("map-data");
   if (!host || !dataEl || document.documentElement.dataset.view !== "map") return;
@@ -1242,63 +1259,85 @@ async function build() {
   let THREE, OrbitControls;
   try { THREE = await import("three"); ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js")); }
   catch { host.innerHTML = '<div class="map-hint">The 3D map could not load. The list below has the same numbers.</div>'; return; }
-  const { services } = JSON.parse(dataEl.textContent);
+  const services = JSON.parse(dataEl.textContent).services;
   const W = () => host.clientWidth, H = () => host.clientHeight;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(W(), H()); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(W(), H());
   host.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d1d9, 1.15));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(14, 26, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40 }); scene.add(sun);
-  // islands: one per provider, blocks in a square grid inside, biggest first
-  const groups = {}; for (const s of services) (groups[s.provider] ??= []).push(s);
-  const islands = Object.entries(groups).sort((a, b) => b[1].reduce((t, x) => t + x.total, 0) - a[1].reduce((t, x) => t + x.total, 0));
-  const max = Math.max(...services.map((s) => s.total)), CELL = 1.7, FOOT = 1.25;
-  const blocks = [], labels = [];
-  let x0 = 0;
-  for (const [prov, list] of islands) {
-    const cols = Math.ceil(Math.sqrt(list.length)), rows = Math.ceil(list.length / cols), w = cols * CELL + 0.8, d = rows * CELL + 0.8;
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(w, 0.3, d), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
-    plate.position.set(x0 + w / 2, -0.15, d / 2); plate.receiveShadow = true; scene.add(plate);
-    labels.push({ text: list[0].label, pos: new THREE.Vector3(x0 + 0.3, 0.05, d + 0.6), cls: "map-island" });
-    list.forEach((s, i) => {
-      const h = 0.25 + 7 * Math.sqrt(s.total / max);
-      const color = s.alarm ? COLORS.alarm : s.trend > 0.15 ? COLORS.up : s.trend < -0.15 ? COLORS.down : COLORS.flat;
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
-      const m = new THREE.Mesh(new THREE.BoxGeometry(FOOT, h, FOOT), mat);
-      m.position.set(x0 + 0.4 + (i % cols) * CELL + CELL / 2, h / 2, 0.4 + Math.floor(i / cols) * CELL + CELL / 2);
-      m.castShadow = true; m.receiveShadow = true; m.userData = { s, h, base: color };
-      scene.add(m); blocks.push(m);
-      if (i < 3 || s.alarm) labels.push({ text: s.name.replace(/^Amazon |^AWS /, ""), pos: new THREE.Vector3(m.position.x, h + 0.3, m.position.z), cls: s.alarm ? "map-label alarm" : "map-label" });
-    });
-    x0 += w + 2.2;
+  scene.add(new THREE.AmbientLight(0xffffff, 1.55));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.25); sun.position.set(-8, 20, 14); scene.add(sun);
+  const INK = 0x2a2a2a;
+  const outlined = (geo, color, pos) => {
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+    m.position.copy(pos);
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: INK })));
+    scene.add(m); return m;
+  };
+  // lots: districts in order, biggest first; column ROAD stays empty for the road
+  const sorted = services.map((s) => ({ s, d: district(s) })).sort((a, b) => DISTRICTS.findIndex((x) => x[0] === a.d[0]) - DISTRICTS.findIndex((x) => x[0] === b.d[0]) || b.s.total - a.s.total);
+  const n = sorted.length, COLS = Math.max(4, Math.ceil(Math.sqrt(n * 1.4))) + 1, ROAD = Math.floor(COLS / 2), CELL = 2.4;
+  const lots = []; for (let i = 0, c = 0; lots.length < n; c++) { if (c % COLS === ROAD) continue; lots.push([c % COLS, Math.floor(c / COLS)]); i++; }
+  const rows = Math.ceil(lots.at(-1)[1] + 1), BW = COLS * CELL + 1.6, BD = rows * CELL + 1.6;
+  const ox = -BW / 2 + 0.8 + CELL / 2, oz = -BD / 2 + 0.8 + CELL / 2;
+  // the board: tiles on a beige slab
+  outlined(new THREE.BoxGeometry(BW + 0.6, 0.5, BD + 0.6), 0xb9b4a8, new THREE.Vector3(0, -0.45, 0));
+  outlined(new THREE.BoxGeometry(BW, 0.2, BD), 0xe9e6de, new THREE.Vector3(0, -0.1, 0));
+  const tiles = new THREE.GridHelper(Math.max(BW, BD), Math.round(Math.max(BW, BD) / (CELL / 2)), 0xc4bfb2, 0xc4bfb2); tiles.position.y = 0.005;
+  tiles.scale.set(BW / Math.max(BW, BD), 1, BD / Math.max(BW, BD)); scene.add(tiles);
+  // the road with its dashes
+  const road = outlined(new THREE.BoxGeometry(CELL * 0.7, 0.04, BD - 0.4), 0xd6d2c8, new THREE.Vector3(ox + ROAD * CELL, 0.02, 0));
+  for (let z = -BD / 2 + 0.8; z < BD / 2 - 0.6; z += 0.9) { const d = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.36), new THREE.MeshBasicMaterial({ color: 0xffffff })); d.position.set(ox + ROAD * CELL, 0.06, z); scene.add(d); }
+  // buildings
+  const max = Math.max(...services.map((s) => s.total)), blocks = [], labels = [];
+  const roofTex = (txt, color) => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+    g.fillStyle = "#" + color.toString(16).padStart(6, "0"); g.beginPath(); g.roundRect(14, 14, 100, 100, 18); g.fill();
+    g.fillStyle = "#fff"; g.font = "700 " + (txt.length > 2 ? 34 : 48) + "px Kalam, system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 64, 68);
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; };
+  const ROOF = { run: 0xe8742a, edge: 0x8b5cf6, data: 0xc026d3, ai: 0x10a37f, ship: 0xc026d3, watch: 0xdb2777, talk: 0xe11d48, other: 0x475569 };
+  sorted.forEach(({ s, d }, i) => {
+    const [c, r] = lots[i], x = ox + c * CELL, z = oz + r * CELL, k = Math.sqrt(s.total / max);
+    const color = s.alarm ? 0xd13212 : d[1];
+    const foot = 0.8 + 1.15 * k, h = 0.35 + 5.6 * k;
+    let top = 0, body;
+    if (k > 0.55) { // big spenders stand on a podium, like the post's tallest towers
+      outlined(new THREE.BoxGeometry(Math.min(2.15, foot + 0.6), h * 0.32, Math.min(2.15, foot + 0.6)), color, new THREE.Vector3(x, h * 0.16, z));
+      body = outlined(new THREE.BoxGeometry(foot * 0.72, h, foot * 0.72), color, new THREE.Vector3(x, h * 0.32 + h / 2, z)); top = h * 1.32;
+    } else { body = outlined(new THREE.BoxGeometry(foot, h, foot), color, new THREE.Vector3(x, h / 2, z)); top = h; }
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(0.95, foot * 0.6), Math.min(0.95, foot * 0.6)), new THREE.MeshBasicMaterial({ map: roofTex(short(s), ROOF[d[0]] ?? 0x475569), transparent: true }));
+    roof.rotation.x = -Math.PI / 2; roof.position.set(x, top + 0.012, z); scene.add(roof);
+    body.userData = { s, base: color }; blocks.push(body);
+    labels.push({ text: nice(s), pos: new THREE.Vector3(x, top + 0.25, z), alarm: s.alarm, rank: s.total });
+  });
+  // traffic: orange dots wandering the road and the lots
+  const dots = [];
+  if (!still) for (let i = 0; i < Math.min(40, 8 + n * 2); i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), new THREE.MeshBasicMaterial({ color: 0xec7211 }));
+    const onRoad = i % 3 === 0, lot = lots[i % n];
+    m.userData = onRoad ? { road: true, z: Math.random() * BD - BD / 2, v: (Math.random() < 0.5 ? -1 : 1) * (0.012 + Math.random() * 0.02), x: ox + ROAD * CELL + (Math.random() < 0.5 ? -0.3 : 0.3) } : { cx: ox + lot[0] * CELL, cz: oz + lot[1] * CELL, a: Math.random() * 6.28, r: 0.9 + Math.random() * 0.3, v: 0.004 + Math.random() * 0.01 };
+    m.position.y = 0.1; scene.add(m); dots.push(m);
   }
-  const center = new THREE.Vector3(x0 / 2 - 1.1, 0, (Math.max(...islands.map(([, l]) => Math.ceil(l.length / Math.ceil(Math.sqrt(l.length))))) * CELL) / 2);
-  // frame the whole scene: its bounding sphere fits at any rotation
   const sphere = new THREE.Box3().setFromObject(scene).getBoundingSphere(new THREE.Sphere());
-  center.copy(sphere.center);
-  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -200, 400);
-  const fit = () => { const a = W() / H(), v = sphere.radius * (a >= 1 ? 0.86 : 0.86 / a); cam.left = -v * a; cam.right = v * a; cam.top = v; cam.bottom = -v; cam.updateProjectionMatrix(); renderer.setSize(W(), H()); };
-  cam.position.set(center.x + 30, 26, center.z + 30); cam.lookAt(center); fit();
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -300, 500);
+  const fit = () => { const a = W() / H(), v = sphere.radius * (a >= 1 ? 0.8 : 0.8 / a); cam.left = -v * a; cam.right = v * a; cam.top = v; cam.bottom = -v; cam.updateProjectionMatrix(); renderer.setSize(W(), H()); };
+  cam.position.set(sphere.center.x + 26, 30, sphere.center.z + 34); cam.lookAt(sphere.center); fit();
   const controls = new OrbitControls(cam, renderer.domElement);
-  Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, autoRotate: !still, autoRotateSpeed: 0.6, minZoom: 0.5, maxZoom: 4, maxPolarAngle: Math.PI * 0.46, enablePan: false });
-  controls.target.copy(center);
+  Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, autoRotate: !still, autoRotateSpeed: 0.35, minZoom: 0.6, maxZoom: 4, maxPolarAngle: Math.PI * 0.42, enablePan: false });
+  controls.target.copy(sphere.center);
   renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false), { once: true });
-  // labels and tooltip are HTML on top of the canvas
   const layer = document.createElement("div"); layer.className = "map-layer"; host.appendChild(layer);
-  labels.sort((a, b) => (a.cls === "map-island" ? -1 : 0) - (b.cls === "map-island" ? -1 : 0));
-  const tags = labels.map((l) => { const e = document.createElement("span"); e.className = l.cls; e.textContent = l.text; layer.appendChild(e); return { ...l, e }; });
+  labels.sort((a, b) => (b.alarm - a.alarm) || b.rank - a.rank);
+  const tags = labels.map((l) => { const e = document.createElement("span"); e.className = "city-label" + (l.alarm ? " alarm" : ""); e.textContent = l.text; layer.appendChild(e); return { ...l, e }; });
   const tip = document.createElement("div"); tip.className = "map-tip"; tip.hidden = true; host.appendChild(tip);
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let hover = null, down = null;
   const money = (v) => "$" + (v >= 100 ? Math.round(v).toLocaleString("en-US") : v.toFixed(2));
-  const pick = (ev) => { const r = renderer.domElement.getBoundingClientRect(); ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, cam); return ray.intersectObjects(blocks)[0]?.object || null; };
+  const pick = (ev) => { const r = renderer.domElement.getBoundingClientRect(); ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, cam); return ray.intersectObjects(blocks, false)[0]?.object || null; };
   renderer.domElement.addEventListener("pointermove", (ev) => {
     const o = pick(ev);
-    if (hover && hover !== o) hover.material.emissive.setHex(0);
+    if (hover && hover !== o) hover.material.emissive?.setHex(0);
     hover = o; renderer.domElement.style.cursor = o ? "pointer" : "grab";
     if (!o) { tip.hidden = true; return; }
-    o.material.emissive.setHex(0x222222);
+    o.material.emissive.setHex(0x2a2a2a);
     const s = o.userData.s, t = Math.abs(s.trend) < 0.05 ? "flat" : (s.trend > 0 ? "+" : "") + Math.round(s.trend * 100) + "%";
     tip.innerHTML = "<b></b><span></span><span></span>"; tip.children[0].textContent = s.name; tip.children[1].textContent = s.label + " · " + money(s.total) + " in 30 days"; tip.children[2].textContent = money(s.last7) + " last 7 days, " + t + (s.alarm ? " · price rule firing" : "");
     const r = host.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 240) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px"; tip.hidden = false;
@@ -1307,28 +1346,28 @@ async function build() {
   renderer.domElement.addEventListener("pointerdown", (ev) => (down = [ev.clientX, ev.clientY]));
   renderer.domElement.addEventListener("pointerup", (ev) => { if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return; const o = pick(ev); if (o && window.hushOpen) window.hushOpen("service:" + o.userData.s.key); });
   const ro = new ResizeObserver(fit); ro.observe(host);
-  const v3 = new THREE.Vector3(); let raf, t0 = performance.now();
+  const v3 = new THREE.Vector3(); let raf;
   const loop = (t) => {
     raf = requestAnimationFrame(loop);
     if (document.hidden || document.documentElement.dataset.view !== "map") return;
     controls.update();
-    if (!still) for (const b of blocks) if (b.userData.s.alarm) { const k = 1 + 0.04 * Math.sin((t - t0) / 260); b.scale.set(k, 1, k); }
+    for (const m of dots) { const u = m.userData;
+      if (u.road) { u.z += u.v; if (u.z > BD / 2 - 0.5) u.z = -BD / 2 + 0.5; if (u.z < -BD / 2 + 0.5) u.z = BD / 2 - 0.5; m.position.set(u.x, 0.12, u.z); }
+      else { u.a += u.v; m.position.set(u.cx + Math.cos(u.a) * u.r, 0.1, u.cz + Math.sin(u.a) * u.r); } }
+    if (!still) for (const b of blocks) if (b.userData.s.alarm) b.material.emissive.setHex(Math.sin(t / 220) > 0 ? 0x551100 : 0x000000);
     renderer.render(scene, cam);
-    const r = host.getBoundingClientRect();
-    const placed = [];
+    const r = host.getBoundingClientRect(), placed = [];
     for (const g of tags) {
       v3.copy(g.pos).project(cam);
-      const x = (v3.x + 1) / 2 * r.width, y = (1 - v3.y) / 2 * r.height, w = g.w ??= g.e.offsetWidth, h = 22;
-      const box = [x - w / 2, y - h, x + w / 2, y];
-      const clash = g.cls !== "map-island" && placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
-      g.e.style.visibility = clash ? "hidden" : "visible";
-      if (!clash) placed.push(box);
+      const x = (v3.x + 1) / 2 * r.width, y = (1 - v3.y) / 2 * r.height, w = g.w ??= g.e.offsetWidth, h = 22, box = [x - w / 2, y - h, x + w / 2, y];
+      const clash = placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
+      g.e.style.visibility = clash ? "hidden" : "visible"; if (!clash) placed.push(box);
       g.e.style.transform = "translate(" + x + "px," + y + "px) translate(-50%,-100%)";
     }
   };
   raf = requestAnimationFrame(loop);
   M.host = host;
-  M.dispose = () => { cancelAnimationFrame(raf); ro.disconnect(); controls.dispose(); renderer.dispose(); scene.traverse((o) => { o.geometry?.dispose(); o.material?.dispose?.(); }); M.host = null; };
+  M.dispose = () => { cancelAnimationFrame(raf); ro.disconnect(); controls.dispose(); renderer.dispose(); scene.traverse((o) => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose?.(); }); M.host = null; };
 }
 addEventListener("hashchange", build); document.addEventListener("hush:swap", () => { M.dispose?.(); build(); }); build();
 </script>`;
@@ -1579,7 +1618,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const mapData = JSON.stringify({ services: SVCS.map((x) => ({ key: x.key, provider: x.provider, label: srcName(x.provider), name: x.name, total: x.total, last7: x.last7, prev7: x.prev7, trend: x.trend, alarm: alarmOn(x).length > 0 })) }).replace(/</g, "\\u003c");
   const mapSection = SVCS.length ? `
     <div class="map-wrap"><div id="svc-map" class="svc-map" aria-label="3D map of services by spend"><div class="map-hint">Drag to rotate · scroll to zoom · click a block</div></div>
-      <div class="map-legend"><span><i style="background:#ec7211"></i>Rising</span><span><i style="background:#5b6b7c"></i>Steady</span><span><i style="background:#2f7fc1"></i>Falling</span><span><i style="background:#d13212"></i>Price rule firing</span><span class="faint">Height = spend in ${WINDOW} days</span></div></div>
+      <div class="map-legend"><span><i style="background:#5f9e6e"></i>Run</span><span><i style="background:#4f9a7a"></i>Edge</span><span><i style="background:#5b8ab8"></i>Data</span><span><i style="background:#7d6bb4"></i>AI</span><span><i style="background:#5a7fa8"></i>Ship</span><span><i style="background:#c9a447"></i>Watch</span><span><i style="background:#b8665f"></i>Talk</span><span><i style="background:#d13212"></i>Price rule firing</span><span class="faint">Size and height = spend in ${WINDOW} days · orange dots are traffic</span></div></div>
     <script type="application/json" id="map-data">${mapData}</script>
     <h2 style="margin-top:28px">Services</h2>
     <div class="group">${SVCS.map((x) => `<div class="line openable" data-open="service:${esc(x.key)}" role="button" tabindex="0"><span class="name">${esc(x.name)}<span class="sub">${srcName(x.provider)}</span></span><span class="meta"><b>${usd(x.total)}</b> <span class="sub">${usd(x.last7)} last 7 days · ${trendTxt(x.trend)}${alarmOn(x).length ? ' · <span style="color:var(--bad)">rule firing</span>' : ""}</span></span></div>`).join("")}</div>`
@@ -1704,7 +1743,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
           <form class="ask" id="ask-form"><textarea id="ask-input" rows="2" placeholder="Ask about ${esc(s.repo)}…"></textarea><button type="submit">Ask</button></form>
           <div class="chat-note">Answers come from ${esc(ASK_MODEL)} on OpenRouter, from this page's data. They can be wrong; check the source.</div>
         </div>`)}
-      ${view("map", `${vh("Map", "Every service the factory pays for, as a 3D block: height is what it cost in the last 30 days, color is where it is heading.")}${mapSection}`)}
+      ${view("map", `${vh("Map", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>

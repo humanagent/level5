@@ -89,10 +89,11 @@ the repo it was created on.
 
 ## Map
 
-A 3D view of every service the factory pays for, from the same cost rows: one island per provider,
-one block per service (each AWS service from the Cost Explorer breakdown; providers that report a
-single total are one block). Height is the spend over 30 days; color is the last 7 complete days
-against the 7 before (orange rising, blue falling, grey steady), red while a price rule on that
-service is firing. Drag to rotate, scroll to zoom, hover for the numbers, click a block for the
-service's window with its daily spend. Built with three.js (loaded from jsDelivr only on this view);
-the list under it has the same numbers if WebGL is not available.
+The factory as a city, after the map in the "Build your own software factory" post: a tiled board
+with a road down the middle, one outlined building per service (each AWS service from the Cost
+Explorer breakdown; a provider that reports one total is one building). Footprint and height come
+from the 30-day spend, and the biggest stand on a podium. Buildings are colored by district (run,
+edge, data, AI, ship, watch, talk) with a short name on the roof; a building turns red while a price
+rule on it is firing. Orange dots moving along the road and around the lots are decoration. Drag to
+rotate, scroll to zoom, hover for the numbers, click a building for the service's window. Built with
+three.js (loaded from jsDelivr only on this view); the list under it has the same numbers.

@@ -934,40 +934,6 @@ html[data-view] .tabs>label{background:var(--bg)}
 .copy{border-radius:20px}
 @media(max-width:820px){.side{top:40px;height:auto}.topbar .logo span{display:none}}
 html[data-view] .grid2{background:var(--line)}
-/* macOS layer, after the admin's desktop: the page is the wallpaper, chrome is glass. Keeps the
-   console's orange accent and status colors. */
-:root{--f:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Open Sans","Helvetica Neue",Arial,sans-serif;--mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
---glass:rgba(248,248,250,.72);--glass-line:rgba(0,0,0,.09);--card-glass:rgba(255,255,255,.86);
---mac-shadow:0 0 0 .5px rgba(0,0,0,.16),0 12px 32px -8px rgba(0,0,0,.22),0 32px 80px -24px rgba(0,0,0,.32);--sel:rgba(0,0,0,.06)}
-body{-webkit-font-smoothing:antialiased;letter-spacing:-.003em}
-html[data-view] body{background:radial-gradient(1100px 560px at 88% -8%,#f9e2d2 0,transparent 62%),radial-gradient(900px 520px at -6% 104%,#dde6f4 0,transparent 60%),radial-gradient(700px 400px at 40% 120%,#efe9f6 0,transparent 60%),#eef0f3;background-attachment:fixed}
-.topbar{height:36px;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(22px);backdrop-filter:saturate(180%) blur(22px);color:var(--ink);border-bottom:.5px solid var(--glass-line);font-size:13px}
-.topbar .logo{color:var(--ink);font-size:15px}.crumbs a,.crumbs span{color:var(--muted)}.crumbs a:hover{color:var(--ink)}.crumbs b{color:var(--ink)}
-.tb-user,.tb-btn{color:var(--muted)}.tb-btn:hover{color:var(--ink)}
-.tb-bell{color:var(--ink);width:30px;height:28px}.tb-bell:hover,.tb-bell[aria-expanded=true]{background:rgba(0,0,0,.07);color:var(--ink)}
-.side{top:36px;height:calc(100vh - 36px);background:rgba(244,244,247,.62);-webkit-backdrop-filter:saturate(180%) blur(30px);backdrop-filter:saturate(180%) blur(30px);border-right:.5px solid var(--glass-line)}
-.repo-box{border-bottom:.5px solid var(--glass-line);background:transparent;border-radius:0}
-.snav a,.side-foot a{border-radius:7px;margin:0 2px;padding:6px 10px;font-size:13.5px;color:var(--ink)}.snav a:hover,.side-foot a:hover{background:rgba(0,0,0,.05);color:var(--ink)}
-.snav .ni,.side-foot .ni{color:var(--accent)}
-.side-foot{border-top:.5px solid var(--glass-line)}
-html[data-view] .group,html[data-view] .card,html[data-view] .onboard{background:var(--card-glass);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);border-radius:12px;box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.05),0 6px 20px -12px rgba(0,0,0,.18)}
-html[data-view] .grid2{background:rgba(0,0,0,.07)}html[data-view] .grid2>.row{background:var(--card-glass)}
-.banner{border-radius:12px;box-shadow:0 6px 20px -10px rgba(0,0,0,.35)}
-button,.btn{border-radius:8px}.chip,.copy{border-radius:999px}
-.vh h1{font-weight:700;letter-spacing:-.02em}
-.win{border-radius:12px;background:rgba(255,255,255,.97);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);box-shadow:var(--mac-shadow)}
-.win-bar{height:40px;background:rgba(246,246,248,.7);border-bottom:.5px solid var(--glass-line);padding:0 6px 0 14px}
-.win-title{text-align:center;font-size:13px}.win-kind{min-width:90px}.win-acts{min-width:90px;justify-content:flex-end}
-.win:not(.active){box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 10px 30px -10px rgba(0,0,0,.25)}
-.win-dock{bottom:12px;padding:7px;border-radius:18px;background:rgba(255,255,255,.38);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);border:.5px solid rgba(255,255,255,.6);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 18px 40px -12px rgba(0,0,0,.35)}
-.win-chip{position:relative;background:rgba(255,255,255,.7);color:var(--ink);border-radius:11px;padding:8px 14px;box-shadow:0 1px 2px rgba(0,0,0,.08)}.win-chip:hover{background:#fff;transform:translateY(-2px)}.win-chip span{color:var(--faint)}
-.win-chip::after{content:"";position:absolute;left:50%;bottom:-5px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:rgba(0,0,0,.45)}
-@media (prefers-reduced-motion:no-preference){.win-chip{transition:transform .15s ease,background .15s ease}}
-.notif{top:40px;border-radius:12px;background:rgba(250,250,252,.86);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);box-shadow:var(--mac-shadow)}
-.notif-i.unread{background:rgba(0,115,187,.07)}
-.msg.user{background:var(--accent);color:#fff}
-::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:10px;border:2px solid transparent;background-clip:padding-box}::-webkit-scrollbar-thumb:hover{background-color:rgba(0,0,0,.3)}::-webkit-scrollbar-track{background:transparent}
-@media(max-width:820px){.side{top:36px}.win{inset:36px 0 0 0!important}}
 .notif[hidden],.win-dock[hidden],.win[hidden]{display:none!important}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1014,7 +980,7 @@ setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
 const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
-const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(0,0,0,.075);color:var(--ink);font-weight:600}`).join("");
+const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{color:var(--accent);font-weight:700;box-shadow:inset 3px 0 var(--accent)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
 addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
 const ASK_MODEL = process.env.HUSH_MODEL || "openai/gpt-6.1-sol";
@@ -1042,7 +1008,7 @@ document.addEventListener("hush:swap",draw);draw()})()</script>`;
 // their contents come from the page's <template>s and are refreshed with it. The open set is in
 // the URL (?w=), so a link reopens them. On a phone each window is a full-screen sheet.
 const WIN_JS = `<script>(()=>{const W=window.hushWin||(window.hushWin={list:[],frames:{}});
-const MINW=380,MINH=280,STEP=28,TOP=48;
+const MINW=380,MINH=280,STEP=28,TOP=52;
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const tpl=k=>[...document.querySelectorAll("#win-tpl template")].find(t=>t.dataset.key===k);
 const phone=()=>matchMedia("(max-width:820px)").matches;

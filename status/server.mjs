@@ -546,6 +546,20 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 @media (prefers-reduced-motion:no-preference){.wrap[data-loading="1"] .updated::after{animation:beat 1s ease-in-out infinite}}
 @keyframes beat{50%{opacity:.3}}
 .wrap[data-failed="1"] .updated::after{background:var(--bad)}
+.onboard{border:1px solid var(--line);border-radius:12px;padding:22px 24px 8px;margin:0 0 36px;box-shadow:0 18px 40px -28px rgba(20,24,30,.25)}
+.onboard>h2{color:var(--ink);font-size:16px;letter-spacing:-.01em;margin:0 0 18px}
+.ob{list-style:none;margin:0;padding:0}
+.ob>li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:14px;padding:0 0 20px;position:relative}
+.ob>li:not(:last-child)::before{content:"";position:absolute;left:9.5px;top:24px;bottom:4px;width:1px;background:var(--line)}
+.ob>li>.gi,.ob>li>.live-dot{margin-top:3px;justify-self:center}.ob>li>.live-dot{margin-top:7px}
+.ob b{font-weight:600}.ob b+small{margin-left:6px}.ob b+small,.ob small{color:var(--faint);font-weight:400;font-size:12px}
+.ob span{display:block;color:var(--muted);font-size:13.5px;margin-top:2px}
+.ob li.done b{color:var(--muted);font-weight:500}
+.ob-n{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;font:600 11px var(--f);margin-top:1px}
+.ob li.wait b{color:var(--warn)}
+.cmd{position:relative;margin:8px 0 6px}.cmd pre{margin:0;padding-right:72px;white-space:pre-wrap;word-break:break-all}
+.copy{position:absolute;top:7px;right:7px;font:500 12px var(--f);border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 9px;cursor:pointer;color:var(--ink)}.copy:hover{background:#f6f7f8}
+.more{margin-top:8px}.more summary{cursor:pointer;color:var(--muted);font-size:13px}.more pre{margin:6px 0 12px}
 #ci-live{margin-bottom:32px}#ci-live .group{margin-bottom:0}.run-group+.recent-label{margin-top:18px}.recent-label{font-size:12px;color:var(--faint);margin:0 0 8px 2px}
 .live-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}.live-head h2{margin:0}
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--empty)}.live-dot[data-on="0"]{background:var(--ok)}.live-dot[data-on="1"]{background:var(--warn);box-shadow:0 0 0 0 rgba(240,169,44,.6)}
@@ -614,8 +628,8 @@ return '<li class="job" data-st="'+e(j.status)+'">'+icon(j.status,j.conclusion)+
 return '<div class="run" data-st="'+e(r.status)+'"><a class="run-head" href="'+e(r.url)+'" target="_blank" rel="noopener">'+icon(r.status,r.conclusion)+'<span class="run-main"><span class="run-title">'+e(r.title||r.name)+'</span><span class="run-sub"><b>'+e(r.name)+'</b> #'+r.number+' · '+e(r.event)+(r.actor?" by "+e(r.actor):"")+'</span></span><span class="run-side"><code class="branch">'+e(r.branch)+'</code><span class="run-time"><span class="faint">'+verb(r)+'</span> <span data-since="'+e(r.started)+'">'+dur(Date.now()-new Date(r.started))+'</span></span></span></a>'+(jobs?'<ul class="jobs">'+jobs+'</ul>':"")+'</div>'}).join("")+'</div>'}
 if(data.recent.length)h+='<div class="recent-label">Recently finished</div><div class="group recent">'+data.recent.map(r=>'<a class="line rrow'+(done.includes(r.id)?" just":"")+'" href="'+e(r.url)+'" target="_blank" rel="noopener"><span class="name">'+icon(r.status,r.conclusion)+'<span>'+e(r.name)+' <span class="faint">#'+r.number+'</span><span class="sub">'+e(r.title)+'</span></span></span><span class="meta"><code class="branch">'+e(r.branch)+'</code><span class="sub">'+dur(new Date(r.updated)-new Date(r.started))+' · '+ago(r.updated)+'</span></span></a>').join("")+'</div>';
 b.innerHTML=h;prev=ids}
-async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await fetch(u,{credentials:"same-origin"});if(r.ok){const d=await r.json();const finished=data&&data.active.some(x=>!d.active.some(y=>y.id===x.id));data=d;render();if(finished&&window.hushPull)setTimeout(window.hushPull,1500)}}catch(e){}}
-timer=setTimeout(poll,data&&data.active.length?8e3:3e4)}
+async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await fetch(u,{credentials:"same-origin"});if(r.ok){const d=await r.json();const finished=data&&data.active.some(x=>!d.active.some(y=>y.id===x.id));data=d;render();if(d.beats&&document.getElementById("onboard")&&window.hushPull)window.hushPull();else if(finished&&window.hushPull)setTimeout(window.hushPull,1500)}}catch(e){}}
+timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll("#ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll("#ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
 const page = (title, body, { live, stale } = {}) =>
@@ -641,6 +655,45 @@ function skeletonPage(repo) {
 }
 
 const STATE = { alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degraded: ["bad", "Chronically degraded"], lying: ["bad", "Said ok, read nothing"], dead: ["bad", "Down"], retired: ["none", "Retired"] };
+
+// Onboarding for a repo: the app is installed (or the user could not see this page), so what is
+// left is the heartbeat. Shown at the top of the repo page until the first heartbeat arrives,
+// and at /r/<repo>/setup after that.
+const COPY = `<button class="copy" type="button" onclick="navigator.clipboard.writeText(this.parentNode.querySelector('pre').textContent).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>`;
+function heartbeatSetup(origin, key, waiting) {
+  const DONE = `<svg class="gi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--ok)"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const n = (i) => `<span class="ob-n">${i}</span>`;
+  return `<ol class="ob">
+    <li class="done">${DONE}<div><b>Hush can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue below come from it.</span></div></li>
+    <li>${n(2)}<div><b>Install the heartbeat</b><span>At the repo root, then commit <code>.claude/</code> and push.</span>
+      <div class="cmd"><pre>curl -fsSL ${esc(origin)}/install.sh | sh -s -- ${esc(key)}</pre>${COPY}</div>
+      <span>It adds a SessionEnd hook, so every Claude Code routine that runs a slash command reports itself when it ends. No change to your skills.</span></div></li>
+    <li>${n(3)}<div><b>Say how each run went</b> <small>optional</small><span>A skill ends with this to send its status and how much it read. A monitor that says ok after reading nothing gets flagged.</span>
+      <div class="cmd"><pre>.claude/hooks/hush.sh beat errors ok '{"swept":{"events":120}}'</pre>${COPY}</div>
+      <details class="more"><summary>Declare your monitors and routines, or post from somewhere else</summary>
+      <span>In <code>.claude/factory.json</code>. Routines show their next run and get marked late when they miss one.</span>
+<pre>{
+  "monitors": [
+    { "id": "errors", "cadence": "daily", "max_silence_hours": 50, "volume_key": "events", "routine": "Monitors" }
+  ],
+  "routines": [
+    { "name": "Monitors", "cron": "0 13 * * *", "prompt": "/monitor", "model": "sonnet" }
+  ]
+}</pre>
+      <span>From a script, a Lambda or another CI, the raw call. <code>status</code> is ok, degraded or skipped.</span>
+<pre>curl -sS -X POST ${esc(origin)}/api/heartbeat \\
+  -H "authorization: Bearer ${esc(key)}" \\
+  -H "content-type: application/json" \\
+  -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details></div></li>
+    ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/hush.sh beat install-test ok</code></span></div></li>` : ""}
+  </ol>`;
+}
+
+function heartbeatPage(origin, repoRow) {
+  return page(`Heartbeat setup · ${repoRow.full_name}`, `
+    <header class="top">${LOGO}<a class="updated" href="/r/${esc(repoRow.full_name)}">← ${esc(repoRow.full_name)}</a></header>
+    <section class="onboard"><h2>Heartbeat setup</h2>${heartbeatSetup(origin, repoRow.ingest_key, false)}</section>`);
+}
 
 function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const repoUrl = s.meta.url;
@@ -707,8 +760,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       </div>
     </div>`;
 
-  const onRoutine = new Set(s.routines.map((r) => (r.prompt.match(/\/([a-z][a-z0-9-]*)/) || [])[1]).filter(Boolean));
-  const owner = repoRow;
+  const onboarding = repoRow && s.counts.heartbeats === 0;
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
   return page(`${s.repo} · hush`, `
@@ -716,15 +768,17 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
     <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
 
+    ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true)}</section>` : ""}
+
     <section id="ci-live" aria-live="polite"><div class="live-head"><h2>Actions</h2><span class="live-dot"></span><span class="live-meta">Checking…</span></div></section>
 
     ${metrics}
 
     <h2>Monitors</h2>
-    ${s.monitors.length ? `<div class="group">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. The curl every monitor runs when it finishes is at the bottom of this page.</span></div></div>`}
+    ${s.monitors.length ? `<div class="group">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet.${onboarding ? " Finish the setup above." : ""}</span></div></div>`}
 
     <h2>Routines</h2>
-    ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code> (see below).</span></div></div>`}
+    ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}
 
     ${ci ? `<h2>CI · GitHub Actions</h2><div class="group">${ci}</div>` : ""}
     ${prs ? `<h2>Open pull requests</h2><div class="group">${prs}</div>` : ""}
@@ -732,30 +786,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <h2>Open issues</h2>
     <div class="incidents">${incidents}</div>
 
-    <details class="fold"><summary>${plural(s.skills.length, "skill")} in .claude/skills</summary>
-      <p>${s.skills.map((k) => onRoutine.has(k.name) ? `<b title="${esc(k.description)}">${esc(k.name)}</b>` : `<span title="${esc(k.description)}">${esc(k.name)}</span>`).join(" · ") || "None."}</p>
-    </details>
-
-    ${owner ? `<details class="fold" style="margin-top:16px"><summary>Install the heartbeat in this repo</summary>
-      <p class="say">Install the heartbeat in this repo. Run it at the repo root, then commit <code>.claude/</code>:</p>
-<pre>curl -fsSL ${esc(origin)}/install.sh | sh -s -- ${esc(owner.ingest_key)}</pre>
-      <p class="say">It adds a SessionEnd hook: every Claude Code routine that runs a slash command reports itself when it ends, with no change to your skills. For status and volume, a skill ends with <code>.claude/hooks/hush.sh beat &lt;id&gt; ok '{"swept":{"events":120}}'</code>. From anywhere else, the raw call is:</p>
-<pre>curl -sS -X POST ${esc(origin)}/api/heartbeat \\
-  -H "authorization: Bearer ${esc(owner.ingest_key)}" \\
-  -H "content-type: application/json" \\
-  -d '{"monitor":"errors","status":"ok","swept":{"events":41233},"filed":[2634],"note":""}'</pre>
-      <p class="say"><code>status</code> is ok, degraded or skipped. Declare the roster and your Claude Code routines in <code>.claude/factory.json</code>:</p>
-<pre>{
-  "monitors": [
-    { "id": "errors", "cadence": "daily", "max_silence_hours": 50, "volume_key": "events", "routine": "Monitors" }
-  ],
-  "routines": [
-    { "name": "Monitors", "cron": "0 13 * * *", "prompt": "/monitor", "model": "sonnet" }
-  ]
-}</pre>
-    </details>` : ""}
-
-    <footer><span><a href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a> · ${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span>${user ? `<a href="/">Your repos</a>` : ""}</span></footer>
+    <footer><span><a href="${repoUrl}" target="_blank" rel="noopener">${esc(s.repo)}</a> · ${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span>${repoRow && !onboarding ? `<a href="/r/${esc(s.repo)}/setup">Heartbeat setup</a> · ` : ""}${user ? `<a href="/">Your repos</a>` : ""}</span></footer>
   `, { live: true, stale });
 }
 
@@ -887,7 +918,7 @@ createServer(async (req, res) => {
 
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live)?$/);
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup)?$/);
     if (m && req.method === "GET") {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
@@ -898,7 +929,8 @@ createServer(async (req, res) => {
       if (!row) db.prepare("INSERT INTO repos (full_name, owner_login, ingest_key, created_at, installation_id) VALUES (?, ?, ?, ?, ?)").run(seen.full_name, user.login, "fsk_" + randomBytes(24).toString("base64url"), new Date().toISOString(), seen.installation_id);
       else if (row.installation_id !== seen.installation_id) db.prepare("UPDATE repos SET installation_id = ? WHERE full_name = ?").run(seen.installation_id, seen.full_name);
       row = db.prepare("SELECT * FROM repos WHERE full_name = ?").get(seen.full_name);
-      if (m[2] === "/live") return json(res, 200, await readLive(await installationToken(row.installation_id), row.full_name));
+      if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: db.prepare("SELECT COUNT(*) n FROM heartbeats WHERE repo = ?").get(row.full_name).n });
+      if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
       const saved = db.prepare("SELECT at, body FROM snapshots WHERE repo = ?").get(row.full_name);
       const fresh = saved && Date.now() - saved.at < FRESH_MS;
       if (m[2]) return json(res, 200, fresh ? JSON.parse(saved.body) : await refresh(row));

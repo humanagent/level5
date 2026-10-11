@@ -633,6 +633,89 @@ function routineState(r, monitors, merged, sessions = {}) {
   return { ...r, last_seen: last, evidence: evidence || "none", next_run: nextRun(r.cron), period_h: cronPeriodHours(r.cron) };
 }
 
+// The status chart: every skill that runs on a routine, one row each, 30 daily bars (12 weekly
+// for weekly skills). A bar is green when the skill ran and read something, yellow when it ran
+// but came back degraded or read nothing, red when its routine should have run it and it did not,
+// grey when nothing was expected (no schedule, or before the skill's first heartbeat).
+// Rows are grouped by the routine that runs them, so a routine's schedule and token cost show once.
+const fireOn = (cron, a, b) => { const t = nextRun(cron, new Date(a - 6e4)); return !!t && Date.parse(t) < b; };
+async function readSkills(factory, repoId, monitors, routines, prices) {
+  const WEEKS = 12, H = 36e5, GRACE = 6 * H, now = Date.now();
+  const since = new Date(now - WEEKS * 7 * 864e5).toISOString();
+  const beats = (await db.all("SELECT monitor, ts, status, body FROM heartbeats WHERE repo_id = $1 AND ts >= $2", repoId, since)).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
+  const firstRows = await db.all("SELECT monitor, MIN(ts) AS t FROM heartbeats WHERE repo_id = $1 GROUP BY monitor", repoId);
+  const first = Object.fromEntries(firstRows.map((r) => [r.monitor, Date.parse(r.t)]));
+  const sess = (await db.all("SELECT day, usd, body FROM costs WHERE repo_id = $1 AND source = 'claude-code' AND day >= $2", repoId, since.slice(0, 10))).map((r) => { const b = JSON.parse(r.body); return { name: b.name || "session", day: r.day, usd: r.usd ?? sessionUsd(b.models, prices) }; });
+  const cfg = Object.fromEntries((factory.monitors || []).map((m) => [m.id, m]));
+  const cc = routines.filter((r) => r.source === "Claude Code");
+  const cmdOf = (r) => ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "";
+  const routineFor = (id, mon) => cc.find((r) => mon?.routine && r.name === mon.routine) || cc.find((r) => routineMatch(r)(id));
+
+  const day0 = new Date(new Date(now).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+  const fmt = (t) => new Date(t).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" });
+  const usdIn = (names, a, b) => sess.filter((x) => names.includes(x.name) && x.usd != null && Date.parse(x.day + "T12:00:00Z") >= a && Date.parse(x.day + "T12:00:00Z") < b).reduce((s, x) => s + x.usd, 0);
+
+  const ids = monitors.filter((m) => m.state !== "retired").map((m) => m.id);
+  for (const b of beats) if (!ids.includes(b.monitor) && cc.some((r) => routineMatch(r)(b.monitor)) && !monitors.some((m) => m.id === b.monitor)) ids.push(b.monitor);
+
+  const row = (id) => {
+    const mon = monitors.find((m) => m.id === id), c = cfg[id] || {}, routine = routineFor(id, mon);
+    const weekly = (mon?.cadence || c.cadence) === "weekly" || (!!routine && cronPeriodHours(routine.cron) >= 24 * 6);
+    const mine = beats.filter((b) => b.monitor === id);
+    const own = mine.some((b) => b.source !== "session") ? mine.filter((b) => b.source !== "session") : mine;
+    const vol = (b) => (b.swept && c.volume_key && c.volume_key in b.swept ? Number(b.swept[c.volume_key]) : null);
+    const start = first[id] ?? Infinity;
+    const declared = !!routine || (!!mon && !mon.unlisted);
+    const span = weekly ? 7 * 864e5 : 864e5, n = weekly ? WEEKS : WINDOW;
+    const buckets = [...Array(n)].map((_, i) => {
+      const b = weekly ? now - (n - 1 - i) * span : day0 + (i - (n - 1)) * span, a = b - (weekly ? span : 0), end = weekly ? b : b + span;
+      const lo = weekly ? a : b, hi = end;
+      const runs = own.filter((x) => { const t = Date.parse(x.ts); return t >= lo && t < hi; });
+      const label = weekly ? `Week to ${fmt(hi - 1)}` : fmt(lo);
+      const v = runs.map(vol).filter((x) => x != null);
+      const cost = routine ? usdIn([cmdOf(routine)], lo, hi) : usdIn([id], lo, hi);
+      let s = "";
+      if (runs.length) {
+        const bad = runs.find((x) => x.status !== "ok");
+        const empty = runs.every((x) => x.status === "ok" && vol(x) === 0) && !c.zero_ok;
+        s = bad ? "warn" : empty ? "empty" : "ok";
+        return { s, label, runs: runs.length, read: v.length ? Math.max(...v) : null, note: (bad?.note || runs[0].note || "").slice(0, 140), status: bad?.status || "ok", usd: cost };
+      }
+      // nothing arrived: was something expected?
+      if (declared && hi > start) {
+        const due = routine ? fireOn(routine.cron, Math.max(lo, start), Math.min(hi, now - GRACE)) : !weekly && hi <= now;
+        if (due) s = "miss";
+      }
+      return { s, label, runs: 0, read: null, note: "", status: "", usd: cost };
+    });
+    const due = buckets.filter((x) => x.s);
+    const last = own.map((x) => x.ts).sort().pop() || null;
+    const lastVol = own.length ? vol(own.reduce((a, x) => (x.ts > a.ts ? x : a))) : null;
+    return {
+      id, weekly, routine: routine?.name || "", unit: c.volume_key || "",
+      state: mon && mon.state === "alive" && buckets.at(-1).s === "miss" ? "late" : mon ? mon.state : !own.length ? "silent" : buckets.at(-1).s === "miss" || buckets.at(-2)?.s === "miss" ? "dead" : "alive",
+      why: mon?.why || "",
+      buckets, last, read: lastVol,
+      on_time: due.length ? Math.round((due.filter((x) => x.s === "ok").length / due.length) * 1000) / 10 : null,
+      misses: buckets.filter((x) => x.s === "miss").length,
+    };
+  };
+  const rows = ids.map(row);
+  // routines that run skills Hush has never heard from still get a row: you should see them
+  for (const r of cc) if (!rows.some((x) => x.routine === r.name)) rows.push({ id: cmdOf(r) || r.name.replace(/^App: /, ""), weekly: cronPeriodHours(r.cron) >= 24 * 6, routine: r.name, unit: "", state: "silent", why: "no heartbeat from this routine yet", buckets: [...Array(cronPeriodHours(r.cron) >= 24 * 6 ? WEEKS : WINDOW)].map(() => ({ s: "", label: "", runs: 0 })), last: null, read: null, on_time: null, misses: 0 });
+  const groups = [];
+  for (const r of cc) {
+    const mine = rows.filter((x) => x.routine === r.name);
+    if (mine.length) groups.push({ name: r.name.replace(/^App: /, ""), cron: r.cron, cmd: cmdOf(r), prompt: r.prompt, next_run: r.next_run, usd_30d: usdIn([cmdOf(r)], now - WINDOW * 864e5, now + 864e5), rows: mine });
+  }
+  // the ones that need a look first, routines that never reported last
+  const rank = (g) => (g.rows.every((x) => x.state === "silent") ? 2 : g.rows.some((x) => ["dead", "degraded", "lying", "warn", "late"].includes(x.state)) ? 0 : 1);
+  groups.sort((a, b) => rank(a) - rank(b));
+  const loose = rows.filter((x) => !x.routine);
+  if (loose.length) groups.push({ name: "Other", cron: "", cmd: "", prompt: "", next_run: null, usd_30d: usdIn(loose.map((x) => x.id), now - WINDOW * 864e5, now + 864e5), rows: loose });
+  return { groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
+}
+
 async function snapshot(repoRow) {
   const repo = repoRow.full_name;
   const token = await installationToken(repoRow.installation_id);
@@ -641,6 +724,7 @@ async function snapshot(repoRow) {
   const metrics = await readMetrics(token, repo, ci, queue.issues);
   const { monitors, beats, sessions } = await judge(factory, repoRow.id);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged, sessions));
+  const skills = await readSkills(factory, repoRow.id, monitors, routines, factory.prices);
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
   for (const r of routines) if (r.source === "GitHub Actions" && runsByName[r.name]) [r.last_seen, r.evidence] = [runsByName[r.name].at, "Actions run"];
   const bad = monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state));
@@ -661,6 +745,7 @@ async function snapshot(repoRow) {
     routines,
     queue,
     skills: factory.skills,
+    status: skills,
     ci,
     metrics,
     costs: await readCosts(repoRow.id, factory.prices),
@@ -924,7 +1009,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 10;
+const SNAP_V = 11;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1254,6 +1339,11 @@ code.branch{font:500 11.5px var(--mono);color:#0969da;background:#ddf4ff;border-
 // shadow, Inter, black primary buttons, indigo only for links and focus. Hush's orange stays in the
 // logo. Palette and type only; layout lives in the base styles.
 const THEME = `
+.sk-g{margin-bottom:28px}.sk-gh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}.sk-gh h2{margin:0}.sk-gh span{font-size:12.5px;color:var(--faint)}.sk-gh code{font:12px var(--mono);color:var(--muted)}.sk-gh b{color:var(--ink);font-weight:500}
+.sk-row .name small b.miss{color:var(--bad);font-weight:500}
+.bars i[data-s=warn]{background:var(--warn)}.bars i[data-s=miss]{background:var(--bad)}
+.sk-key{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;font-size:12px;color:var(--faint);margin:-8px 0 0}.sk-key i{display:inline-block;width:8px;height:14px;border-radius:2px;background:var(--empty);margin-right:2px;vertical-align:-2px}.sk-key i[data-s=ok]{background:var(--ok)}.sk-key i[data-s=warn]{background:var(--warn)}.sk-key i[data-s=miss]{background:var(--bad)}
+
 :root{--bg:#fff;--canvas:#fbfbfc;--ink:#1b1c1f;--ink2:#3c3f45;--muted:#6b6f76;--faint:#9a9ea6;--line:#ebebef;--line2:#f3f3f5;
 --ok:#2f9e5b;--warn:#e8913a;--bad:#e5484d;--empty:#ececf0;--link:#5e6ad2;--accent:#1b1c1f;--squid:#1b1c1f;--sel:rgba(15,16,20,.05);--warn-ink:#b5651d;
 --shadow:0 0 0 1px var(--line),0 1px 2px rgba(15,16,20,.04);
@@ -1406,10 +1496,10 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "security", "setup"];
-const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
+const VIEWS = ["status", "overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "security", "setup"];
+const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
-const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
+const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
 addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
 const ASK_MODEL = process.env.HUSH_MODEL || "openai/gpt-6.1-sol";
 const ASK_JS = `<script>(()=>{const S=window.hushChat||(window.hushChat={msgs:[],busy:false,draft:""});
@@ -2088,6 +2178,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     assistant: `<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/>`,
     overview: `<path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z"/>`,
     monitors: `<path d="M1.5 8.5h3l1.8-4.5 3.4 8.5 1.8-4h3"/>`,
+    status: `<path d="M2.5 13.5V9M5.5 13.5V6M8.5 13.5V8M11.5 13.5V3.5M14 13.5H1.5"/>`,
     automations: `<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>`,
     ci: `<circle cx="8" cy="8" r="6"/><path d="M5.5 8.2l1.8 1.8 3.3-3.6"/>`,
     prs: `<circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/><path d="M4 5v6M12 11V6.5A2 2 0 0 0 10 4.5H7.5M9 3l-1.5 1.5L9 6"/>`,
@@ -2102,7 +2193,9 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const failingCi = (s.ci || []).filter((w) => w.last?.status === "completed" && w.last.conclusion === "failure").length;
   const badge = (n, tone) => (n ? `<span class="nb" data-t="${tone}">${n}</span>` : "");
   const count = (n) => (n ? `<span class="nc">${n}</span>` : "");
+  const needsN = ((s.status?.groups) || []).flatMap((g) => g.rows).filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state)).length;
   const NAV = [
+    ["status", "Status", needsN ? badge(needsN, "bad") : ""],
     ["overview", "Overview", ""],
     ["assistant", "Assistant", ""],
     ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(s.monitors.length)],
@@ -2130,6 +2223,42 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ${card("costs", "Costs", C ? `<div class="big">${usd(C.total_usd)}</div><div class="cap">in ${WINDOW} days · ${usd(C.yesterday)} yesterday</div><div class="cap">${tk(C.tokens_30d)} Claude Code tokens, ${C.sessions_30d} session${C.sessions_30d === 1 ? "" : "s"}</div>` : `<div class="cap">No cost data yet. <a href="#costs">How to connect</a>.</div>`)}
   </div>`;
 
+  // --- the status chart: skills grouped by the routine that runs them ----------------------
+  const ST = s.status || { groups: [], usd_30d: 0 };
+  const SK = { alive: ["ok", "Running"], warn: ["warn", "Degraded"], degraded: ["bad", "Often degraded"], lying: ["warn", "Read nothing"], late: ["bad", "Missed the last run"], dead: ["bad", "Stopped"], silent: ["none", "No heartbeat yet"] };
+  const allRows = ST.groups.flatMap((g) => g.rows);
+  const needs = allRows.filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state));
+  const skOverall = needs.some((r) => ["dead", "degraded", "late"].includes(r.state)) ? "down" : needs.length ? "degraded" : "ok";
+  const sched = (cron) => { if (!cron) return ""; const f = cron.split(/\s+/); const t = `${f[1].padStart(2, "0")}:${f[0].padStart(2, "0")} UTC`; return f[4] !== "*" && /^\d$/.test(f[4]) ? `${DOW[Number(f[4])]} ${t}` : f[2] === "*" && f[4] === "*" && /^\d+$/.test(f[1]) ? `daily ${t}` : cron; };
+  const barTip = (r, b) => {
+    if (!b.label) return "";
+    const what = { ok: "ran", warn: `ran, ${b.status}`, empty: "ran, read nothing", miss: "should have run, did not", "": "nothing expected" }[b.s];
+    return [b.label, what, b.read != null && r.unit ? `${b.read.toLocaleString("en-US")} ${r.unit}` : "", b.runs > 1 ? `${b.runs} runs` : "", b.usd ? usd(b.usd) : "", b.note].filter(Boolean).join(" · ");
+  };
+  const skRow = (r) => {
+    const [ps, label] = SK[r.state] || ["none", r.state];
+    const bars = r.buckets.map((b) => `<i data-s="${b.s === "empty" ? "warn" : b.s}" title="${esc(barTip(r, b))}"></i>`).join("");
+    const sub = [r.last ? `last run ${ago(r.last)}` : "never reported", r.read != null && r.unit ? `read ${r.read.toLocaleString("en-US")} ${esc(r.unit)}` : "", r.misses ? `<b class="miss">missed ${r.misses}</b>` : ""].filter(Boolean).join(" · ");
+    const open = s.monitors.some((m) => m.id === r.id) ? ` openable" data-open="monitor:${esc(r.id)}" role="button" tabindex="0` : "";
+    return `<div class="row sk-row${open}">
+      <div class="row-head"><span class="name"><span class="mon-id">${esc(r.id)}</span><small>${sub}</small></span><span class="state" data-s="${ps}" title="${esc(r.why)}">${label}</span></div>
+      <div class="bars${r.weekly ? " wk" : ""}">${bars}</div>
+      <div class="axis"><span>${r.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${r.on_time == null ? "–" : `${r.on_time}% ok`}</span><span class="rule"></span><span>${r.weekly ? "this week" : "today"}</span></div>
+    </div>`;
+  };
+  const skGroups = ST.groups.map((g) => `<section class="sk-g">
+      <header class="sk-gh"><h2>${esc(g.name)}</h2><span>${[g.cmd ? `<code>/${esc(g.cmd)}</code>` : "", sched(g.cron), g.next_run ? `next ${until(g.next_run)}` : "", g.usd_30d ? `<b>${usd(g.usd_30d)}</b> in ${WINDOW} d` : ""].filter(Boolean).join(" · ")}</span></header>
+      <div class="group${g.rows.length > 1 ? " grid2" : ""}">${g.rows.map(skRow).join("")}</div>
+    </section>`).join("");
+  const skBanner = skOverall === "ok" ? `All ${plural(allRows.length, "skill")} ran as expected` : `${plural(needs.length, "skill")} need${needs.length === 1 ? "s" : ""} a look`;
+  const skSub = [needs.length ? needs.map((r) => `${esc(r.id)} (${(SK[r.state] || ["", r.state])[1].toLowerCase()})`).join(", ") + "." : "", `${plural(allRows.length, "skill")} in ${plural(ST.groups.filter((g) => g.cmd).length, "routine")}.`, ST.usd_30d ? `${usd(ST.usd_30d)} in Claude Code tokens in ${WINDOW} days.` : ""].filter(Boolean).join(" ");
+  const statusView = `
+        <div class="banner" data-s="${skOverall}">${skOverall === "ok" ? CHECK : ALERT}<span>${skBanner}</span></div>
+        <p class="banner-sub">${skSub}</p>
+        ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true, setupState)}</section>` : ""}
+        ${skGroups || `<div class="group"><div class="line"><span class="hint">No skills reporting yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}
+        <p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>degraded or read nothing <i data-s="miss"></i>should have run, did not <i></i>nothing expected</p>`;
+
   const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
   return page(`${s.repo} · hush`, `<div class="app">
@@ -2152,10 +2281,10 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     </aside>
     <main class="main">
       ${winTemplates}
+      ${view("status", statusView)}
       ${view("overview", `
         <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
         <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
-        ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true, setupState)}</section>` : ""}
         ${cards}
         ${liveBox(true)}
         ${metrics}`)}
@@ -2458,6 +2587,8 @@ createServer(async (req, res) => {
 
     const user = await sessionUser(req);
 
+    // the public landing, also for someone signed in who wants to see it
+    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null));
     if (url.pathname === "/" && req.method === "GET") {
       if (!user) return send(res, 200, homePage(null));
       const repos = await userRepos(user).catch(() => null);

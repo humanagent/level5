@@ -12,6 +12,16 @@ const EXAMPLE = [
   ["speed", "Chronically degraded", "bad", "oododddoddddoddddodddoddoddodd", "36.7"],
 ];
 
+// Example spend for the costs section: 30 days per provider, and what each routine burned.
+const COST_SRC = [["Claude Code", "#d97757"], ["AWS", "#5e6ad2"], ["Vercel", "#26b5ce"], ["Neon", "#4cb782"]];
+const COST_DAYS = [...Array(30)].map((_, i) => [6 + 2.5 * Math.sin(i / 2.2) + (i % 7 === 3 ? 4 : 0) + (i > 22 ? 5 : 0), 9 + Math.sin(i / 4), 2 + (i % 5 === 0 ? 1.4 : 0.3), 1.2]);
+const COST_ROUTINES = [
+  ["/fix-issues", "daily", "31", "212M", "$118"],
+  ["/monitor", "daily", "30", "96M", "$44"],
+  ["/pr-review", "daily", "30", "71M", "$37"],
+  ["/growth-report", "weekly", "4", "9M", "$6"],
+];
+
 // What Hush connects to today: the four platforms first, the rest in one line under them.
 const LOGO_GH = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="#fff" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
 const LOGO_VERCEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3l10 17.5H2z"/></svg>`;
@@ -32,6 +42,10 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark }) {
     </div>`,
   ).join("");
 
+  const maxDay = Math.max(...COST_DAYS.map((d) => d.reduce((a, b) => a + b, 0)));
+  const costCols = COST_DAYS.map((d) => `<div class="cc">${d.map((v, i) => `<i style="height:${(v / maxDay) * 100}%;background:${COST_SRC[i][1]}"></i>`).join("")}</div>`).join("");
+  const totals = COST_SRC.map(([n, c], i) => [n, c, COST_DAYS.reduce((a, d) => a + d[i], 0)]);
+
   const cta = () => `<div class="cta">
     <a class="btn gh" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>
     <a class="btn ghost" href="/auth/login">Already installed? Sign in →</a>
@@ -39,7 +53,7 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark }) {
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>hush</title>
-<meta name="description" content="A status page for your software factory: monitors, Claude Code routines, CI and the queue, on one page.">
+<meta name="description" content="A status page for your software factory: every skill your Claude Code routines run, whether it ran, and what it cost.">
 ${icon}${fonts}
 <style>${css}
 /* Landing: one white column. Headline, install button, an example status page, three steps, what it reads, the button again. */
@@ -66,6 +80,16 @@ ${icon}${fonts}
 .step p{color:var(--muted);margin:0}
 .step code,.reads code{font:12.5px var(--mono);color:var(--ink);background:#f4f5f6;border-radius:4px;padding:1px 5px}
 .reads{max-width:760px;margin:112px auto 0}
+.costs{max-width:1000px;margin:112px auto 0}.costs>h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600}.costs>p{color:var(--muted);text-align:center;margin:0 auto 32px;max-width:60ch;text-wrap:pretty}
+.cost-shot{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 30px 60px -30px rgba(20,24,30,.25)}
+.cost-chart,.cost-runs{background:var(--bg);padding:22px 24px}
+.cost-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}.cost-h b{font-size:22px;font-weight:600;letter-spacing:-.02em}.cost-runs .cost-h b{font-size:15px}.cost-h span{font-size:12.5px;color:var(--faint)}
+.cost-cols{display:flex;align-items:flex-end;gap:3px;height:150px}.cc{flex:1;display:flex;flex-direction:column-reverse;height:100%;gap:1px}.cc i{display:block;border-radius:1.5px;min-height:1px}
+.cost-leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:12.5px;color:var(--muted)}.cost-leg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}.cost-leg b{color:var(--ink);font-weight:500;margin-left:2px}
+.cost-runs table{width:100%;border-collapse:collapse;font-size:13.5px}.cost-runs th{text-align:left;font-weight:500;color:var(--faint);font-size:12px;padding:0 0 8px}.cost-runs td{padding:9px 0;border-top:1px solid var(--line)}.cost-runs th:not(:first-child),.cost-runs td:not(:first-child){text-align:right}
+.cost-runs code{font:12.5px var(--mono);color:var(--ink)}.cost-runs small{color:var(--faint);margin-left:8px;font-size:11.5px}.cost-runs td b{font-weight:600}
+.cost-alarm{display:flex;align-items:center;gap:8px;margin:14px 0 0;padding:9px 12px;border-radius:9px;background:#fff7ec;color:#8a5a12;font-size:12.5px}.cost-alarm i{width:7px;height:7px;border-radius:50%;background:var(--warn);flex:none}.cost-alarm b{font-weight:600}
+@media(max-width:760px){.costs{margin-top:80px}.cost-shot{grid-template-columns:minmax(0,1fr)}.cost-chart,.cost-runs{padding:18px 16px}.cost-cols{height:110px;gap:2px}}
 .ints{max-width:1000px;margin:112px auto 0}.ints>h2{font-size:28px;letter-spacing:-.025em;color:var(--ink);margin:0 0 8px;text-align:center;font-weight:600}.ints>p{color:var(--muted);text-align:center;margin:0 auto 32px;max-width:60ch}
 .int-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .int{display:flex;flex-direction:column;gap:8px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
@@ -93,7 +117,7 @@ ${icon}${fonts}
     <span>Routines run while you sleep.</span>
     <span class="now">Hush tells you when one dies.</span>
   </h1>
-  <p class="lede">One status page for every repo you pick. See whether your monitors are beating, whether your Claude Code routines ran, and what is left in the queue.</p>
+  <p class="lede">One status page for every repo you pick. See whether each skill your Claude Code routines run actually ran, whether it read anything, and what it cost.</p>
   ${cta()}
   <p class="fine">Free. Read-only. Pick one repo, a few, or all of them.</p>
   ${msg ? `<p class="err" style="text-align:center">${esc(msg)}</p>` : ""}
@@ -111,7 +135,25 @@ ${icon}${fonts}
 <section class="steps">
   <div class="step"><span class="n">01</span><h3>Install the app</h3><p>On your account or your organization. On the same GitHub screen you pick one repo, a few, or all of them, and you can add or remove any later.</p></div>
   <div class="step"><span class="n">02</span><h3>Your routines report</h3><p>One command installs a hook: every Claude Code routine reports itself when it ends. A monitor that stops beating is marked down. One that says ok after reading nothing is too.</p></div>
-  <div class="step"><span class="n">03</span><h3>You read one page</h3><p>Monitors with 30 days of history, routines with their next run, CI, open PRs and issues. It refreshes on its own.</p></div>
+  <div class="step"><span class="n">03</span><h3>You read one page</h3><p>Every skill with 30 days of history, grouped by the routine that runs it, with its next run and its tokens. It refreshes on its own.</p></div>
+</section>
+
+<section class="costs">
+  <h2>And what it costs</h2>
+  <p>Tokens for every routine run, next to what your cloud bills each day. A routine that burns 4× its usual tokens shows up the same day, not on the invoice.</p>
+  <div class="cost-shot">
+    <div class="cost-chart">
+      <div class="cost-h"><b>$${Math.round(totals.reduce((a, t) => a + t[2], 0)).toLocaleString("en-US")}</b><span>last 30 days</span></div>
+      <div class="cost-cols" aria-hidden="true">${costCols}</div>
+      <div class="cost-leg">${totals.map(([n, c, v]) => `<span><i style="background:${c}"></i>${n} <b>$${Math.round(v)}</b></span>`).join("")}</div>
+    </div>
+    <div class="cost-runs">
+      <div class="cost-h"><b>Per routine</b><span>30 days</span></div>
+      <table><thead><tr><th>Routine</th><th>Runs</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>${COST_ROUTINES.map(([n, cad, runs, tok, usd]) => `<tr><td><code>${n}</code><small>${cad}</small></td><td>${runs}</td><td>${tok}</td><td><b>${usd}</b></td></tr>`).join("")}</tbody></table>
+      <p class="cost-alarm"><i></i>Price rule: <b>/fix-issues</b> over $6 a day, fired 3 h ago</p>
+    </div>
+  </div>
+  <span class="example">Example with invented data.</span>
 </section>
 
 <section class="ints">

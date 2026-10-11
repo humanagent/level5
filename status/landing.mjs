@@ -116,7 +116,11 @@ ${icon}${fonts}
 
 <section class="h">
   <a class="oss" href="${REPO}" target="_blank" rel="noopener">Open source · MIT</a>
-  <h1><span class="now">Observability for your software factory.</span></h1>
+  <h1>
+    <span>Your agents run the factory.</span>
+    <span>Skills run while you sleep.</span>
+    <span class="now">Hush is observability for it.</span>
+  </h1>
   <p class="lede">Whether every skill your agents run actually ran, and what it cost.</p>
   ${cta()}
   <p class="fine">Free and open source. Read-only on your repos. Use ours or <a href="${REPO}#run-and-deploy" target="_blank" rel="noopener">host your own</a>.</p>

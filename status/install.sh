@@ -32,7 +32,9 @@ cat > .claude/hooks/hush.sh <<'HOOK'
 #       The SessionEnd hook. In a Claude Code cloud session (a routine) it posts one heartbeat
 #       named after the slash command the session ran. Local sessions send nothing.
 #
-# Never fails the caller: no network, no key, no curl, it just exits 0.
+# Never fails or slows the caller: the post runs in the background, detached, with a 5 s cap,
+# and no network, no key or no curl just exits 0. HUSH_DISABLED=1 turns it off entirely.
+[ -z "${HUSH_DISABLED:-}" ] || exit 0
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CFG="$DIR/hush.json"
 [ -f "$CFG" ] || exit 0
@@ -41,9 +43,9 @@ KEY="${HUSH_KEY:-$(sed -n 's/.*"key": *"\([^"]*\)".*/\1/p' "$CFG")}"
 [ -n "$URL" ] && [ -n "$KEY" ] && command -v curl >/dev/null 2>&1 || exit 0
 
 post() {
-  curl -sS -m 10 -X POST "$URL/api/heartbeat" \
-    -H "authorization: Bearer $KEY" -H "content-type: application/json" \
-    -d "$1" >/dev/null 2>&1 || true
+  ( curl -sS -m 5 -X POST "$URL/api/heartbeat" \
+      -H "authorization: Bearer $KEY" -H "content-type: application/json" \
+      -d "$1" >/dev/null 2>&1 & ) >/dev/null 2>&1 || true
 }
 
 case "${1:-}" in

@@ -266,7 +266,7 @@ async function readFactory(token, repo) {
     );
     routines = routines.concat(scheduled.flat());
 
-    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, client: { hush_sh: !!hushSh, cost_cmd: /\bcost\)/.test(hushSh || ""), hook: /hush\.sh session-end/.test(settingsJson || "") }, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
+    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, promotion: config.promotion || null, client: { hush_sh: !!hushSh, cost_cmd: /\bcost\)/.test(hushSh || ""), hook: /hush\.sh session-end/.test(settingsJson || "") }, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
   });
 }
 
@@ -368,6 +368,59 @@ async function readQueue(token, repo) {
 
 // What Actions is doing right now: runs that have not finished, with their jobs and the step
 // each job is on, plus the last few that did. One list call, then one jobs call per active run.
+// Promotions: how code moves from the integration branch to production. Repos that promote
+// (staging -> main, develop -> master...) do it with pull requests into the production branch;
+// this reads those PRs, what is waiting on the integration branch, and the last runs on production.
+// Branches come from .claude/factory.json ("promotion": {"from": "staging", "to": "main"}) or are
+// detected. A repo with one branch (trunk-based) has no promotions and says so.
+async function readPromotions(token, repo, cfg, defaultBranch) {
+  return cached(`promo:${repo}`, 2 * 60e3, async () => {
+    // ask for the candidate branches by name: a busy repo has thousands of branches to page through
+    const CAND = [...new Set([cfg?.from, cfg?.to, "staging", "develop", "development", "dev", "next", "main", "master", "production", "prod", "release"].filter(Boolean))];
+    const found = await Promise.all(CAND.map((n) => gh(token, `repos/${repo}/branches/${encodeURIComponent(n)}`).then((b) => (b ? n : null)).catch(() => null)));
+    const names = new Set(found.filter(Boolean));
+    const from = cfg?.from || ["staging", "develop", "development", "dev", "next"].find((n) => names.has(n));
+    const to = cfg?.to || ["main", "master", "production", "prod", "release"].find((n) => names.has(n) && n !== from);
+    if (!from || !to) return { enabled: false, default_branch: defaultBranch };
+    const [pulls, cmp, runs] = await Promise.all([
+      gh(token, `repos/${repo}/pulls?state=all&base=${encodeURIComponent(to)}&sort=created&direction=desc&per_page=40`).catch(() => []),
+      gh(token, `repos/${repo}/compare/${encodeURIComponent(to)}...${encodeURIComponent(from)}`).catch(() => null),
+      gh(token, `repos/${repo}/actions/runs?branch=${encodeURIComponent(to)}&per_page=40`).catch(() => null),
+    ]);
+    // a promotion is a PR into production whose head is the integration branch or a merge branch made from it
+    const isPromo = (p) => p.head.ref === from || /merge|promot|release/i.test(p.head.ref) || /promot|release/i.test(p.title);
+    const prs = (pulls || []).filter(isPromo).map((p) => ({ number: p.number, title: p.title, head: p.head.ref, state: p.merged_at ? "merged" : p.state, created_at: p.created_at, merged_at: p.merged_at, closed_at: p.closed_at, author: p.user?.login || "", url: p.html_url, sha: p.head.sha }));
+    const open = prs.find((p) => p.state === "open");
+    if (open) {
+      const c = await gh(token, `repos/${repo}/commits/${open.sha}/check-runs?per_page=100`).catch(() => null);
+      const cr = c?.check_runs || [];
+      open.ci = cr.some((x) => ["failure", "timed_out"].includes(x.conclusion)) ? "red" : cr.some((x) => x.status !== "completed") ? "running" : cr.length ? "green" : "none";
+    }
+    const merged = prs.filter((p) => p.state === "merged").sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1));
+    const since = Date.now() - WINDOW * 864e5;
+    const in30 = merged.filter((p) => Date.parse(p.merged_at) > since);
+    const gaps = in30.slice(0, -1).map((p, i) => (Date.parse(p.merged_at) - Date.parse(in30[i + 1].merged_at)) / 36e5).sort((a, b) => a - b);
+    const waiting = (cmp?.commits || []).filter((c) => !/^Merge (branch|remote-tracking)/.test(c.commit.message)).reverse().slice(0, 60).map((c) => {
+      const msg = c.commit.message.split("\n")[0];
+      return { sha: c.sha.slice(0, 7), message: msg, pr: Number((msg.match(/\(#(\d+)\)\s*$/) || [])[1]) || null, author: c.author?.login || c.commit.author?.name || "", at: c.commit.committer?.date || c.commit.author?.date, url: c.html_url };
+    });
+    const deploys = [];
+    for (const r of runs?.workflow_runs || []) if (!deploys.some((x) => x.name === r.name)) deploys.push({ name: r.name, status: r.status, conclusion: r.conclusion, at: r.updated_at, url: r.html_url, sha: r.head_sha?.slice(0, 7) });
+    return {
+      enabled: true, from, to,
+      ahead: cmp?.ahead_by ?? null, behind: cmp?.behind_by ?? null,
+      waiting, waiting_prs: [...new Set(waiting.map((w) => w.pr).filter(Boolean))].length,
+      oldest_waiting: waiting.length ? waiting.reduce((a, w) => (w.at < a ? w.at : a), waiting[0].at) : null,
+      open: open || null,
+      history: merged.slice(0, 15),
+      last: merged[0] || null,
+      count_30d: in30.length,
+      median_gap_h: gaps.length ? gaps[Math.floor(gaps.length / 2)] : null,
+      deploys: deploys.slice(0, 8),
+    };
+  });
+}
+
 async function readLive(token, repo) {
   return cached(`live:${repo}`, 6e3, async () => {
     const list = await gh(token, `repos/${repo}/actions/runs?per_page=25`).catch(() => null);
@@ -584,7 +637,7 @@ async function snapshot(repoRow) {
   const repo = repoRow.full_name;
   const token = await installationToken(repoRow.installation_id);
   const [factory, queue] = await Promise.all([readFactory(token, repo), readQueue(token, repo)]);
-  const ci = await readCi(token, repo, factory.workflows || []);
+  const [ci, promotions] = await Promise.all([readCi(token, repo, factory.workflows || []), readPromotions(token, repo, factory.promotion, factory.meta.default_branch).catch(() => null)]);
   const metrics = await readMetrics(token, repo, ci, queue.issues);
   const { monitors, beats, sessions } = await judge(factory, repoRow.id);
   const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged, sessions));
@@ -611,6 +664,7 @@ async function snapshot(repoRow) {
     ci,
     metrics,
     costs: await readCosts(repoRow.id, factory.prices),
+    promotions,
     rules: await evalRules(repoRow.id, { fire: true, prices: factory.prices }),
     setup: { ...(factory.client || {}), skill_beats: monitors.filter((m) => m.last && m.last.source !== "session").length },
     notes: factory.notes,
@@ -670,6 +724,12 @@ function diffEvents(prev, s) {
   const prevOpen = new Set((prev.queue?.prs || []).map((x) => x.number)), prevMerged = new Set((prev.queue?.merged || []).map((x) => x.number)), prevIssues = new Set((prev.queue?.issues || []).map((x) => x.number));
   for (const x of s.queue?.prs || []) if (!prevOpen.has(x.number)) add("info", "pr", `${agent(x.branch) ? "An agent opened" : `${x.author || "Someone"} opened`} PR #${x.number}`, x.title, `pr:${x.number}`, `pr-open:${x.number}`);
   for (const x of s.queue?.merged || []) if (!prevMerged.has(x.number)) add("info", "pr", `PR #${x.number} merged${agent(x.branch) ? " (agent)" : ""}`, x.title, `pr:${x.number}`, `pr-merged:${x.number}`);
+  const pp = prev.promotions, np = s.promotions;
+  if (pp?.enabled && np?.enabled) {
+    const seenPromo = new Set((pp.history || []).map((x) => x.number));
+    for (const x of np.history || []) if (!seenPromo.has(x.number)) add("ok", "promotion", `Promoted ${np.from} → ${np.to} (#${x.number})`, x.title, `pr:${x.number}`, `promo-merged:${x.number}`);
+    if (np.open && np.open.number !== pp.open?.number) add("info", "promotion", `Promotion opened: #${np.open.number}`, `${np.ahead ?? "?"} commits from ${np.from} waiting for ${np.to}.`, `pr:${np.open.number}`, `promo-open:${np.open.number}`);
+  }
   for (const x of s.queue?.issues || []) if (!prevIssues.has(x.number)) add(x.labels?.includes("risky") ? "warn" : "info", "issue", `Issue #${x.number} opened`, x.title, `issue:${x.number}`, `issue:${x.number}`);
   const C = s.costs;
   if (C && C.yesterday > 5 && C.avg7 > 0 && C.yesterday > C.avg7 * 1.5) {
@@ -795,7 +855,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 8;
+const SNAP_V = 9;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1064,6 +1124,14 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .ms-list{max-height:240px;overflow-y:auto;margin-top:6px}.ms-list label,.cx-checks label{flex-direction:row;align-items:center;gap:8px;font-weight:400;margin:0;padding:4px 2px;font-size:13.5px}
 .cx-checks{display:grid;gap:2px}
 @media(max-width:1100px){.cx{grid-template-columns:minmax(0,1fr)}.cx-panel{border-left:0;border-top:1px solid var(--line)}}
+.promo-h{display:flex;align-items:center;gap:14px;margin-bottom:10px}.promo-h h2{margin:0}
+.flow{display:inline-flex;align-items:center;gap:6px}.flow svg{width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+code.branch.prod{color:#0f7a38;background:#e3f6e8}
+.promo-open{margin-bottom:24px;border-left:3px solid var(--ok)}.promo-open .name{display:flex;gap:10px;align-items:flex-start}.promo-open .name .gi{margin-top:3px}
+.promo-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;margin-bottom:28px}.promo-cols h2 .faint{font-weight:500}
+.promo-list{margin-bottom:0}.promo-list .line{text-decoration:none;color:var(--ink);align-items:center}.promo-list a.line:hover{background:#f9fafa}
+.promo-list .name{display:flex;gap:10px;align-items:flex-start;min-width:0}.promo-list .name>span:not(.gi){min-width:0;flex:1}.promo-list .name .gi{margin-top:3px}.pm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1000px){.promo-cols{grid-template-columns:minmax(0,1fr)}}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 32px}
 .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
 .card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -1259,7 +1327,7 @@ window.hushOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href)
 const NOTIF_JS = `<script>(()=>{const N=window.hushNotif||(window.hushNotif={data:null});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
-const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs"};
+const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
 function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
@@ -1781,6 +1849,28 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <h2 style="margin-top:28px">Services</h2>
     <div class="group">${SVCS.map((x) => `<div class="line openable" data-open="service:${esc(x.key)}" role="button" tabindex="0"><span class="name">${esc(x.name)}<span class="sub">${srcName(x.provider)}</span></span><span class="meta"><b>${usd(x.total)}</b> <span class="sub">${usd(x.last7)} last 7 days · ${trendTxt(x.trend)}${alarmOn(x).length ? ' · <span style="color:var(--bad)">rule firing</span>' : ""}</span></span></div>`).join("")}</div>`
     : `<div class="group"><div class="line"><span class="hint">The map draws every service you spend on, from the cost data. Nothing has arrived yet: see <a href="#setup">Setup</a>, step 4.</span></div></div>`;
+  // promotions block (CI view) + a window per promotion PR that is not already an open PR window
+  const P = s.promotions;
+  const hrs = (h) => (h == null ? "–" : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} d`);
+  const ciTxt = { green: "Passing", red: "Failing", running: "Running", none: "No CI" };
+  const promoSection = !P ? "" : !P.enabled ? `<h2>Promotions</h2><div class="group"><div class="line"><span class="hint">No promotion flow found: this repo ships from one branch${P.default_branch ? ` (<code>${esc(P.default_branch)}</code>)` : ""}. If it promotes between two, set <code>"promotion": {"from": "staging", "to": "main"}</code> in <code>.claude/factory.json</code>.</span></div></div>` : `
+    <div class="promo-h"><h2>Promotions</h2><span class="flow"><code class="branch">${esc(P.from)}</code><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg><code class="branch prod">${esc(P.to)}</code></span></div>
+    <div class="group stats">
+      <div class="stat"><b>${P.last ? ago(P.last.merged_at).replace(" ago", "") : "–"}</b><span>Since the last promotion</span><small>${P.last ? `<a href="#" data-open="pr:${P.last.number}">#${P.last.number}</a> · ${hrs((Date.parse(P.last.merged_at) - Date.parse(P.last.created_at)) / 36e5)} to merge` : "none yet"}</small></div>
+      <div class="stat"><b>${P.ahead ?? "–"}</b><span>Commits waiting in ${esc(P.from)}</span><small>${P.waiting_prs} PR${P.waiting_prs === 1 ? "" : "s"}${P.oldest_waiting ? `, oldest ${ago(P.oldest_waiting)}` : ""}</small></div>
+      <div class="stat"><b>${P.count_30d}</b><span>Promotions in ${WINDOW} days</span><small>${P.median_gap_h != null ? `one every ${hrs(P.median_gap_h)} (median)` : ""}</small></div>
+      <div class="stat"><b>${P.deploys.filter((d) => d.conclusion === "success").length}<i>/${P.deploys.length}</i></b><span>Workflows green on ${esc(P.to)}</span><small data-s="${P.deploys.some((d) => d.conclusion === "failure") ? "bad" : "ok"}">${P.deploys.filter((d) => d.conclusion === "failure").map((d) => esc(d.name)).join(", ") || (P.deploys.length ? "latest run of each passed" : "no runs")}</small></div>
+    </div>
+    ${P.open ? `<div class="group promo-open openable" data-open="pr:${P.open.number}" role="button" tabindex="0"><div class="line"><span class="name">${PR_ICON.open}<span><b>Promotion in progress: #${P.open.number}</b><span class="sub">${esc(P.open.title)} · opened ${ago(P.open.created_at)} by ${esc(P.open.author)} · <code class="branch">${esc(P.open.head)}</code> → <code class="branch prod">${esc(P.to)}</code></span></span></span><span class="meta"><span class="state" data-s="${P.open.ci === "green" ? "ok" : P.open.ci === "red" ? "bad" : P.open.ci === "running" ? "warn" : "none"}"${P.open.ci === "running" ? " data-run" : ""}>${ciTxt[P.open.ci] || ""}</span></span></div></div>` : ""}
+    <div class="promo-cols">
+      <div><h2>Waiting for ${esc(P.to)} <span class="faint">${P.ahead ?? 0}</span></h2><div class="group promo-list">${P.waiting.length ? P.waiting.slice(0, 25).map((w) => `<a class="line" href="${esc(w.pr ? `${repoUrl}/pull/${w.pr}` : w.url)}" target="_blank" rel="noopener"><span class="name"><span><span class="pm">${esc(w.message.replace(/\s*\(#\d+\)\s*$/, ""))}</span><span class="sub">${w.pr ? `#${w.pr} · ` : ""}<code>${esc(w.sha)}</code> · ${esc(w.author)} · ${ago(w.at)}</span></span></span></a>`).join("") + (P.waiting.length > 25 ? `<div class="line"><span class="hint">and ${P.waiting.length - 25} more</span></div>` : "") : `<div class="line"><span class="hint">Nothing waiting: ${esc(P.to)} has everything in ${esc(P.from)}.</span></div>`}</div></div>
+      <div><h2>Recent promotions</h2><div class="group promo-list">${P.history.length ? P.history.map((p) => `<a class="line" href="${esc(p.url)}" target="_blank" rel="noopener" data-open="pr:${p.number}"><span class="name">${PR_ICON.merged}<span><span class="pm">#${p.number} ${esc(p.title)}</span><span class="sub">merged ${ago(p.merged_at)} · open ${hrs((Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5)}${p.author ? ` · ${esc(p.author)}` : ""}</span></span></span></a>`).join("") : `<div class="line"><span class="hint">No promotion merged yet.</span></div>`}</div>
+      ${P.deploys.length ? `<h2 style="margin-top:20px">Latest runs on ${esc(P.to)}</h2><div class="group promo-list">${P.deploys.map((d) => `<a class="line" href="${esc(d.url)}" target="_blank" rel="noopener"><span class="name">${esc(d.name)}<span class="sub"><code>${esc(d.sha || "")}</code> · ${ago(d.at)}</span></span><span class="meta"><span class="state" data-s="${d.status !== "completed" ? "warn" : d.conclusion === "success" ? "ok" : d.conclusion === "failure" ? "bad" : "none"}"${d.status !== "completed" ? " data-run" : ""}>${d.status !== "completed" ? "Running" : d.conclusion === "success" ? "Passed" : d.conclusion === "failure" ? "Failed" : esc(d.conclusion || "")}</span></span></a>`).join("")}</div>` : ""}</div>
+    </div>`;
+  if (P?.enabled) for (const p of [P.open, ...P.history].filter(Boolean)) if (!wins.some((w) => w.key === `pr:${p.number}`)) wins.push({ key: `pr:${p.number}`, kind: "Promotion", title: `#${p.number} ${p.title}`, href: p.url, body: `
+      <div class="w-head">${statePill(p.state === "open" ? "ok" : "merged", p.state === "open" ? "Open" : "Merged")}<span class="flow"><code class="branch">${esc(p.head)}</code> → <code class="branch prod">${esc(P.to)}</code></span></div>
+      <p class="w-title">${esc(p.title)}</p>
+      ${kv([["Author", esc(p.author)], ["Opened", when2(p.created_at)], ["Merged", p.merged_at ? when2(p.merged_at) : ""], ["Time to merge", p.merged_at ? hrs((Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5) : ""], ["CI", p.ci ? ciTxt[p.ci] : ""]])}` });
   const winTemplates = `<div id="win-tpl" hidden>${wins.map((w) => `<template data-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-title="${esc(w.title)}" data-href="${esc(w.href || "")}">${w.body}</template>`).join("")}</div>`;
 
   const incidents = s.queue.issues.length
@@ -1888,7 +1978,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "Claude Code routines and scheduled GitHub Actions, with their next run and proof that the last one happened.")}
         ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
-      ${view("ci", `${vh("CI", "GitHub Actions: what is running now, and every workflow over the last 30 days.")}
+      ${view("ci", `${vh("CI", "How code reaches production: promotions, what is running now, and every workflow over the last 30 days.")}
+        ${promoSection}
         ${liveBox(false)}
         ${ci ? `<h2>Workflows</h2><div class="group grid2">${ci}</div>` : ""}`)}
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}

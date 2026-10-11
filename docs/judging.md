@@ -57,3 +57,15 @@ From GitHub search and the merged PR list:
 - **Median time to merge**, and PRs closed without merging.
 - **Issues closed / opened**, open count and median age of open issues.
 - **CI pass rate** over all completed runs, and the workflows failing right now.
+
+## Promotions
+
+Under CI. A repo that promotes code from an integration branch to production (staging → main,
+develop → master…) does it with pull requests into the production branch. Hush finds the two
+branches by name (or from `"promotion": {"from": "staging", "to": "main"}` in `.claude/factory.json`)
+and shows: time since the last promotion and how long it took to merge, the commits waiting on the
+integration branch (from GitHub's compare, with their PRs), promotions in 30 days and the median gap,
+the open promotion PR with its CI, recent promotions, and the latest run of each workflow on the
+production branch. A promotion PR is one into production from the integration branch or from a
+branch named like `merge/`, `promote` or `release`. A new promotion, opened or merged, is a
+notification. A repo with a single branch has no promotions and says so.

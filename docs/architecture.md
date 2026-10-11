@@ -40,6 +40,7 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | `costs` | Daily provider spend and per-session Claude Code tokens. Unique on `(repo_id, source, key)`. |
 | `snapshots` | The last full snapshot per repo, so a page opens instantly. Versioned by `SNAP_V`. |
 | `price_rules` | Cost alarms per repo: name, config (provider, measure, period, condition, limits, days, dates, severity), enabled. |
+| `inventories` | Security inventory per repo and kind (`aws-iam`, `infisical`): names and metadata only. |
 | `events` | Notifications: one row per change (monitor state, late routine, CI broken or fixed, PR opened or merged, issue opened, spend jump). Unique on `(repo_id, dedupe)`. |
 | `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed. |
 
@@ -70,6 +71,7 @@ of the page refreshes.
 | `POST /r/<owner>/<repo>/ask` | The assistant: streams an answer as plain text. |
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
 | `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
+| `POST /api/inventory` | Security inventory ingest ([security.md](security.md)). |
 | `GET /install.sh` | The installer, with this origin filled in. |
 | `GET /setup?t=SETUP_TOKEN` | One-time GitHub App creation from a manifest. |
 | `GET /auth/login`, `/auth/callback`, `POST /logout` | Sign in with GitHub. |

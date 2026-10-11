@@ -664,6 +664,7 @@ async function snapshot(repoRow) {
     ci,
     metrics,
     costs: await readCosts(repoRow.id, factory.prices),
+    security: await readSecurity(repoRow.id),
     promotions,
     rules: await evalRules(repoRow.id, { fire: true, prices: factory.prices }),
     setup: { ...(factory.client || {}), skill_beats: monitors.filter((m) => m.last && m.last.source !== "session").length },
@@ -731,6 +732,8 @@ function diffEvents(prev, s) {
     if (np.open && np.open.number !== pp.open?.number) add("info", "promotion", `Promotion opened: #${np.open.number}`, `${np.ahead ?? "?"} commits from ${np.from} waiting for ${np.to}.`, `pr:${np.open.number}`, `promo-open:${np.open.number}`);
   }
   for (const x of s.queue?.issues || []) if (!prevIssues.has(x.number)) add(x.labels?.includes("risky") ? "warn" : "info", "issue", `Issue #${x.number} opened`, x.title, `issue:${x.number}`, `issue:${x.number}`);
+  const pf = new Set((prev.security?.findings || []).map((f) => f.id));
+  if (prev.security) for (const f of s.security?.findings || []) if (!pf.has(f.id) && SEV[f.sev] <= 1) add(f.sev === "critical" ? "bad" : "warn", "security", f.title, f.detail, "", `sec:${f.id}`);
   const C = s.costs;
   if (C && C.yesterday > 5 && C.avg7 > 0 && C.yesterday > C.avg7 * 1.5) {
     const day = C.per_day[C.per_day.length - 2]?.d;
@@ -842,6 +845,72 @@ async function evalRules(repoId, { fire = false, prices = {} } = {}) {
   return out;
 }
 
+// --- security inventory ------------------------------------------------------------------
+// Sent by scripts/security-inventory.mjs. Only names and metadata are accepted: every field is
+// copied by name and length-limited, secret names must look like names, and nothing else is kept.
+const str = (x, n = 200) => (x == null ? null : String(x).slice(0, n));
+const strs = (a, n = 50, m = 200) => (Array.isArray(a) ? a.slice(0, n).map((x) => str(x, m)) : []);
+function cleanInventory(kind, d) {
+  if (kind === "aws-iam") {
+    const keys = (k) => (Array.isArray(k) ? k.slice(0, 2).map((x) => ({ created: str(x?.created, 40), last_used: str(x?.last_used, 40), service: str(x?.service, 60) })) : []);
+    return {
+      account: str(d.account, 20), caller: str(d.caller, 200),
+      root: d.root ? { mfa: !!d.root.mfa, keys: keys(d.root.keys), password_last_used: str(d.root.password_last_used, 40) } : null,
+      users: (d.users || []).slice(0, 500).map((u) => ({ name: str(u.name, 128), arn: str(u.arn), created: str(u.created, 40), console: !!u.console, password_last_used: str(u.password_last_used, 40), mfa: !!u.mfa, keys: keys(u.keys), policies: strs(u.policies), groups: strs(u.groups) })),
+      roles: (d.roles || []).slice(0, 1500).map((r) => ({ name: str(r.name, 128), path: str(r.path, 128), created: str(r.created, 40), last_used: str(r.last_used, 40), last_region: str(r.last_region, 30), trusted: strs(r.trusted, 20), service_linked: !!r.service_linked, policies: strs(r.policies), description: str(r.description) })),
+    };
+  }
+  if (kind === "infisical") {
+    const NAME = /^[A-Za-z0-9_.\-]{1,128}$/;
+    return { project: str(d.project, 60), environments: strs(d.environments, 10, 40), folders: (d.folders || []).slice(0, 300).map((f) => ({ env: str(f.env, 40), path: str(f.path, 200), keys: (f.keys || []).slice(0, 3000).map(String).filter((k) => NAME.test(k)) })) };
+  }
+  throw new Error("kind must be aws-iam or infisical");
+}
+const SEV = { critical: 0, high: 1, medium: 2, low: 3 };
+function securityFindings(awsInv, inf) {
+  const out = [];
+  const days = (d) => (d ? (Date.now() - Date.parse(d)) / 864e5 : null);
+  const add = (sev, title, detail, id) => out.push({ sev, title, detail: detail || "", id });
+  if (awsInv) {
+    const r = awsInv.root;
+    if (r?.keys?.length) add("critical", "The root account has active access keys", "Delete them; nothing should sign requests as root.", "root-keys");
+    if (r && !r.mfa) add("critical", "The root account has no MFA", "Turn on MFA for root.", "root-mfa");
+    for (const u of awsInv.users) {
+      if (u.console && !u.mfa) add("high", `${u.name} signs in to the console without MFA`, "", `nomfa:${u.name}`);
+      u.keys.forEach((k, i) => {
+        const age = days(k.created), idle = k.last_used ? days(k.last_used) : age;
+        if (age > 90) add("medium", `${u.name}'s access key is ${Math.round(age)} days old`, "Rotate keys at least every 90 days.", `keyage:${u.name}:${i}`);
+        if (idle > 90) add("medium", `${u.name}'s access key ${k.last_used ? `has not been used in ${Math.round(idle)} days` : "was never used"}`, "Deactivate keys nobody uses.", `keyidle:${u.name}:${i}`);
+      });
+      if (u.policies.includes("AdministratorAccess")) add("low", `${u.name} has AdministratorAccess`, "Prefer roles with narrower policies for day-to-day work.", `useradmin:${u.name}`);
+    }
+    for (const r of awsInv.roles) {
+      if (r.service_linked) continue;
+      if (r.trusted.includes("*")) add("critical", `Role ${r.name} can be assumed by anyone`, "Its trust policy allows the * principal.", `rolestar:${r.name}`);
+      if (r.policies.includes("AdministratorAccess")) add("medium", `Role ${r.name} has AdministratorAccess`, `Trusted by ${r.trusted.join(", ") || "?"}.`, `roleadmin:${r.name}`);
+      const idle = r.last_used ? days(r.last_used) : days(r.created);
+      if (idle > 90) add("low", `Role ${r.name} ${r.last_used ? `has not been used in ${Math.round(idle)} days` : "has never been used"}`, "Delete roles nothing assumes.", `roleidle:${r.name}`);
+    }
+  }
+  if (inf) {
+    const byEnv = {};
+    for (const f of inf.folders) for (const k of f.keys) ((byEnv[f.env] ??= {})[k] ??= []).push(f.path);
+    for (const [env, m] of Object.entries(byEnv)) {
+      const dups = Object.entries(m).filter(([, paths]) => paths.length > 2).sort((x, y) => y[1].length - x[1].length);
+      if (dups.length) add("low", `${dups.length} secret${dups.length === 1 ? " is" : "s are"} copied into 3 or more folders in ${env}`, `${dups.slice(0, 8).map(([k, p]) => `${k} (${p.length})`).join(", ")}${dups.length > 8 ? "…" : ""}. Every copy is one more place to rotate.`, `dup:${env}`);
+    }
+    const prod = inf.folders.filter((f) => f.env === "prod"), stg = Object.fromEntries(inf.folders.filter((f) => f.env === "staging").map((f) => [f.path, new Set(f.keys)]));
+    for (const f of prod) if (stg[f.path]) { const miss = f.keys.filter((k) => !stg[f.path].has(k)); if (miss.length) add("low", `${miss.length} key${miss.length === 1 ? "" : "s"} in prod ${f.path} missing from staging`, miss.slice(0, 12).join(", ") + (miss.length > 12 ? "…" : ""), `drift:${f.path}`); }
+  }
+  return out.sort((a, b) => SEV[a.sev] - SEV[b.sev]);
+}
+async function readSecurity(repoId) {
+  const rows = await db.all("SELECT kind, at, body FROM inventories WHERE repo_id = $1", repoId);
+  if (!rows.length) return null;
+  const by = Object.fromEntries(rows.map((r) => [r.kind, { at: r.at, data: JSON.parse(r.body) }]));
+  return { aws: by["aws-iam"] || null, infisical: by.infisical || null, findings: securityFindings(by["aws-iam"]?.data, by.infisical?.data) };
+}
+
 async function recordEvents(repoId, prev, s) {
   const now = new Date().toISOString();
   for (const e of diffEvents(prev, s)) await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", repoId, now, e.level, e.kind, e.title.slice(0, 200), e.detail.slice(0, 400), e.entity, e.dedupe.slice(0, 300));
@@ -855,7 +924,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 9;
+const SNAP_V = 10;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1196,7 +1265,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible,s
 h2{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:0;margin-bottom:8px}
 .vh{margin-bottom:20px}.vh h1{font-size:19px;font-weight:600;letter-spacing:-.015em;margin-bottom:4px}.vh p{font-size:13.5px;color:var(--muted)}
 /* chrome */
-.app{grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto 1fr}
+.app{grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto 1fr}.app.solo{grid-template-columns:minmax(0,1fr)}.solo .main{margin:0 auto;max-width:1080px}
 .topbar{grid-column:1/-1;position:sticky;top:0;z-index:6;height:44px;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bg);color:var(--ink);border-bottom:1px solid var(--line);font-size:13px}
 .topbar .logo{color:var(--ink);font-size:14px;font-weight:600;gap:7px}.topbar .logo svg{color:#f2702c;width:18px;height:18px}
 .crumbs{display:flex;align-items:center;gap:6px;min-width:0}.crumbs a{color:var(--muted);text-decoration:none}.crumbs a:hover{color:var(--ink)}.crumbs span{color:var(--faint)}.crumbs b{color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1285,6 +1354,13 @@ button,.btn{background:var(--ink);color:#fff;border-radius:6px;font:500 13px var
 .cx-legend{font-size:12px;color:var(--ink2)}.cx-legend i{border-radius:3px}
 .cx-table th{font-size:11.5px;font-weight:500;color:var(--faint)}.cx-table td{font-size:13px;border-bottom:1px solid var(--line2)}.cx-table .bar i{background:var(--link)}
 .cx-tip{border-radius:8px;padding:10px 12px;width:260px}.cx-tip b{font-size:12.5px}.cx-tip .tt{font-weight:600}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}.tbl th{text-align:left;font-size:11.5px;font-weight:500;color:var(--faint);padding:9px 14px;border-bottom:1px solid var(--line)}.tbl td{padding:9px 14px;border-top:1px solid var(--line2);vertical-align:top}.tbl tr:first-child td{border-top:0}
+.tbl td .sub{display:block}.tbl .c{text-align:center;width:90px}.tbl tr[hidden]{display:none}
+.roles-g tr.sl{display:none}.roles-g.show-sl tr.sl{display:table-row}.sl-toggle{gap:6px;cursor:pointer}.sl-toggle input{margin:0}
+code.branch.admin{background:#fdecec;color:var(--bad)}
+.dot-y{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok)}.dot-n{color:var(--faint)}
+.sec-f .name{display:flex;gap:10px;align-items:flex-start}.sec-f .pill{flex:none;margin-top:1px}.sec-f b{font-weight:500}
+.sec-q{height:28px;border:1px solid var(--line);border-radius:6px;padding:0 9px;font:13px var(--f);width:220px}
 .notif[hidden],.win-dock[hidden],.win[hidden]{display:none!important}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
@@ -1330,7 +1406,7 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "setup"];
+const VIEWS = ["overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "security", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"overview"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"overview"};
@@ -1403,7 +1479,7 @@ window.hushOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href)
 const NOTIF_JS = `<script>(()=>{const N=window.hushNotif||(window.hushNotif={data:null});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
-const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci"};
+const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"security"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
 function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
@@ -1655,8 +1731,11 @@ addEventListener("resize",()=>{clearTimeout(X.rt);X.rt=setTimeout(draw,120)});
 addEventListener("hashchange",()=>{if(location.hash==="#costs")draw()});
 document.addEventListener("hush:swap",()=>{if(Date.now()-X.at>12e4)fetchData();else draw()});
 if(X.data)draw();else fetchData()})()</script>`;
+const SEC_JS = `<script>(()=>{if(window.hushSec)return;window.hushSec=1;
+document.addEventListener("input",ev=>{if(!ev.target.classList||!ev.target.classList.contains("sec-q"))return;const q=ev.target.value.trim().toLowerCase();document.querySelectorAll(".sec-m tr[data-k]").forEach(r=>r.hidden=q&&!r.dataset.k.includes(q))});
+document.addEventListener("change",ev=>{if(ev.target.classList&&ev.target.classList.contains("sl-cb"))document.querySelectorAll(".roles-g").forEach(g=>g.classList.toggle("show-sl",ev.target.checked))})})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx"') ? CX_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx"') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -1944,6 +2023,37 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="w-head">${statePill(p.state === "open" ? "ok" : "merged", p.state === "open" ? "Open" : "Merged")}<span class="flow"><code class="branch">${esc(p.head)}</code> → <code class="branch prod">${esc(P.to)}</code></span></div>
       <p class="w-title">${esc(p.title)}</p>
       ${kv([["Author", esc(p.author)], ["Opened", when2(p.created_at)], ["Merged", p.merged_at ? when2(p.merged_at) : ""], ["Time to merge", p.merged_at ? hrs((Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5) : ""], ["CI", p.ci ? ciTxt[p.ci] : ""]])}` });
+  const SEC = s.security;
+  const dAgo = (d) => (d ? ago(d) : "never");
+  const age = (d) => (d ? `${Math.round((Date.now() - Date.parse(d)) / 864e5)} d` : "–");
+  const SEVL = { critical: ["bad", "Critical"], high: ["bad", "High"], medium: ["warn", "Medium"], low: ["none", "Low"] };
+  const secEmpty = `<div class="group"><div class="line"><span class="hint">No inventory yet. Run this where the AWS and Infisical CLIs are logged in (your laptop, or a routine), at the repo root:<br><code>node &lt;hush&gt;/status/scripts/security-inventory.mjs</code><br>It reads IAM users, roles and keys, and the names of your Infisical secrets, and sends only names and metadata.</span></div></div>`;
+  let secSection = secEmpty;
+  if (SEC) {
+    const A = SEC.aws?.data, I = SEC.infisical?.data, F = SEC.findings;
+    const users = A?.users || [], roles = (A?.roles || []), own = roles.filter((r) => !r.service_linked);
+    const keysAll = users.flatMap((u) => u.keys.map((k) => ({ ...k, user: u.name })));
+    const names = I ? [...new Set(I.folders.flatMap((f) => f.keys))] : [];
+    const envs = I?.environments?.filter((e) => I.folders.some((f) => f.env === e)) || [];
+    const paths = I ? [...new Set(I.folders.map((f) => f.path))].sort() : [];
+    const has = (env, path, k) => I.folders.some((f) => f.env === env && f.path === path && f.keys.includes(k));
+    secSection = `
+    <p class="hint" style="margin:-8px 0 16px">${A ? `AWS account <code>${esc(A.account)}</code>, inventory ${ago(SEC.aws.at)}` : "No AWS inventory"}${I ? ` · Infisical, inventory ${ago(SEC.infisical.at)}` : " · no Infisical inventory"}.</p>
+    <div class="group stats">
+      <div class="stat"><b>${F.filter((f) => SEV[f.sev] <= 1).length}<i>/${F.length}</i></b><span>Critical or high findings</span><small>${F.length} in total</small></div>
+      <div class="stat"><b>${users.length}</b><span>IAM users</span><small>${users.filter((u) => u.console && !u.mfa).length} with console and no MFA</small></div>
+      <div class="stat"><b>${keysAll.length}</b><span>Active access keys</span><small>${keysAll.length ? `oldest ${age(keysAll.map((k) => k.created).filter(Boolean).sort()[0])}` : ""}</small></div>
+      <div class="stat"><b>${names.length}</b><span>Secret names</span><small>${I ? `${I.folders.length} folders in ${envs.length} environment${envs.length === 1 ? "" : "s"}` : "no inventory"}</small></div>
+    </div>
+    <h2>Findings</h2>
+    <div class="group sec-f">${F.length ? F.map((f) => `<div class="line"><span class="name"><span class="pill" data-s="${SEVL[f.sev][0]}">${SEVL[f.sev][1]}</span><span><b>${esc(f.title)}</b>${f.detail ? `<span class="sub">${esc(f.detail)}</span>` : ""}</span></span></div>`).join("") : `<div class="line"><span class="hint">Nothing to flag.</span></div>`}</div>
+    ${A ? `<h2>IAM users</h2><div class="group"><table class="tbl"><thead><tr><th>User</th><th>Console</th><th>MFA</th><th>Access keys</th><th>Policies and groups</th></tr></thead><tbody>${users.map((u) => `<tr><td><b>${esc(u.name)}</b><span class="sub">created ${age(u.created)} ago</span></td><td>${u.console ? `yes <span class="sub">last ${dAgo(u.password_last_used)}</span>` : "no"}</td><td>${u.mfa ? '<span class="state" data-s="ok">on</span>' : u.console ? '<span class="state" data-s="bad">off</span>' : '<span class="faint">off</span>'}</td><td>${u.keys.map((k) => `<div>${age(k.created)} old · used ${dAgo(k.last_used)}${k.service ? ` <span class="faint">(${esc(k.service)})</span>` : ""}</div>`).join("") || '<span class="faint">none</span>'}</td><td>${[...u.policies, ...u.groups.map((g) => g + " (group)")].map((x) => `<code class="branch${x === "AdministratorAccess" ? " admin" : ""}">${esc(x)}</code>`).join(" ") || '<span class="faint">none</span>'}</td></tr>`).join("") || `<tr><td colspan="5" class="hint">No IAM users.</td></tr>`}</tbody></table></div>
+    ${A.root ? `<p class="hint" style="margin:-20px 0 28px">Root account: MFA ${A.root.mfa ? "on" : '<b style="color:var(--bad)">off</b>'}, ${A.root.keys.length ? `<b style="color:var(--bad)">${A.root.keys.length} access key${A.root.keys.length === 1 ? "" : "s"}</b>` : "no access keys"}, last console sign-in ${dAgo(A.root.password_last_used)}.</p>` : ""}
+    <div class="rules-h"><h2>IAM roles <span class="faint">${own.length} yours, ${roles.length - own.length} service-linked</span></h2><label class="pick sl-toggle"><input type="checkbox" class="sl-cb"> Show service-linked</label></div>
+    <div class="group roles-g"><table class="tbl"><thead><tr><th>Role</th><th>Trusted by</th><th>Policies</th><th>Last used</th></tr></thead><tbody>${roles.sort((a, b) => a.service_linked - b.service_linked || a.name.localeCompare(b.name)).map((r) => `<tr${r.service_linked ? ' class="sl"' : ""}><td><b>${esc(r.name)}</b>${r.description ? `<span class="sub">${esc(r.description)}</span>` : ""}</td><td>${r.trusted.map((t) => `<code class="branch">${esc(t.replace(/^arn:aws:iam::\\d+:/, ""))}</code>`).join(" ")}</td><td>${r.policies.map((x) => `<code class="branch${x === "AdministratorAccess" ? " admin" : ""}">${esc(x)}</code>`).join(" ") || '<span class="faint">inline only</span>'}</td><td>${r.last_used ? `${ago(r.last_used)}${r.last_region ? ` <span class="faint">${esc(r.last_region)}</span>` : ""}` : '<span class="faint">never</span>'}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${I ? `<div class="rules-h"><h2>Infisical secrets <span class="faint">${names.length} names</span></h2><input type="search" class="sec-q" placeholder="Filter keys" aria-label="Filter secret names"></div>
+    <div class="group sec-m"><table class="tbl"><thead><tr><th>Key</th><th>Folder</th>${envs.map((e) => `<th class="c">${esc(e)}</th>`).join("")}</tr></thead><tbody>${paths.flatMap((pth) => [...new Set(I.folders.filter((f) => f.path === pth).flatMap((f) => f.keys))].sort().map((k) => `<tr data-k="${esc(k.toLowerCase())}"><td><code>${esc(k)}</code></td><td class="faint">${esc(pth)}</td>${envs.map((e) => `<td class="c">${has(e, pth, k) ? '<span class="dot-y" title="present"></span>' : '<span class="dot-n" title="missing">–</span>'}</td>`).join("")}</tr>`)).join("")}</tbody></table></div>` : ""}`;
+  }
   const winTemplates = `<div id="win-tpl" hidden>${wins.map((w) => `<template data-key="${esc(w.key)}" data-kind="${esc(w.kind)}" data-title="${esc(w.title)}" data-href="${esc(w.href || "")}">${w.body}</template>`).join("")}</div>`;
 
   const incidents = s.queue.issues.length
@@ -1973,6 +2083,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
 
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
   const NAV_ICON = {
+    security: `<path d="M8 1.8l5 2v4c0 3.2-2.2 5.5-5 6.4-2.8-.9-5-3.2-5-6.4v-4z"/><path d="M5.8 8.2l1.6 1.6 3-3.2"/>`,
     map: `<path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z"/><path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2"/>`,
     assistant: `<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/>`,
     overview: `<path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z"/>`,
@@ -2001,6 +2112,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ["issues", "Issues", count(s.queue.issues.length)],
     ["costs", "Costs", C ? `<span class="nc">${usd(C.total_usd)}</span>` : ""],
     ["map", "Map", ""],
+    ["security", "Security", (() => { const f = s.security?.findings || []; const hi = f.filter((x) => SEV[x.sev] <= 1).length; return hi ? badge(hi, "bad") : f.length ? count(f.length) : ""; })()],
   ];
   const navLink = ([k, label, extra]) => `<a href="#${k}" data-nav="${k}">${ico(k)}<span>${label}</span>${extra}</a>`;
   const vh = (title, desc) => `<header class="vh"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</header>`;
@@ -2066,6 +2178,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
           <div class="chat-note">Answers come from ${esc(ASK_MODEL)} on OpenRouter, from this page's data. They can be wrong; check the source.</div>
         </div>`)}
       ${view("map", `${vh("Map", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
+      ${view("security", `${vh("Security", "AWS IAM and the secrets in Infisical. Names and metadata only: Hush never receives a secret value.")}${secSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
@@ -2311,6 +2424,16 @@ createServer(async (req, res) => {
     if (url.pathname === "/healthz") return send(res, 200, "ok", { "content-type": "text/plain" });
     if (url.pathname === "/install.sh") return send(res, 200, INSTALL.replaceAll("__ORIGIN__", origin), { "content-type": "text/x-shellscript; charset=utf-8" });
 
+    if (url.pathname === "/api/inventory" && req.method === "POST") {
+      const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
+      const list = [].concat(JSON.parse((await readBody(req, 4e6)) || "[]"));
+      for (const it of list.slice(0, 5)) await db.run("INSERT INTO inventories (repo_id, kind, at, body) VALUES ($1, $2, $3, $4) ON CONFLICT (repo_id, kind) DO UPDATE SET at = excluded.at, body = excluded.body", repo.id, String(it.kind), new Date().toISOString(), JSON.stringify(cleanInventory(String(it.kind), it.data || {})));
+      const row = await db.one("SELECT * FROM repos WHERE id = $1", repo.id);
+      refresh(row).catch(() => {});
+      return json(res, 200, { ok: true, stored: list.length });
+    }
     if (url.pathname === "/api/cost" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
       const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));

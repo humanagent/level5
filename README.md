@@ -41,6 +41,7 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
 - [Heartbeats](docs/heartbeats.md): the API, the installer, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
+- [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
 - [How Hush judges](docs/judging.md): monitor states, routine evidence, the banner, CI and metrics.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
 

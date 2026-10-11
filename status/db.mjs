@@ -40,6 +40,8 @@ const SCHEMA = (pg) => `
     id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, repo_id BIGINT NOT NULL, name TEXT NOT NULL, config TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, created_at TEXT NOT NULL, last_fired_at TEXT);
   CREATE INDEX IF NOT EXISTS price_rules_repo ON price_rules(repo_id);
+  CREATE TABLE IF NOT EXISTS inventories (
+    repo_id BIGINT NOT NULL, kind TEXT NOT NULL, at TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (repo_id, kind));
   CREATE TABLE IF NOT EXISTS events (
     id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, repo_id BIGINT NOT NULL, at TEXT NOT NULL, level TEXT NOT NULL,
     kind TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL, entity TEXT NOT NULL, dedupe TEXT NOT NULL);

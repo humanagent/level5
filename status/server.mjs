@@ -356,7 +356,17 @@ function judge(factory, repo) {
   const since = new Date(Date.now() - WINDOW * 864e5).toISOString();
   const beats = db.prepare("SELECT monitor, ts, status, body FROM heartbeats WHERE repo = ? AND ts >= ? ORDER BY ts DESC").all(repo, since).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
   const roster = [...factory.monitors];
-  for (const id of new Set(beats.map((b) => b.monitor))) if (!roster.some((m) => m.id === id)) roster.push({ id, cadence: "daily", max_silence_hours: 50, unlisted: true });
+  // A SessionEnd beat named after a declared routine's slash command is evidence for that
+  // routine, not a monitor of its own. Anything else unknown still shows, marked unlisted.
+  const routineSkill = (r) => (r.prompt?.match(/\/([a-z][a-z0-9:_-]*)/) || [])[1];
+  const routineSkills = new Set(factory.routines.map(routineSkill).filter(Boolean));
+  const sessions = {};
+  for (const b of beats) if (b.source === "session" && !sessions[b.monitor]) sessions[b.monitor] = b.ts;
+  for (const id of new Set(beats.map((b) => b.monitor))) {
+    if (roster.some((m) => m.id === id)) continue;
+    if (routineSkills.has(id) && beats.every((b) => b.monitor !== id || b.source === "session")) continue;
+    roster.push({ id, cadence: "daily", max_silence_hours: 50, unlisted: true });
+  }
   const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
   const RANK = { ok: 1, degraded: 2, skipped: 3 };
 
@@ -384,10 +394,10 @@ function judge(factory, repo) {
     }
     return { id: m.id, cadence: m.cadence || "daily", routine: m.routine || "", state, why, unlisted: !!m.unlisted, last, runs: mine.length, days: days.map((d) => byDay[d] || ""), filed: [...new Set(mine.flatMap((b) => b.filed || []))].slice(0, 20) };
   });
-  return { monitors, beats: beats.length };
+  return { monitors, beats: beats.length, sessions };
 }
 
-function routineState(r, monitors, merged) {
+function routineState(r, monitors, merged, sessions = {}) {
   const fed = monitors.filter((m) => m.routine && m.routine === r.name && m.last);
   let last = fed.map((m) => m.last.ts).sort().pop() || null;
   let evidence = fed.length ? "heartbeat" : "";
@@ -396,6 +406,8 @@ function routineState(r, monitors, merged) {
     const m = monitors.find((x) => x.id === skill && x.last);
     if (m) [last, evidence] = [m.last.ts, "heartbeat"];
   }
+  const ran = sessions[(r.prompt?.match(/\/([a-z][a-z0-9:_-]*)/) || [])[1]];
+  if (ran && (!last || ran > last)) [last, evidence] = [ran, "routine session"];
   if (!last && /review/i.test(r.name)) {
     const p = merged.find((x) => /pr-sweep|review/.test(x.branch));
     if (p) [last, evidence] = [p.merged_at, "merged PR"];
@@ -413,8 +425,8 @@ async function snapshot(repoRow) {
   const [factory, queue] = await Promise.all([readFactory(token, repo), readQueue(token, repo)]);
   const ci = await readCi(token, repo, factory.workflows || []);
   const metrics = await readMetrics(token, repo, ci, queue.issues);
-  const { monitors, beats } = judge(factory, repo);
-  const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged));
+  const { monitors, beats, sessions } = judge(factory, repo);
+  const routines = factory.routines.map((r) => routineState(r, monitors, queue.merged, sessions));
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
   for (const r of routines) if (r.source === "GitHub Actions" && runsByName[r.name]) [r.last_seen, r.evidence] = [runsByName[r.name].at, "Actions run"];
   const bad = monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state));

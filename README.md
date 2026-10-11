@@ -32,6 +32,13 @@ repo you pick, on one page. Live at https://factory-status.fly.dev.
   volume with `.claude/hooks/hush.sh beat <id> ok '{"swept":{"events":120}}'`. The post is
   detached with a 5 s cap and never fails or slows the caller; `HUSH_DISABLED=1` turns it off.
 
+## Docs
+
+- [Heartbeats](docs/heartbeats.md): the API, the installer, the `SessionEnd` hook, isolation guarantees.
+- [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
+- [How Hush judges](docs/judging.md): monitor states, routine evidence, the banner, CI and metrics.
+- [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
+
 ## Layout
 
 | Path | What |

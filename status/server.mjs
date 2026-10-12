@@ -1541,17 +1541,10 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .askp .chat-log{flex:1;max-height:none;min-height:0}.askp .chips{display:flex;flex-direction:column;align-items:flex-start;gap:6px}.askp .ask textarea{min-height:56px}
 @media(min-width:1100px){html[data-ask] .app .main{width:auto;margin-right:400px}}
 @media(max-width:820px){.askp{width:auto;left:0}.tb-ask span{display:none}}
-.rt .rt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rt .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rt .name b{font-size:14.5px;font-weight:600}.rt .name small{color:var(--muted);font-size:12.5px}.rt .name small a{color:var(--muted);text-decoration:none}.rt .name small a:hover{color:var(--ink)}.rt .name code{font-size:12px}
+.rt .rt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rt .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rt .name b{font-size:14.5px;font-weight:600}.rt .name small{color:var(--faint);font-size:12px}.rt .bars{margin-top:10px}.rt .name small a{color:var(--muted);text-decoration:none}.rt .name small a:hover{color:var(--ink)}.rt .name code{font-size:12px}
 .rt-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:10px 0 8px}.rts .bars{gap:1.5px}.rt-stats span{display:flex;flex-direction:column;font-size:11.5px;color:var(--faint)}.rt-stats b{font-size:14px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .rt-hint{margin:8px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rt-hint code{font-size:11.5px}
 .w-facts{margin:12px 0 0;font-size:13px;color:var(--muted)}.w-facts a{color:var(--ink)}.w-raw{margin-top:14px;font-size:12.5px}.w-raw summary{cursor:pointer;color:var(--faint)}.w-raw .w-list{margin-top:8px}
-.win:not(.adhoc) .win-body{flex:none;max-height:45%}.win:not(.adhoc) .win-chat{flex:1;max-height:none}
-.win-chat{flex:none;display:flex;flex-direction:column;gap:8px;max-height:52%;border-top:1px solid var(--line);padding:10px 14px 12px;background:#fbfbfc}
-.win.adhoc .win-body{display:none}.win.adhoc .win-chat{flex:1;max-height:none;border-top:0;background:var(--bg)}
-.wc-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5}
-.wc-m{padding:8px 11px;border-radius:10px;max-width:92%}.wc-m.assistant{align-self:flex-start;background:var(--bg);border:1px solid var(--line)}.wc-m.user{align-self:flex-end;background:var(--ink);color:var(--bg)}.wc-m.err{color:var(--bad)}.wc-m ul{margin:4px 0;padding-left:18px}
-.wc-ask{display:flex;gap:8px;align-items:flex-end}.wc-ask textarea{flex:1;resize:none;min-height:36px;max-height:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:var(--bg)}.wc-ask button{height:36px;padding:0 14px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font:500 13px inherit;cursor:pointer}.wc-ask button:disabled{opacity:.5}
-.main :is(.banner,.banner-sub,.stat,.chart,.row,.line,.incident,.tbl tbody tr,.cx-main,.card,.rt-stats){cursor:pointer}.main :is(.stat,.chart,.line,.incident,.tbl tbody tr,.card):hover{background:rgba(15,16,20,.025)}
 .tb-actsw{position:relative}.tb-acts{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:500 12.5px inherit;cursor:pointer}.tb-acts:hover{background:rgba(15,16,20,.04)}.tb-ai{display:inline-flex}.tb-ai .gi{width:13px;height:13px}.tb-n{font-variant-numeric:tabular-nums;color:var(--warn);font-weight:600}.tb-n:empty{display:none}html[data-acts] .tb-acts{background:rgba(15,16,20,.06)}
 .acts-pop{display:none;position:absolute;right:0;top:36px;z-index:60;width:min(520px,calc(100vw - 24px));max-height:72vh;overflow:auto;padding:4px 14px 12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px -10px rgba(0,28,36,.3)}html[data-acts] .acts-pop{display:block}
 .acts-pop .live-head h2{font-size:13px}.acts-pop .job:not([data-st=in_progress]){display:none}.acts-pop .recent .rrow:nth-child(n+7){display:none}.acts-pop .group{margin-bottom:10px}
@@ -1560,7 +1553,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .cols:hover>div:not(:hover) i,.bars:hover>i:not(:hover){opacity:.45}.cols i,.bars i{transition:opacity .12s}
 .stats5{grid-template-columns:repeat(5,minmax(0,1fr))}.stat b.loc span{font-size:inherit}.loc .add{color:var(--ok)}.loc.sm{font:500 12px var(--mono);white-space:nowrap}.loc .del{color:var(--bad)}@media(max-width:1000px){.stats5{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .ci-cols,.day-cols{height:140px}.day-cols>div.grp{display:flex;align-items:flex-end;gap:1px}.day-cols>div.grp i{flex:1;border-radius:2px 2px 0 0;min-height:0}.ci-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px;color:var(--muted)}.ci-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
-.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}.grid3>*{background:var(--bg)}.grid3 .bars{gap:1.5px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}.grid3>*{background:var(--bg)}.grid3 .bars{gap:1.5px}.sk-row .row-head{gap:8px}.sk-row .row-head .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:1100px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.grid3{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
@@ -1658,8 +1651,8 @@ function open(key,quiet){const had=W.list.find(w=>w.key===key);if(had){focus(had
 const n=W.list.filter(w=>!w.min).length,vw=innerWidth,vh=innerHeight,ww=Math.min(620,Math.max(MINW,vw*.42));
 W.frames[key]=W.frames[key]||{w:ww,h:vh-TOP-24-n*STEP,x:vw-ww-20-n*STEP,y:TOP+8+n*STEP};
 const el=document.createElement("section");el.className="win";el.setAttribute("role","dialog");el.setAttribute("aria-label",t.dataset.kind+" "+t.dataset.title);
-el.innerHTML='<header class="win-bar"><span class="win-kind">'+esc(t.dataset.kind)+'</span><b class="win-title"></b><span class="win-acts">'+(t.dataset.href?'<a class="win-btn" data-no-drag href="'+esc(t.dataset.href)+'" target="_blank" rel="noopener" title="Open on GitHub">'+ICON.gh+"</a>":"")+'<button type="button" class="win-btn" data-act="min" title="Minimize">'+ICON.min+'</button><button type="button" class="win-btn" data-act="close" title="Close">'+ICON.close+'</button></span></header><div class="win-body"></div><div class="win-chat"><div class="wc-log"></div><form class="wc-ask"><textarea rows="1" placeholder="Ask about this…"></textarea><button type="submit">Ask</button></form></div><div class="win-gone">No longer in this page\\'s data.</div>'+["n","s","e","w","ne","nw","se","sw"].map(d=>'<i class="win-rz" data-dir="'+d+'"></i>').join("");
-document.body.appendChild(el);const w={key,el,kind:t.dataset.kind,title:t.dataset.title,min:false,msgs:[],ad};if(ad)el.classList.add("adhoc");W.list.push(w);fill(w);place(w);if(!quiet)syncUrl();chat(w);
+el.innerHTML='<header class="win-bar"><span class="win-kind">'+esc(t.dataset.kind)+'</span><b class="win-title"></b><span class="win-acts">'+(t.dataset.href?'<a class="win-btn" data-no-drag href="'+esc(t.dataset.href)+'" target="_blank" rel="noopener" title="Open on GitHub">'+ICON.gh+"</a>":"")+'<button type="button" class="win-btn" data-act="min" title="Minimize">'+ICON.min+'</button><button type="button" class="win-btn" data-act="close" title="Close">'+ICON.close+'</button></span></header><div class="win-body"></div><div class="win-gone">No longer in this page\\'s data.</div>'+["n","s","e","w","ne","nw","se","sw"].map(d=>'<i class="win-rz" data-dir="'+d+'"></i>').join("");
+document.body.appendChild(el);const w={key,el,kind:t.dataset.kind,title:t.dataset.title,min:false,msgs:[],ad};if(ad)el.classList.add("adhoc");W.list.push(w);fill(w);place(w);if(!quiet)syncUrl();
 el.addEventListener("pointerdown",()=>focus(w),true);
 el.querySelector('[data-act="close"]').onclick=()=>close(w);
 el.querySelector('[data-act="min"]').onclick=()=>{w.min=true;el.hidden=true;order();renderDock()};
@@ -1671,25 +1664,8 @@ const mv=e=>{const dx=e.clientX-o.cx,dy=e.clientY-o.cy;if(d.includes("e"))f.w=Ma
 const up=()=>{h.removeEventListener("pointermove",mv);h.removeEventListener("pointerup",up);el.classList.remove("moving")};h.addEventListener("pointermove",mv);h.addEventListener("pointerup",up)}));
 return true}
 
-const md=t=>esc(t).replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/\\x60([^\\x60\\n]+)\\x60/g,"<code>$1</code>").replace(/^[-*] (.+)$/gm,"<li>$1</li>").replace(/(<li>.*<\\/li>\\n?)+/g,m=>"<ul>"+m.replace(/\\n/g,"")+"</ul>").replace(/\\n{2,}/g,"<br><br>").replace(/\\n/g,"<br>");
-const SUMMARY="Give me a concise, simple summary of what I'm looking at.";
-function ctxOf(w){const b=w.el.querySelector(".win-body");return ((w.ad?w.ad.text:b?b.textContent.replace(/[ \\t]+/g," "):"")||"").replace(/\\n{3,}/g,"\\n\\n").slice(0,6000)}
-function drawChat(w){const log=w.el.querySelector(".wc-log");log.innerHTML=w.msgs.filter(m=>!m.hidden).map(m=>'<div class="wc-m '+m.role+(m.err?" err":"")+'">'+(m.role==="user"?esc(m.content):md(m.content)||'<span class="typing"><i></i><i></i><i></i></span>')+"</div>").join("");log.scrollTop=log.scrollHeight;w.el.querySelector(".wc-ask button").disabled=!!w.busy}
-async function talk(w,q,hidden){if(w.busy||!q.trim())return;w.busy=true;w.msgs.push({role:"user",content:q.trim(),hidden});const a={role:"assistant",content:""};w.msgs.push(a);drawChat(w);
-try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/ask",{method:"POST",headers:{"content-type":"application/json"},credentials:"same-origin",body:JSON.stringify({focus:{title:w.kind+": "+w.title,text:ctxOf(w)},messages:w.msgs.filter(m=>m!==a&&!m.err).map(({role,content})=>({role,content}))})});
-if(!r.ok||!r.body){a.content=(await r.text())||"The assistant did not answer.";a.err=true}else{const rd=r.body.getReader(),dec=new TextDecoder();for(;;){const {done,value}=await rd.read();if(done)break;a.content+=dec.decode(value,{stream:true});drawChat(w)}}}catch(x){a.content="Could not reach the assistant.";a.err=true}w.busy=false;drawChat(w)}
-function chat(w){const f=w.el.querySelector(".wc-ask"),i=f.querySelector("textarea");f.addEventListener("submit",ev=>{ev.preventDefault();const q=i.value;i.value="";talk(w,q)});
-i.addEventListener("keydown",ev=>{if(ev.key==="Enter"&&!ev.shiftKey){ev.preventDefault();f.requestSubmit()}});talk(w,SUMMARY,true)}
-// what on the page can be explained, and how it is named in the window's title bar
-const EXPLAIN=".banner,.banner-sub,.stat,.chart,.row,.line,.incident,.tbl tbody tr,.cx-main,.svc-map,.card,.rt-stats,.sec-f .line";
-function explain(ev){if(ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;if(String(getSelection())) return;
-const el=ev.target.closest(EXPLAIN);if(!el||!el.closest(".main")||ev.target.closest("a,button,input,textarea,select,label,summary,.cx-bar,.ms"))return;
-const view=el.closest(".view"),sec=view&&view.querySelector(".vh h1"),h2=(()=>{let n=el.closest(".group,.cx,.incidents")||el;while(n&&n.previousElementSibling){n=n.previousElementSibling;if(/^H[12]$/.test(n.tagName)||n.classList.contains("rules-h"))return n.innerText.replace(/\\s*All costs.*$/,"").trim()}return ""})();
-const first=(el.querySelector("b,.mon-id,h3,.name")||el).innerText.split("\\n")[0].trim().slice(0,70);
-const kind=h2||(sec?sec.innerText:"")||"Status",title=first||kind,key="ask:"+kind+":"+title;
-W.adhoc=W.adhoc||{};W.adhoc[key]={kind,title,text:(kind+"\\n"+el.innerText).slice(0,6000)};open(key)}
 document.addEventListener("click",ev=>{const chip=ev.target.closest(".win-chip");if(chip){const w=W.list.find(x=>x.key===chip.dataset.key);if(w)focus(w);return}
-const o=ev.target.closest("[data-open]");if(!o){explain(ev);return}if(ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;
+const o=ev.target.closest("[data-open]");if(!o)return;if(ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;
 const inner=ev.target.closest("a,button");if(inner&&inner!==o&&!inner.hasAttribute("data-open"))return;if(open(o.dataset.open))ev.preventDefault()});
 document.addEventListener("keydown",ev=>{if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches&&ev.target.matches("[data-open][tabindex]")){ev.preventDefault();open(ev.target.dataset.open)}
 if(ev.key==="Escape"&&!ev.target.closest("input,textarea")){const top=W.list.filter(w=>!w.min).at(-1);if(top)close(top)}});
@@ -2100,24 +2076,11 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       : failed && b.at(-1)?.s === "warn" ? ["bad", "Last run failed", 0]
       : ["ok", "On schedule", 1];
     const tip = (x) => [x.label, { ok: x.failed ? `${x.runs} runs, ${x.failed} failed` : x.runs > 1 ? `ran ${x.runs} times` : "ran", warn: `${x.failed} of ${x.runs} runs failed`, miss: "should have run, did not", "": "nothing scheduled" }[x.s], x.usd ? usd(x.usd) : ""].filter(Boolean).join(" · ");
-    const facts = [
-      cmd ? `<code>/${esc(cmd)}</code>` : r.source === "GitHub Actions" ? `<code>${esc(r.prompt.replace(/^\.github\/workflows\//, ""))}</code>` : `<span class="faint">no slash command</span>`,
-      esc(when(r)),
-      r.model ? esc(r.model) : r.source === "GitHub Actions" ? "GitHub Actions" : "",
-      h?.skills?.length ? `<a href="#monitors">${h.skills.length} skill${h.skills.length === 1 ? "" : "s"} →</a>` : "",
-    ].filter(Boolean).join(" · ");
-    const stats = [
-      `<span><b>${r.last_seen ? ago(r.last_seen) : "never"}</b>last run</span>`,
-      `<span><b>${until(r.next_run).replace(/^in /, "")}</b>next run</span>`,
-      `<span><b>${onTime == null ? "–" : onTime + "%"}</b>on time</span>`,
-      r.source === "Claude Code" ? `<span><b>${h?.usd_30d ? usd(h.usd_30d) : "–"}</b>${h?.usd_run ? `${usd(h.usd_run)} a run` : `in ${WINDOW} days`}</span>` : "",
-    ].join("");
-    const hint = st === "none" ? `<p class="rt-hint">${r.source === "Claude Code" ? `Nothing from this routine reached Hush. Its session ends without a heartbeat${cmd ? "" : " because its prompt runs no slash command"}. <a href="#setup">Install the hook</a> or end the prompt with <code>hush.sh beat</code>.` : "No run of this workflow in the window."}</p>` : "";
+    const facts = [cmd ? `/${esc(cmd)}` : r.source === "GitHub Actions" ? esc(r.prompt.replace(/^\.github\/workflows\//, "")) : "", esc(when(r).replace(" UTC", "")), r.next_run ? `next ${until(r.next_run)}` : ""].filter(Boolean).join(" · ");
+    const hint = st === "none" ? `<p class="rt-hint">${r.source === "Claude Code" ? `No heartbeat. <a href="#setup">Install the hook</a>` : "No runs in the window."}</p>` : "";
     return { rank, html: `<div class="row rt openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0">
       <div class="rt-top"><span class="name"><b>${esc(r.name.replace(/^App: /, ""))}</b><small>${facts}</small></span><span class="state" data-s="${st}">${label}</span></div>
-      <div class="rt-stats">${stats}</div>
-      ${b.length ? `<div class="bars${h.weekly ? " wk" : ""}">${b.map((x) => `<i data-s="${x.s}" title="${esc(tip(x))}"></i>`).join("")}</div>
-      <div class="axis"><span>${h.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${h.weekly ? "this week" : "today"}</span></div>` : ""}
+      ${b.length ? `<div class="bars${h.weekly ? " wk" : ""}">${b.map((x) => `<i data-s="${x.s}" title="${esc(tip(x))}"></i>`).join("")}</div>` : ""}
       ${hint}
     </div>` };
   };
@@ -2410,12 +2373,11 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const skRow = (r) => {
     const [ps, label] = SK[r.state] || ["none", r.state];
     const bars = r.buckets.map((b) => `<i data-s="${b.s === "empty" ? "warn" : b.s}" title="${esc(barTip(r, b))}"></i>`).join("");
-    const sub = [r.last ? `last run ${ago(r.last)}` : "never reported", r.read != null && r.unit ? `read ${r.read.toLocaleString("en-US")} ${esc(r.unit)}` : "", r.misses ? `<b class="miss">missed ${r.misses}</b>` : ""].filter(Boolean).join(" · ");
+    const sub = r.last ? `last run ${ago(r.last)}` : "never reported";
     const open = s.monitors.some((m) => m.id === r.id) ? ` openable" data-open="monitor:${esc(r.id)}" role="button" tabindex="0` : "";
     return `<div class="row sk-row${open}">
       <div class="row-head"><span class="name"><span class="mon-id">${esc(r.id)}</span><small>${sub}</small></span><span class="state" data-s="${ps}" title="${esc(r.why)}">${label}</span></div>
       <div class="bars${r.weekly ? " wk" : ""}">${bars}</div>
-      <div class="axis"><span>${r.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${r.on_time == null ? "–" : `${r.on_time}% ok`}</span><span class="rule"></span><span>${r.weekly ? "this week" : "today"}</span></div>
     </div>`;
   };
   // --- Status: the one page. Only what is wrong, then what it costs, then the numbers ----------
@@ -2447,7 +2409,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         <p class="banner-sub">${allRows.length ? `${healthy} of ${plural(allRows.length, "skill")} ran as expected. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
         ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true, setupState)}</section>` : ""}
         ${nAlerts ? `<h2>Needs a look</h2>
-        ${needs.length ? `<div class="group${needs.length > 1 ? " grid2" : ""}">${needs.map(skRow).join("")}</div>` : ""}
+        ${needs.length ? `<div class="group${needs.length > 1 ? " grid3" : ""}">${needs.map(skRow).join("")}</div>` : ""}
         ${others.length ? `<div class="group">${others.join("")}</div>` : ""}
         ${needs.length ? `<p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>degraded or read nothing <i data-s="miss"></i>should have run, did not <i></i>nothing expected</p>` : ""}` : ""}
         <div class="rules-h"><h2>Costs</h2><a class="more" href="#costs">All costs →</a></div>
@@ -2571,7 +2533,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${winTemplates}
       ${view("status", statusView)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
-        ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
+        ${s.monitors.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}${autoHead}
         ${s.routines.length ? `<div class="group grid3 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "Minutes spent per day, every workflow over the last 30 days, and what goes to production.")}

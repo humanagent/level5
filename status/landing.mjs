@@ -54,8 +54,8 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars =
   </div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>hush · observability for your software factory</title>
-<meta name="description" content="Observability for your software factory: whether every skill your agents run actually ran, and what it cost.">
+<title>hush · software observability for the AI era</title>
+<meta name="description" content="Software observability for the AI era. Monitor your factory so software never sleeps.">
 ${icon}${fonts}
 <style>${css}
 /* Landing: one white column. Headline, install button, an example status page, three steps, what it reads, the button again. */
@@ -119,11 +119,10 @@ ${icon}${fonts}
 <section class="h">
   <a class="oss" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>Star on GitHub</span>${starTag}</a>
   <h1>
-    <span>Your agents run the factory.</span>
-    <span>Skills run while you sleep.</span>
-    <span class="now">Hush is observability for it.</span>
+    <span>Software observability</span>
+    <span class="now">for the AI era.</span>
   </h1>
-  <p class="lede">Whether every skill your agents run actually ran, and what it cost.</p>
+  <p class="lede">Monitor your factory so software never sleeps.</p>
   ${cta()}
   <p class="fine">Free and open source. Read-only on your repos. Use ours or <a href="${REPO}#run-and-deploy" target="_blank" rel="noopener">host your own</a>.</p>
   ${msg ? `<p class="err" style="text-align:center">${esc(msg)}</p>` : ""}

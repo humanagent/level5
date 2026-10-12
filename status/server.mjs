@@ -2365,7 +2365,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <header class="topbar">
       <a class="logo" href="/">${MARK()}<span>hush</span></a>
       <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
-      <span class="tb-right"><button type="button" class="tb-ask" data-ask-toggle aria-controls="chat" title="Ask about this repo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg><span>Ask</span></button>${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><span class="tb-user">${esc(user.login)}</span>` : ""}</span>
+      <span class="tb-right"><button type="button" class="tb-ask" data-ask-toggle aria-controls="chat" title="Ask about this repo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg><span>Ask</span></button>${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button>` : ""}</span>
     </header>
     <aside class="side">
       <div class="repo-box">
@@ -2445,7 +2445,7 @@ function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
       <span class="go">Open →</span></a>`;
   };
   return page("Repositories · hush", `<div class="app solo">
-    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><span class="tb-user">${esc(user.login)}</span><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
+    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
     <main class="main">
       <header class="vh"><h1>Repositories</h1><p>Every repo Hush is installed on that your GitHub account can see. Numbers are the last ${WINDOW} days.</p></header>
       ${repos.length ? accounts.map((a) => `<h2>${esc(a.login)}</h2><div class="group repos-t">

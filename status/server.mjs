@@ -22,6 +22,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, r
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
+import { dailyReport } from "./report.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 // Local dev (npm run dev): signed in as DEV_USER, GitHub read with your own `gh` session instead of
@@ -3267,7 +3268,7 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
     if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2] === "/key" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
@@ -3289,6 +3290,14 @@ createServer(async (req, res) => {
           for (const [name, v] of parts) if (Number(v)) rows.push([r.day, r.source, svcShort(name), Math.round(Number(v) * 100) / 100]);
         }
         return json(res, 200, { today: new Date().toISOString().slice(0, 10), rows });
+      }
+      if (m[2] === "/report") {
+        // the daily factory report for one UTC day (default yesterday), exactly as the email
+        const saved = await db.one("SELECT body FROM snapshots WHERE repo_id = $1", row.id);
+        let snap = saved && JSON.parse(saved.body);
+        if (!snap || snap.v !== SNAP_V) snap = await refresh(row);
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("day") || "") ? url.searchParams.get("day") : undefined;
+        return send(res, 200, dailyReport(snap, { origin, day }).html);
       }
       if (m[2] === "/key") {
         // replacing the key is a deliberate, same-site form post; the old key keeps working for a day

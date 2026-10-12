@@ -78,6 +78,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `POST /r/<owner>/<repo>/key` | Replace the repo's ingest key (same-site form post); the old one works 24 h more. |
 | `POST /r/<owner>/<repo>/rules` | Create, edit, pause or delete a price rule; `{text}` makes one from a sentence. |
 | `GET /settings`, `POST` | The signed-in person's settings: their time zone. |
+| `GET /r/<owner>/<repo>/report?day=YYYY-MM-DD` | The daily factory report for one UTC day (default yesterday), as the email renders it. |
 | `GET /landing` | The landing, also when signed in (it then says Enter instead of Sign in). |
 | `POST /r/<owner>/<repo>/ask` | The assistant: streams an answer as plain text. |
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
@@ -122,7 +123,8 @@ and background refreshes, and the open set is in the URL (`?w=`).
 ## Assistant
 
 A panel on the right of the repo page, opened from Ask in the top bar; it stays open across sections
-and refreshes, and the page makes room for it. Each question is one OpenRouter call (`HUSH_MODEL`, default
+and refreshes, and the page makes room for it. It is also where price rules are made: it has tools to
+create, list and delete them ([costs.md](costs.md)). Each question is one OpenRouter call (`HUSH_MODEL`, default
 `openai/gpt-6.1-sol`) whose system prompt carries everything Hush has on the repo: the snapshot,
 30 days of heartbeats with their notes and volumes, the cost rows, and a one-line summary of every
 other repo the person can see. The conversation lives in the page only; nothing is stored.

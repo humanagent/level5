@@ -86,14 +86,15 @@ tokens (input, cached, output) and estimated dollars.
 
 ## Price rules
 
-Alarms on spend and tokens, at the top of Costs. Each rule measures one number over one period and
-sends a notification (the bell) when it crosses its limit, at most once per period.
+Alarms on spend and tokens. Each rule measures one number over one period and sends a notification
+(the bell) when it crosses its limit, at most once per period; a firing rule also shows on Status.
 
-**Written as a sentence.** Type it the way you would say it ("tell me when AWS goes over $50 a day on
-weekdays", "urgent if the month-end forecast passes 1500") and Hush turns it into a rule: the
-assistant's model fills the fields below, and the server validates every field before saving, so it
-cannot store anything else. Rules are listed as sentences ("When AWS spend goes over $50 in a day, on
-weekdays"); clicking one opens the fields to edit.
+**Asked for in words, to the assistant.** There is no rules form: open Ask and say it ("tell me when
+AWS goes over $50 a day on weekdays", "urgent if the month-end forecast passes 1500", "what alarms do
+I have?", "delete alarm 4"). The assistant has three tools, `create_price_rule`,
+`list_price_rules` and `delete_price_rule`; the server validates every field of a new rule before
+saving, so the model cannot store anything else, and the assistant confirms by repeating the rule as
+saved ("When AWS spend goes over $40 in a day, on weekdays").
 
 | Field | Options |
 | --- | --- |

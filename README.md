@@ -50,6 +50,7 @@ zone), and **Repositories** (every repo you can see, by account, side by side).
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
+- [Daily factory report](docs/report.md): one email with everything that happened in the factory that day.
 - [Automations](docs/automations.md): each scheduled job as one stored object, its runs, state and calendar.
 - [How Hush judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.

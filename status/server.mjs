@@ -298,6 +298,10 @@ async function readCi(token, repo, workflows) {
           const d = byDay[r.created_at.slice(0, 10)];
           if (d) r.conclusion === "success" ? d.ok++ : d.bad++;
         }
+        // wall-clock minutes per day: from the run's start to its last update
+        const mins = Object.fromEntries(days.map((d) => [d, 0]));
+        // a run re-run or edited days later keeps its start and moves its update: over 3 h is not run time
+        for (const r of runs) { const m = (Date.parse(r.updated_at) - Date.parse(r.run_started_at)) / 6e4; if (r.status === "completed" && r.run_started_at && m >= 0 && m <= 180 && r.created_at.slice(0, 10) in mins) mins[r.created_at.slice(0, 10)] += m; }
         const last = runs[0];
         const ok = done.filter((r) => r.conclusion === "success").length;
         return {
@@ -309,6 +313,8 @@ async function readCi(token, repo, workflows) {
           pct: done.length ? Math.round((ok / done.length) * 1000) / 10 : null,
           days: days.map((d) => { const x = byDay[d]; return !x.ok && !x.bad ? "" : !x.bad ? "ok" : !x.ok ? "skipped" : "degraded"; }),
           tips: days.map((d) => byDay[d]),
+          mins: days.map((d) => Math.round(mins[d] * 10) / 10),
+          dates: days,
           last: last ? { conclusion: last.conclusion, status: last.status, at: last.updated_at, branch: last.head_branch, url: last.html_url } : null,
         };
       }),
@@ -403,7 +409,7 @@ async function readPromotions(token, repo, cfg, defaultBranch) {
     const from = cfg?.from || ["staging", "develop", "development", "dev", "next"].find((n) => names.has(n));
     const to = cfg?.to || ["main", "master", "production", "prod", "release"].find((n) => names.has(n) && n !== from);
     if (!from || !to) return { enabled: false, default_branch: defaultBranch };
-    const [pulls, cmp, runs] = await Promise.all([
+    let [pulls, cmp, runs] = await Promise.all([
       gh(token, `repos/${repo}/pulls?state=all&base=${encodeURIComponent(to)}&sort=created&direction=desc&per_page=40`).catch(() => []),
       gh(token, `repos/${repo}/compare/${encodeURIComponent(to)}...${encodeURIComponent(from)}`).catch(() => null),
       gh(token, `repos/${repo}/actions/runs?branch=${encodeURIComponent(to)}&per_page=40`).catch(() => null),
@@ -418,6 +424,13 @@ async function readPromotions(token, repo, cfg, defaultBranch) {
       open.ci = cr.some((x) => ["failure", "timed_out"].includes(x.conclusion)) ? "red" : cr.some((x) => x.status !== "completed") ? "running" : cr.length ? "green" : "none";
     }
     const merged = prs.filter((p) => p.state === "merged").sort((a, b) => (a.merged_at < b.merged_at ? 1 : -1));
+    // squash-merged promotions leave the two branches diverged, so to...from keeps counting commits
+    // that already shipped. What is waiting is what the integration branch got since the last
+    // promotion's head.
+    if (merged[0]?.sha) {
+      const since = await gh(token, `repos/${repo}/compare/${merged[0].sha}...${encodeURIComponent(from)}`).catch(() => null);
+      if (since && since.status !== "behind") cmp = since;
+    }
     const since = Date.now() - WINDOW * 864e5;
     const in30 = merged.filter((p) => Date.parse(p.merged_at) > since);
     const gaps = in30.slice(0, -1).map((p, i) => (Date.parse(p.merged_at) - Date.parse(in30[i + 1].merged_at)) / 36e5).sort((a, b) => a - b);
@@ -1060,7 +1073,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 13;
+const SNAP_V = 14;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1528,6 +1541,9 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .htip{position:fixed;z-index:200;pointer-events:none;max-width:300px;padding:10px 12px;background:var(--bg);border:1px solid #d1d5db;border-radius:10px;box-shadow:0 8px 24px -6px rgba(0,28,36,.3);font-size:13px;line-height:1.45;color:var(--ink)}.htip b{display:block;margin-bottom:4px;font-size:13.5px}.htip div{color:var(--muted)}
 .cols:hover>div:not(:hover) i,.bars:hover>i:not(:hover){opacity:.45}.cols i,.bars i{transition:opacity .12s}
 .stats5{grid-template-columns:repeat(5,minmax(0,1fr))}.stat b.loc span{font-size:inherit}.loc .add{color:var(--ok)}.loc.sm{font:500 12px var(--mono);white-space:nowrap}.loc .del{color:var(--bad)}@media(max-width:1000px){.stats5{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.ci-cols{height:140px}.ci-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px;color:var(--muted)}.ci-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}.grid3>*{background:var(--bg)}.grid3 .bars{gap:1.5px}
+@media(max-width:1100px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.grid3{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1538,7 +1554,7 @@ const ICON = `<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w
 const LIVE = `<script>(()=>{const u=location.pathname+"?partial=1";let busy=0;
 const pull=async()=>{if(busy)return;busy=1;const w=document.querySelector(".wrap");w.dataset.loading="1";
 try{const r=await fetch(u,{credentials:"same-origin"});if(r.status===401){location.href="/auth/login";return}
-const d=new DOMParser().parseFromString(await r.text(),"text/html");const n=d.querySelector(".wrap");if(!n)throw 0;
+const d=new DOMParser().parseFromString(await r.text(),"text/html");const n=d.querySelector(".wrap");if(!n)throw 0;if(r.ok&&w.querySelector(".sk-nav")&&!n.querySelector(".sk-nav")){location.reload();return}
 if(!r.ok)throw 0;const open=[...w.querySelectorAll("details")].map(x=>x.open),on=[...w.querySelectorAll("input[type=radio]:checked")].map(x=>x.id);w.replaceWith(n);on.forEach(id=>{const x=document.getElementById(id);if(x)x.checked=true});
 n.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true});document.title=d.title;document.dispatchEvent(new Event("hush:swap"))}catch(e){w.dataset.loading="";w.dataset.failed="1"}finally{busy=0}};
 window.hushPull=pull;if(document.body.dataset.stale)pull();setInterval(()=>{if(!document.hidden)pull()},120e3);
@@ -2426,6 +2442,31 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${costBlock}
         ${metrics}`;
 
+  // CI minutes per day, stacked by workflow (top 7, the rest as Others)
+  const CIW = (s.ci || []).filter((w) => w.mins);
+  let ciMinutes = "";
+  if (CIW.length) {
+    const PAL = ["#5e6ad2", "#26b5ce", "#4cb782", "#f2c94c", "#f2994a", "#eb5757", "#bb87fc"];
+    const tot = (w) => w.mins.reduce((a, b) => a + b, 0);
+    const ranked = [...CIW].sort((a, b) => tot(b) - tot(a));
+    const series = ranked.slice(0, 7).map((w, i) => ({ name: w.name, color: PAL[i], v: w.mins }));
+    if (ranked.length > 7) series.push({ name: "Others", color: "#c4c6cc", v: ranked[0].mins.map((_, i) => ranked.slice(7).reduce((a, w) => a + w.mins[i], 0)) });
+    const dates = CIW[0].dates || [];
+    const dayTot = dates.map((_, i) => series.reduce((a, x) => a + x.v[i], 0));
+    const all = dayTot.reduce((a, b) => a + b, 0), mx = Math.max(1, ...dayTot);
+    const mm = (m) => (m >= 600 ? `${Math.round(m / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`);
+    const last7 = dayTot.slice(-8, -1).reduce((a, b) => a + b, 0) / 7;
+    ciMinutes = `<div class="group stats">
+      <div class="stat"><b>${mm(all)}</b><span>CI time in ${WINDOW} days</span><small>${Math.round(all).toLocaleString("en-US")} minutes, wall clock</small></div>
+      <div class="stat"><b>${mm(dayTot.at(-2) || 0)}</b><span>Yesterday</span><small>${mm(last7)} a day over the last 7</small></div>
+      <div class="stat"><b>${esc(series[0].name)}</b><span>Most time</span><small>${mm(tot(ranked[0]))}, ${Math.round((tot(ranked[0]) / Math.max(1, all)) * 100)}% of all</small></div>
+      <div class="stat"><b>${(s.ci || []).reduce((a, w) => a + w.runs, 0).toLocaleString("en-US")}</b><span>Runs</span><small>${mm(all / Math.max(1, (s.ci || []).reduce((a, w) => a + w.runs, 0)))} each on average</small></div>
+      <div class="chart"><div class="cols ci-cols">${dates.map((d, i) => `<div title="${d} · ${mm(dayTot[i])} in total${series.filter((x) => x.v[i] >= 0.5).sort((a, b) => b.v[i] - a.v[i]).map((x) => ` · ${esc(x.name)}: ${mm(x.v[i])}`).join("")}"><i class="stack" style="height:${(dayTot[i] / mx) * 100}%">${series.map((x) => (x.v[i] > 0 ? `<em style="height:${(x.v[i] / dayTot[i]) * 100}%;background:${x.color}"></em>` : "")).join("")}</i></div>`).join("")}</div>
+      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>today</span></div>
+      <div class="ci-legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div></div>
+    </div>`;
+  }
+
   const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
   return page(`${s.repo} · hush`, `<div class="app">
@@ -2453,10 +2494,10 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}
         ${s.routines.length ? `<div class="group grid2 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
-      ${view("ci", `${vh("CI", "How code reaches production: promotions, what is running now, and every workflow over the last 30 days.")}
-        ${promoSection}
-        ${liveBox(false)}
-        ${ci ? `<h2>Workflows</h2><div class="group grid2">${ci}</div>` : ""}`)}
+      ${view("ci", `${vh("CI", "How code reaches production: minutes spent, promotions, what is running now, and every workflow over the last 30 days.")}
+        ${ciMinutes}
+        ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}
+        ${promoSection}`)}
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
       ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}

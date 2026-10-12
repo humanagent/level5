@@ -83,6 +83,14 @@ async function gh(token, path, raw = false) {
   return raw ? r.text() : r.json();
 }
 
+async function ghql(token, query, variables) {
+  const r = await fetch("https://api.github.com/graphql", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "user-agent": "factory-status" }, body: JSON.stringify({ query, variables }) });
+  if (!r.ok) throw new Error(`GitHub GraphQL ${r.status}`);
+  const j = await r.json();
+  if (j.errors?.length) throw new Error(`GitHub GraphQL: ${j.errors[0].message}`);
+  return j.data;
+}
+
 // --- the GitHub App -----------------------------------------------------------------
 // The app's credentials live sealed in settings and are cached here (loaded at start-up).
 let APP = null;
@@ -326,15 +334,28 @@ async function readMetrics(token, repo, ci, issuesOpen) {
       merged.push(...batch.filter((p) => p.merged_at && p.merged_at.slice(0, 10) >= since));
       if (batch.length < 100 || batch.at(-1).updated_at.slice(0, 10) < since) break;
     }
+    // diff size of every merged PR: REST lists do not carry it, one GraphQL search page carries 100
+    const size = {};
+    try {
+      let after = null;
+      for (let i = 0; i < 6; i++) {
+        const d = await ghql(token, `query($q:String!,$a:String){search(query:$q,type:ISSUE,first:100,after:$a){pageInfo{hasNextPage endCursor}nodes{...on PullRequest{number additions deletions}}}}`, { q: `repo:${repo} is:pr is:merged merged:>=${since}`, a: after });
+        for (const n of d.search.nodes) if (n?.number) size[n.number] = [n.additions, n.deletions];
+        if (!d.search.pageInfo.hasNextPage) break;
+        after = d.search.pageInfo.endCursor;
+      }
+    } catch (e) { console.error("pr sizes:", e.message); }
+    const sz = (p, k) => size[p.number]?.[k] || 0;
     const hours = merged.map((p) => (Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5).sort((a, b) => a - b);
     const median = (xs) => (xs.length ? xs[Math.floor(xs.length / 2)] : null);
     const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
-    const perDay = days.map((d) => ({ d, all: merged.filter((p) => p.merged_at.slice(0, 10) === d).length, agents: merged.filter((p) => p.merged_at.slice(0, 10) === d && AGENT_BRANCH.test(p.head.ref)).length }));
+    const perDay = days.map((d) => ({ d, all: merged.filter((p) => p.merged_at.slice(0, 10) === d).length, agents: merged.filter((p) => p.merged_at.slice(0, 10) === d && AGENT_BRANCH.test(p.head.ref)).length, added: merged.filter((p) => p.merged_at.slice(0, 10) === d).reduce((a, p) => a + sz(p, 0), 0), deleted: merged.filter((p) => p.merged_at.slice(0, 10) === d).reduce((a, p) => a + sz(p, 1), 0) }));
+    const churn = merged.filter((p) => size[p.number]).map((p) => sz(p, 0) + sz(p, 1)).sort((a, b) => a - b);
     const runs = ci.reduce((a, w) => a + w.runs, 0);
     const passed = ci.reduce((a, w) => a + Math.round(((w.pct || 0) * w.runs) / 100), 0);
     const ages = issuesOpen.map((i) => (Date.now() - Date.parse(i.created_at)) / 864e5).sort((a, b) => a - b);
     return {
-      prs: { opened: prOpened, merged: prMerged, closed_unmerged: prClosedUnmerged, median_merge_h: median(hours), agent_share: merged.length ? Math.round((merged.filter((p) => AGENT_BRANCH.test(p.head.ref)).length / merged.length) * 100) : null, per_day: perDay },
+      prs: { opened: prOpened, merged: prMerged, closed_unmerged: prClosedUnmerged, median_merge_h: median(hours), agent_share: merged.length ? Math.round((merged.filter((p) => AGENT_BRANCH.test(p.head.ref)).length / merged.length) * 100) : null, per_day: perDay, added: merged.reduce((a, p) => a + sz(p, 0), 0), deleted: merged.reduce((a, p) => a + sz(p, 1), 0), median_lines: median(churn), sized: churn.length, size },
       issues: { opened: issOpened, closed: issClosed, open: issuesOpen.length, median_age_d: median(ages) },
       ci: { runs, pass_rate: runs ? Math.round((passed / runs) * 1000) / 10 : null, failing_now: ci.filter((w) => w.last?.conclusion === "failure").map((w) => w.name) },
     };
@@ -1039,7 +1060,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 12;
+const SNAP_V = 13;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1504,6 +1525,9 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .acts-pop{display:none;position:absolute;right:0;top:36px;z-index:60;width:min(520px,calc(100vw - 24px));max-height:72vh;overflow:auto;padding:4px 14px 12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px -10px rgba(0,28,36,.3)}html[data-acts] .acts-pop{display:block}
 .acts-pop .live-head h2{font-size:13px}.acts-pop .job:not([data-st=in_progress]){display:none}.acts-pop .recent .rrow:nth-child(n+7){display:none}.acts-pop .group{margin-bottom:10px}
 @media(max-width:820px){.tb-acts>span:nth-child(2){display:none}}
+.htip{position:fixed;z-index:200;pointer-events:none;max-width:300px;padding:10px 12px;background:var(--bg);border:1px solid #d1d5db;border-radius:10px;box-shadow:0 8px 24px -6px rgba(0,28,36,.3);font-size:13px;line-height:1.45;color:var(--ink)}.htip b{display:block;margin-bottom:4px;font-size:13.5px}.htip div{color:var(--muted)}
+.cols:hover>div:not(:hover) i,.bars:hover>i:not(:hover){opacity:.45}.cols i,.bars i{transition:opacity .12s}
+.stats5{grid-template-columns:repeat(5,minmax(0,1fr))}.stat b.loc span{font-size:inherit}.loc .add{color:var(--ok)}.loc.sm{font:500 12px var(--mono);white-space:nowrap}.loc .del{color:var(--bad)}@media(max-width:1000px){.stats5{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1900,8 +1924,19 @@ if(X.data)draw();else fetchData()})()</script>`;
 const SEC_JS = `<script>(()=>{if(window.hushSec)return;window.hushSec=1;
 document.addEventListener("input",ev=>{if(!ev.target.classList||!ev.target.classList.contains("sec-q"))return;const q=ev.target.value.trim().toLowerCase();document.querySelectorAll(".sec-m tr[data-k]").forEach(r=>r.hidden=q&&!r.dataset.k.includes(q))});
 document.addEventListener("change",ev=>{if(ev.target.classList&&ev.target.classList.contains("sl-cb"))document.querySelectorAll(".roles-g").forEach(g=>g.classList.toggle("show-sl",ev.target.checked))})})()</script>`;
+// Tooltips: every title="a · b · c" in the app shows at once, styled like the cost chart's: the first
+// part (a date gets spelled out) as the heading, one line per other part. The native title is
+// moved to data-tip so the browser's own slow tooltip never shows.
+const TIP_JS = `<script>(()=>{if(window.hushTip)return;window.hushTip=1;const t=document.createElement("div");t.className="htip";t.hidden=true;document.body.appendChild(t);
+const e=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const day=x=>/^\\d{4}-\\d{2}-\\d{2}$/.test(x)?new Date(x+"T12:00:00Z").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",timeZone:"UTC"}):x;
+let cur=null;document.addEventListener("mouseover",ev=>{const el=ev.target.closest&&ev.target.closest("[title],[data-tip]");if(!el||el.closest(".win-bar,.tb-right,.cx-svg")){t.hidden=true;cur=null;return}
+if(el.hasAttribute("title")){el.dataset.tip=el.getAttribute("title");el.removeAttribute("title")}const txt=el.dataset.tip;if(!txt){t.hidden=true;return}cur=el;
+const [h,...rest]=txt.split(" · ");t.innerHTML="<b>"+e(day(h))+"</b>"+rest.map(x=>"<div>"+e(x)+"</div>").join("");t.hidden=false});
+document.addEventListener("mousemove",ev=>{if(t.hidden)return;const w=t.offsetWidth,h=t.offsetHeight;let x=ev.clientX+14,y=ev.clientY+16;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-12;t.style.left=x+"px";t.style.top=y+"px"});
+document.addEventListener("mouseout",ev=>{if(cur&&!cur.contains(ev.relatedTarget)){t.hidden=true;cur=null}});addEventListener("scroll",()=>{t.hidden=true},{passive:true})})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -2108,7 +2143,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ${C.sessions.length ? `<h2>Last ${C.sessions.length === 1 ? "Claude Code session" : `${C.sessions.length} Claude Code sessions`}</h2><div><div class="group" style="margin-bottom:0">${C.sessions.map((x) => `<div class="line"><span class="name"><code>/${esc(x.name)}</code><span class="sub">${ago(x.at)} · ${esc(x.models.join(", "))}${x.turns ? ` · ${x.turns} turns` : ""}</span></span><span class="meta"><b>${tk(x.tokens.total)}</b> tokens <span class="sub">${tk(x.tokens.input + x.tokens.cache_write)} in · ${tk(x.tokens.cache_read)} cached · ${tk(x.tokens.output)} out${x.usd != null ? ` · ~${usd(x.usd)}` : ""}</span></span></div>`).join("")}</div><div class="cost-note">Dollars are estimated at API list prices. On a Claude subscription they show what the same tokens would cost, not what you pay. A model with no known price shows tokens only; set it under <code>prices</code> in <code>.claude/factory.json</code>.</div></div>` : ""}`;
   const prTabs = [
     ["open", "Open", s.queue.prs.map((p) => prLine(p, p.draft ? "draft" : "open", `opened ${ago(p.created_at)}${p.draft ? " · draft" : ""}`, ciTag(p)))],
-    ["merged", "Merged", (s.queue.merged || []).slice(0, 15).map((p) => prLine(p, "merged", `merged ${ago(p.merged_at)}`))],
+    ["merged", "Merged", (s.queue.merged || []).slice(0, 15).map((p) => { const z = s.metrics?.prs?.size?.[p.number]; return prLine(p, "merged", `merged ${ago(p.merged_at)}`, z ? `<span class="loc sm"><span class="add">+${z[0].toLocaleString("en-US")}</span> <span class="del">−${z[1].toLocaleString("en-US")}</span></span>` : ""); })],
     ["closed", "Closed", (s.queue.closed || []).slice(0, 15).map((p) => prLine(p, "closed", `closed ${ago(p.closed_at)}`))],
   ];
   const prSection = `<div class="tabs">${prTabs.map(([k, label, rows], i) => `<input type="radio" name="prtab" id="prtab-${k}"${i === 0 ? " checked" : ""}><label for="prtab-${k}">${PR_ICON[k]}${label} <span class="count">${k === "open" ? rows.length : rows.length + (rows.length === 15 ? "+" : "")}</span></label>`).join("")}
@@ -2275,15 +2310,17 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const dur = (h) => (h == null ? "–" : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${Math.round(h * 10) / 10} h` : `${Math.round(h / 24)} d`);
   const n = (x) => (x == null ? "–" : x);
   const maxDay = M ? Math.max(1, ...M.prs.per_day.map((d) => d.all)) : 1;
+  const kn = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n));
   const metrics = !M ? "" : `
     <h2>Last ${WINDOW} days</h2>
-    <div class="group stats">
+    <div class="group stats stats5">
       <div class="stat"><b>${n(M.prs.merged)}</b><span>PRs merged</span><small>${M.prs.agent_share == null ? "" : `${M.prs.agent_share}% by agents · `}${n(M.prs.opened)} opened</small></div>
       <div class="stat"><b>${dur(M.prs.median_merge_h)}</b><span>Median time to merge</span><small>${n(M.prs.closed_unmerged)} closed without merge</small></div>
       <div class="stat"><b>${n(M.issues.closed)}<i>/${n(M.issues.opened)}</i></b><span>Issues closed / opened</span><small>${M.issues.open} open${M.issues.median_age_d == null ? "" : `, median age ${Math.round(M.issues.median_age_d)} d`}</small></div>
+      <div class="stat"><b class="loc">${M.prs.added == null ? "–" : `<span class="add">+${kn(M.prs.added)}</span> <span class="del">−${kn(M.prs.deleted)}</span>`}</b><span>Lines changed</span><small>${M.prs.median_lines == null ? "in merged PRs" : `median PR ${M.prs.median_lines.toLocaleString("en-US")} lines`}</small></div>
       <div class="stat"><b>${M.ci.pass_rate == null ? "–" : M.ci.pass_rate + "%"}</b><span>CI runs passing</span><small data-s="${M.ci.failing_now.length ? "bad" : "ok"}">${M.ci.failing_now.length ? `Failing now: ${esc(M.ci.failing_now.join(", "))}` : `${M.ci.runs} runs, none failing now`}</small></div>
       <div class="chart" aria-label="PRs merged per day">
-        <div class="cols">${M.prs.per_day.map((d) => `<div title="${d.d} · ${d.all} merged, ${d.agents} by agents"><i style="height:${(d.all / maxDay) * 100}%"><em style="height:${d.all ? (d.agents / d.all) * 100 : 0}%"></em></i></div>`).join("")}</div>
+        <div class="cols">${M.prs.per_day.map((d) => `<div title="${d.d} · ${d.all} merged · ${d.agents} by agents · ${d.all - d.agents} by people${d.added != null ? ` · +${d.added.toLocaleString("en-US")} −${(d.deleted || 0).toLocaleString("en-US")} lines` : ""}"><i style="height:${(d.all / maxDay) * 100}%"><em style="height:${d.all ? (d.agents / d.all) * 100 : 0}%"></em></i></div>`).join("")}</div>
         <div class="axis"><span>PRs merged per day</span><span class="rule"></span><span><span class="key"></span> by agents</span></div>
       </div>
     </div>`;

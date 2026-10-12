@@ -689,11 +689,13 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
       return { s, label, runs: 0, read: null, note: "", status: "", usd: cost };
     });
     const due = buckets.filter((x) => x.s);
+    // judged on the last run that was due, not on today's bar: after midnight UTC today has nothing due yet
+    const missedLast = due.at(-1)?.s === "miss";
     const last = own.map((x) => x.ts).sort().pop() || null;
     const lastVol = own.length ? vol(own.reduce((a, x) => (x.ts > a.ts ? x : a))) : null;
     return {
       id, weekly, routine: routine?.name || "", unit: c.volume_key || "",
-      state: mon && mon.state === "alive" && buckets.at(-1).s === "miss" ? "late" : mon ? mon.state : !own.length ? "silent" : buckets.at(-1).s === "miss" || buckets.at(-2)?.s === "miss" ? "dead" : "alive",
+      state: mon && mon.state === "alive" && missedLast ? "late" : mon ? mon.state : !own.length ? "silent" : missedLast ? "dead" : "alive",
       why: mon?.why || "",
       buckets, last, read: lastVol,
       on_time: due.length ? Math.round((due.filter((x) => x.s === "ok").length / due.length) * 1000) / 10 : null,
@@ -713,7 +715,25 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
   groups.sort((a, b) => rank(a) - rank(b));
   const loose = rows.filter((x) => !x.routine);
   if (loose.length) groups.push({ name: "Other", cron: "", cmd: "", prompt: "", next_run: null, usd_30d: usdIn(loose.map((x) => x.id), now - WINDOW * 864e5, now + 864e5), rows: loose });
-  return { groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
+  // per routine, not per skill: any heartbeat from the routine's session or its skills counts as a run
+  const hist = {};
+  for (const r of cc) {
+    const weekly = cronPeriodHours(r.cron) >= 24 * 6, n = weekly ? WEEKS : WINDOW, span = weekly ? 7 * 864e5 : 864e5;
+    const skillIds = rows.filter((x) => x.routine === r.name).map((x) => x.id), cmd = cmdOf(r), match = routineMatch(r);
+    const mine = beats.filter((b) => skillIds.includes(b.monitor) || match(b.monitor)).map((b) => Date.parse(b.ts));
+    const start = Math.min(...mine, Infinity);
+    const buckets = [...Array(n)].map((_, i) => {
+      const hi = weekly ? now - (n - 1 - i) * span : day0 + (i - (n - 2)) * span, lo = hi - span;
+      const runs = mine.filter((t) => t >= lo && t < hi).length, usd = cmd ? usdIn([cmd], lo, hi) : 0;
+      const label = weekly ? `Week to ${fmt(hi - 1)}` : fmt(lo);
+      const s = runs ? "ok" : hi > start && fireOn(r.cron, Math.max(lo, start), Math.min(hi, now - GRACE)) ? "miss" : "";
+      return { s, label, runs, usd };
+    });
+    const runs30 = beats.filter((b) => (skillIds.includes(b.monitor) || match(b.monitor)) && b.source === "session" && Date.parse(b.ts) >= now - WINDOW * 864e5).length;
+    const usd30 = cmd ? usdIn([cmd], now - WINDOW * 864e5, now + 864e5) : 0;
+    hist[r.name] = { weekly, buckets, skills: skillIds, usd_30d: usd30, usd_run: runs30 && usd30 ? usd30 / runs30 : null };
+  }
+  return { routines: hist, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
 }
 
 async function snapshot(repoRow) {
@@ -727,6 +747,16 @@ async function snapshot(repoRow) {
   const skills = await readSkills(factory, repoRow.id, monitors, routines, factory.prices);
   const runsByName = Object.fromEntries(queue.runs.map((r) => [r.name, r]));
   for (const r of routines) if (r.source === "GitHub Actions" && runsByName[r.name]) [r.last_seen, r.evidence] = [runsByName[r.name].at, "Actions run"];
+  for (const r of routines) {
+    const w = r.source === "GitHub Actions" && (ci || []).find((x) => x.path === r.prompt || x.name === r.name);
+    if (!w) continue;
+    const first = w.days.findIndex(Boolean);
+    skills.routines[r.name] = { weekly: false, actions: true, skills: [], usd_30d: 0, usd_run: null, buckets: w.days.slice(-WINDOW).map((d, i, all) => {
+      const t = w.tips[w.tips.length - all.length + i] || {}, lo = Date.now() - (all.length - i) * 864e5;
+      return { s: d === "ok" ? "ok" : d ? "warn" : first >= 0 && i > first && i < all.length - 1 && cronPeriodHours(r.cron) <= 24 ? "miss" : "", label: new Date(lo + 864e5).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }), runs: (t.ok || 0) + (t.bad || 0), failed: t.bad || 0 };
+    }) };
+    if (!r.last_seen && w.last) [r.last_seen, r.evidence] = [w.last.at, "Actions run"];
+  }
   const bad = monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state));
   const warn = monitors.filter((m) => m.state === "warn");
   const lateRoutines = routines.filter((r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2);
@@ -1009,7 +1039,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 11;
+const SNAP_V = 12;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1093,7 +1123,7 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 @keyframes sk{0%{background-position:100% 0}100%{background-position:0 0}}
 .sk-t{display:block;height:12px}.row-head .sk-t{display:inline-block}.stat .sk-t{display:block}
 .bars i.sk{background:linear-gradient(90deg,#eef0f2 0,#f6f7f8 40%,#eef0f2 80%);background-size:3000% 100%}
-.sk-banner{background:#e3e5e8}
+.sk-banner{background:#e3e5e8}.sk-nav a{display:flex;align-items:center;gap:10px;padding:7px 10px}
 .sk-note{color:var(--faint);font-size:13px;text-align:center;margin-top:8px}
 .updated::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-left:8px;vertical-align:middle;background:transparent}
 .wrap[data-loading="1"] .updated::after{background:var(--warn)}
@@ -1459,6 +1489,9 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .askp .chat-log{flex:1;max-height:none;min-height:0}.askp .chips{display:flex;flex-direction:column;align-items:flex-start;gap:6px}.askp .ask textarea{min-height:56px}
 @media(min-width:1100px){html[data-ask] .app .main{width:auto;margin-right:400px}}
 @media(max-width:820px){.askp{width:auto;left:0}.tb-ask span{display:none}}
+.rt .rt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rt .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rt .name b{font-size:14.5px;font-weight:600}.rt .name small{color:var(--muted);font-size:12.5px}.rt .name small a{color:var(--muted);text-decoration:none}.rt .name small a:hover{color:var(--ink)}.rt .name code{font-size:12px}
+.rt-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 10px}.rt-stats span{display:flex;flex-direction:column;font-size:11.5px;color:var(--faint)}.rt-stats b{font-size:14px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.rt-hint{margin:8px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rt-hint code{font-size:11.5px}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1844,17 +1877,29 @@ function skeletonPage(repo) {
   const bars = `<div class="bars">${'<i class="sk"></i>'.repeat(WINDOW)}</div>`;
   const row = (w) => `<div class="row"><div class="row-head"><span class="sk sk-t" style="width:${w}px"></span><span class="sk sk-t" style="width:84px"></span></div>${bars}<div class="axis"><span class="sk sk-t" style="width:100%;height:8px"></span></div></div>`;
   const stat = `<div class="stat"><span class="sk sk-t" style="width:56px;height:26px"></span><span class="sk sk-t" style="width:110px;margin-top:10px"></span><span class="sk sk-t" style="width:90px;margin-top:8px;height:8px"></span></div>`;
-  return page(`${repo} · hush`, `
-    <header class="top">${LOGO}<span class="updated">${esc(repo)} · reading GitHub…</span></header>
-    <div class="banner sk-banner"><span class="sk sk-t" style="width:200px;background:rgba(255,255,255,.55)"></span></div>
-    <p class="banner-sub"><span class="sk sk-t" style="width:62%"></span></p>
-    <h2>Last ${WINDOW} days</h2>
-    <div class="group stats">${stat.repeat(4)}</div>
-    <h2>Monitors</h2>
-    <div class="group grid2">${[120, 90, 140, 100].map(row).join("")}</div>
-    <h2>Routines</h2>
-    <div class="group">${row(110)}${row(80)}</div>
-    <p class="sk-note" role="status">The first read of a repo takes a few seconds. After that it opens instantly.</p>
+  // the real shell (top bar, sidebar, main column) so nothing jumps when the page arrives
+  const nav = [64, 78, 92, 30, 96, 52, 46, 40, 62].map((w) => `<a><span class="sk sk-t" style="width:16px;height:14px"></span><span class="sk sk-t" style="width:${w}px"></span></a>`).join("");
+  return page(`${repo} · hush`, `<div class="app">
+    <header class="topbar">
+      <a class="logo" href="/">${MARK()}<span>hush</span></a>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Repositories</a><span>/</span><b>${esc(repo)}</b></nav>
+      <span class="tb-right"><span class="updated">reading GitHub…</span></span>
+    </header>
+    <aside class="side">
+      <div class="repo-box"><span class="repo-name">${esc(repo)}</span><span class="sk sk-t" style="width:96px;margin-top:6px"></span></div>
+      <nav class="snav sk-nav" aria-hidden="true">${nav}</nav>
+    </aside>
+    <main class="main">
+      <div class="banner sk-banner"><span class="sk sk-t" style="width:200px;background:rgba(255,255,255,.55)"></span></div>
+      <p class="banner-sub"><span class="sk sk-t" style="width:62%"></span></p>
+      <h2>Needs a look</h2>
+      <div class="group grid2">${[120, 90, 140, 100].map(row).join("")}</div>
+      <h2>Costs</h2>
+      <div class="group stats">${stat.repeat(4)}<div class="chart"><span class="sk" style="display:block;height:200px"></span></div></div>
+      <h2>Last ${WINDOW} days</h2>
+      <div class="group stats">${stat.repeat(4)}</div>
+      <p class="sk-note" role="status">The first read of a repo takes a few seconds. After that it opens instantly.</p>
+    </main></div>
   `, { live: true, stale: true, app: true });
 }
 
@@ -1938,11 +1983,45 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     if (r.period_h === 24) return `daily ${hh}`;
     return `${DOW[t.getUTCDay()]} ${hh}`;
   };
-  const routineRows = s.routines.map((r) => {
-    const late = r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
-    const [st, label] = !r.last_seen ? ["none", "No evidence"] : late ? ["bad", "Late"] : ["ok", `Ran ${ago(r.last_seen)}`];
-    return `<div class="line openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0"><span class="name">${esc(r.name.replace(/^App: /, ""))}<span class="sub">${esc(r.source)} · ${esc(r.prompt)} · ${esc(when(r))}${r.model ? " · " + esc(r.model) : ""}</span></span><span class="meta"><span class="state" data-s="${st}">${label}</span><span class="sub">next ${until(r.next_run)}</span></span></div>`;
-  }).join("");
+  // Automations: did each routine run when it should have, and what it cost. Whether the run was any
+  // good is Monitors' question; here a routine's skills are only a count and a link.
+  const RH = s.status?.routines || {};
+  const fullDay = (d) => d.replace(/s$/, "");
+  const routineCard = (r) => {
+    const h = RH[r.name], cmd = r.source === "Claude Code" ? ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] : "";
+    const b = h?.buckets || [], due = b.filter((x) => x.s), recent = b.slice(-7).filter((x) => x.s);
+    const missedLast = due.at(-1)?.s === "miss";
+    const missRecent = recent.filter((x) => x.s === "miss").length, failed = b.filter((x) => x.s === "warn").length;
+    const onTime = due.length ? Math.round((due.filter((x) => x.s !== "miss").length / due.length) * 100) : null;
+    const lastFire = (() => { const t = new Date(r.next_run || Date.now()); t.setTime(t.getTime() - r.period_h * 36e5); return r.period_h >= 24 * 6 ? `${fullDay(DOW[t.getUTCDay()])} ${t.toISOString().slice(11, 16)}` : t.toISOString().slice(11, 16); })();
+    const [st, label, rank] = !r.last_seen && !due.length ? ["none", r.source === "Claude Code" ? "Not reporting" : "No runs found", 2]
+      : missedLast ? ["bad", `Missed the ${lastFire} run`, 0]
+      : missRecent ? ["warn", `Missed ${missRecent} of the last ${recent.length}`, 0]
+      : failed && b.at(-1)?.s === "warn" ? ["bad", "Last run failed", 0]
+      : ["ok", "On schedule", 1];
+    const tip = (x) => [x.label, { ok: x.failed ? `${x.runs} runs, ${x.failed} failed` : x.runs > 1 ? `ran ${x.runs} times` : "ran", warn: `${x.failed} of ${x.runs} runs failed`, miss: "should have run, did not", "": "nothing scheduled" }[x.s], x.usd ? usd(x.usd) : ""].filter(Boolean).join(" · ");
+    const facts = [
+      cmd ? `<code>/${esc(cmd)}</code>` : r.source === "GitHub Actions" ? `<code>${esc(r.prompt.replace(/^\.github\/workflows\//, ""))}</code>` : `<span class="faint">no slash command</span>`,
+      esc(when(r)),
+      r.model ? esc(r.model) : r.source === "GitHub Actions" ? "GitHub Actions" : "",
+      h?.skills?.length ? `<a href="#monitors">${h.skills.length} skill${h.skills.length === 1 ? "" : "s"} →</a>` : "",
+    ].filter(Boolean).join(" · ");
+    const stats = [
+      `<span><b>${r.last_seen ? ago(r.last_seen) : "never"}</b>last run</span>`,
+      `<span><b>${until(r.next_run).replace(/^in /, "")}</b>next run</span>`,
+      `<span><b>${onTime == null ? "–" : onTime + "%"}</b>on time</span>`,
+      r.source === "Claude Code" ? `<span><b>${h?.usd_30d ? usd(h.usd_30d) : "–"}</b>${h?.usd_run ? `${usd(h.usd_run)} a run` : `in ${WINDOW} days`}</span>` : "",
+    ].join("");
+    const hint = st === "none" ? `<p class="rt-hint">${r.source === "Claude Code" ? `Nothing from this routine reached Hush. Its session ends without a heartbeat${cmd ? "" : " because its prompt runs no slash command"}. <a href="#setup">Install the hook</a> or end the prompt with <code>hush.sh beat</code>.` : "No run of this workflow in the window."}</p>` : "";
+    return { rank, html: `<div class="row rt openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0">
+      <div class="rt-top"><span class="name"><b>${esc(r.name.replace(/^App: /, ""))}</b><small>${facts}</small></span><span class="state" data-s="${st}">${label}</span></div>
+      <div class="rt-stats">${stats}</div>
+      ${b.length ? `<div class="bars${h.weekly ? " wk" : ""}">${b.map((x) => `<i data-s="${x.s}" title="${esc(tip(x))}"></i>`).join("")}</div>
+      <div class="axis"><span>${h.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${h.weekly ? "this week" : "today"}</span></div>` : ""}
+      ${hint}
+    </div>` };
+  };
+  const routineRows = s.routines.map(routineCard).map((x, i) => ({ ...x, i })).sort((a, b) => a.rank - b.rank || a.i - b.i).map((x) => x.html).join("");
 
   const ci = (s.ci || []).map((w) => {
     const lastS = !w.last ? ["none", "No runs"] : w.last.status !== "completed" ? ["warn", "Running"] : w.last.conclusion === "success" ? ["ok", "Passing"] : w.last.conclusion === "failure" ? ["bad", "Failing"] : ["none", w.last.conclusion];
@@ -2305,8 +2384,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("status", statusView)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}
         ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
-      ${view("automations", `${vh("Automations", "Claude Code routines and scheduled GitHub Actions, with their next run and proof that the last one happened.")}
-        ${s.routines.length ? `<div class="group">${routineRows}</div>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
+      ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}
+        ${s.routines.length ? `<div class="group grid2 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "How code reaches production: promotions, what is running now, and every workflow over the last 30 days.")}
         ${promoSection}
         ${liveBox(false)}
@@ -2409,7 +2488,7 @@ const readBody = (req, limit = 2e6) =>
   });
 const form = async (req) => Object.fromEntries(new URLSearchParams(await readBody(req)));
 const send = (res, code, body, headers = {}) => {
-  res.writeHead(code, { "content-type": "text/html; charset=utf-8", "x-frame-options": "DENY", "referrer-policy": "same-origin", ...headers });
+  res.writeHead(code, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-frame-options": "DENY", "referrer-policy": "same-origin", ...headers });
   res.end(body);
 };
 const json = (res, code, obj) => send(res, code, JSON.stringify(obj), { "content-type": "application/json" });

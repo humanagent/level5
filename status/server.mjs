@@ -785,7 +785,13 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
     const mine = beats.filter((b) => skillIds.includes(b.monitor) || match(b.monitor));
     return { name: r.name.replace(/^App: /, ""), tokens: dates.map((d) => sess.filter((x) => x.name === cmd && x.day === d).reduce((a, x) => a + x.tok, 0)), runs: dates.map((d) => { const today = mine.filter((b) => b.ts.slice(0, 10) === d); return Math.max(today.filter((b) => b.source === "session").length, today.length ? 1 : 0); }) };
   }) };
-  return { routines: hist, daily, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
+  // Reports: every weekly skill (and anything that sent a report), its runs newest first
+  const reportIds = [...new Set([...rows.filter((x) => x.weekly).map((x) => x.id), ...beats.filter((b) => b.report).map((b) => b.monitor)])];
+  const reports = reportIds.map((id) => {
+    const r = rows.find((x) => x.id === id), mine = beats.filter((b) => b.monitor === id && b.source !== "session").sort((a, b) => (a.ts < b.ts ? 1 : -1));
+    return { id, routine: r?.routine || "", state: r?.state || "alive", buckets: r?.buckets || [], items: mine.slice(0, 12).map((b) => ({ ts: b.ts, status: b.status, note: b.note || "", swept: b.swept || {}, filed: b.filed || [], title: b.title || "", report: b.report || "" })) };
+  });
+  return { routines: hist, daily, reports, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
 }
 
 async function snapshot(repoRow) {
@@ -1091,7 +1097,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 15;
+const SNAP_V = 16;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1556,6 +1562,11 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}.grid3>*{background:var(--bg)}.grid3 .bars{gap:1.5px}.sk-row .row-head{gap:8px}.sk-row .row-head .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:1100px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.grid3{grid-template-columns:minmax(0,1fr)}}
 .more5:not(.all)>:nth-child(n+6):not(.more-btn){display:none}.more-btn{display:block;width:100%;padding:10px 16px;border:0;border-top:1px solid var(--line);background:none;color:var(--muted);font:500 12.5px inherit;text-align:left;cursor:pointer}.more-btn:hover{color:var(--ink);background:rgba(15,16,20,.025)}
+.rps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}@media(max-width:1000px){.rps{grid-template-columns:minmax(0,1fr)}}
+.rp{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}.rp-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.rp-h .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rp-h .name b{font:600 14px var(--mono)}.rp-h small{color:var(--faint);font-size:12px}
+.rp .bars{margin:10px 0 4px}.rp-none{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rp-none code{font-size:11.5px}
+.rp-body{margin-top:10px}.rp-body summary{cursor:pointer;font-weight:600;font-size:13px}.rp-body .md{margin-top:6px;font-size:13px;line-height:1.55;color:var(--ink2);max-height:420px;overflow:auto}.rp-body .md h3,.rp-body .md h4,.rp-body .md h5{margin:10px 0 4px;font-size:13.5px}.rp-body .md ul{padding-left:18px;margin:4px 0}
+.rp-past{margin:12px 0 0;box-shadow:none;border:1px solid var(--line)}.rp-past .line{padding:8px 12px}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1601,7 +1612,7 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "setup"];
+const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "reports", "services", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
@@ -1729,7 +1740,7 @@ const short = (s) => (SHORT.find(([re]) => re.test(s.name)) || [null, s.name.rep
 const nice = (s) => s.name.replace(/^(Amazon|AWS) /, "").replace(/Elastic Container Service/, "ECS").replace(/Simple Storage Service/, "S3").replace(/Relational Database Service/, "RDS").replace(/Simple Email Service/, "SES").replace(/Elastic Compute Cloud - Compute/, "EC2").replace(/Virtual Private Cloud/, "VPC").replace(/Key Management Service/, "KMS").replace(/Elastic Container Registry \\(ECR\\)/, "ECR").replace(/^AmazonCloudTrail$|^CloudTrail$/, "CloudTrail").replace(/^Amazon/, "").replace(/Systems Manager/, "Parameter Store").replace(/Claude Code sessions/, "Claude Code");
 async function build() {
   const host = document.getElementById("svc-map"), dataEl = document.getElementById("map-data");
-  if (!host || !dataEl || document.documentElement.dataset.view !== "map") return;
+  if (!host || !dataEl || document.documentElement.dataset.view !== "services") return;
   if (M.host === host) return;
   M.dispose?.();
   let THREE, OrbitControls;
@@ -1825,7 +1836,7 @@ async function build() {
   const v3 = new THREE.Vector3(); let raf;
   const loop = (t) => {
     raf = requestAnimationFrame(loop);
-    if (document.hidden || document.documentElement.dataset.view !== "map") return;
+    if (document.hidden || document.documentElement.dataset.view !== "services") return;
     controls.update();
     for (const m of dots) { const u = m.userData;
       if (u.road) { u.z += u.v; if (u.z > BD / 2 - 0.5) u.z = -BD / 2 + 0.5; if (u.z < -BD / 2 + 0.5) u.z = BD / 2 - 0.5; m.position.set(u.x, 0.12, u.z); }
@@ -2329,7 +2340,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
   const NAV_ICON = {
     security: `<path d="M8 1.8l5 2v4c0 3.2-2.2 5.5-5 6.4-2.8-.9-5-3.2-5-6.4v-4z"/><path d="M5.8 8.2l1.6 1.6 3-3.2"/>`,
-    map: `<path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z"/><path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2"/>`,
+    reports: `<path d="M4 1.8h5.5l3 3v9.4H4z"/><path d="M9.5 1.8v3h3M6 8h5M6 10.5h5M6 13h3"/>`,
+    services: `<path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z"/><path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2"/>`,
     assistant: `<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/>`,
     overview: `<path d="M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z"/>`,
     monitors: `<path d="M1.5 8.5h3l1.8-4.5 3.4 8.5 1.8-4h3"/>`,
@@ -2357,7 +2369,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ["prs", "Pull requests", count(s.queue.prs.length)],
     ["issues", "Issues", count(s.queue.issues.length)],
     ["costs", "Costs", C ? `<span class="nc">${usd(C.total_usd)}</span>` : ""],
-    ["map", "Map", ""],
+    ["reports", "Reports", (() => { const n = (s.status?.reports || []).filter((r) => ["dead", "late", "warn", "degraded", "lying"].includes(r.state)).length; return n ? badge(n, "bad") : count((s.status?.reports || []).length); })()],
+    ["services", "Services", ""],
   ];
   const navLink = ([k, label, extra]) => `<a href="#${k}" data-nav="${k}">${ico(k)}<span>${label}</span>${extra}</a>`;
   const vh = (title, desc) => `<header class="vh"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</header>`;
@@ -2490,6 +2503,39 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ], toks ? dayChart(AD.dates, tokSeries, (n) => tk(n) + " tokens") : dayChart(AD.dates, runSeries, (n) => plural(n, "run")));
   }
 
+
+  // Reports: the weekly ones. Unit: reports per week, delivered or missed.
+  const mdHtml = (t) => esc(t).replace(/^### (.+)$/gm, "<h5>$1</h5>").replace(/^## (.+)$/gm, "<h4>$1</h4>").replace(/^# (.+)$/gm, "<h3>$1</h3>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/^[-*] (.+)$/gm, "<li>$1</li>").replace(/(<li>.*<\/li>\n?)+/g, (m) => "<ul>" + m.replace(/\n/g, "") + "</ul>").replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>");
+  const RP = s.status?.reports || [];
+  let reportsView = `<div class="group"><div class="line"><span class="hint">No weekly reports yet. A skill whose routine runs once a week shows up here.</span></div></div>`;
+  if (RP.length) {
+    const wk = RP.filter((r) => r.buckets.length === 12);
+    const wkLabels = [...Array(12)].map((_, i) => `Week to ${new Date(Date.now() - (11 - i) * 7 * 864e5).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`);
+    const sent = wkLabels.map((_, i) => wk.filter((r) => ["ok", "warn", "empty"].includes(r.buckets[i]?.s)).length), missed = wkLabels.map((_, i) => wk.filter((r) => r.buckets[i]?.s === "miss").length);
+    const totS = sent.reduce((a, b) => a + b, 0), totM = missed.reduce((a, b) => a + b, 0);
+    const last = RP.flatMap((r) => r.items.slice(0, 1).map((x) => ({ ...x, id: r.id }))).sort((a, b) => (a.ts < b.ts ? 1 : -1))[0];
+    const head2 = head([
+      tile(num(totS), "Reports in 12 weeks", `${RP.length} weekly report${RP.length === 1 ? "" : "s"}`),
+      tile(totS + totM ? Math.round((totS / (totS + totM)) * 100) + "%" : "–", "Delivered", "of the ones that were due"),
+      tile(num(totM), "Missed", "should have gone out, did not"),
+      tile(last ? ago(last.ts).replace(" ago", "") : "–", "Since the last one", last ? esc(last.id) : ""),
+    ], dayChart(wkLabels, [{ name: "Delivered", color: "#4cb782", v: sent }, { name: "Missed", color: "#eb5757", v: missed }], (n) => plural(n, "report")).replace(`${WINDOW} days ago`, "12 weeks ago").replace(">today<", ">this week<"));
+    const card = (r) => {
+      const [ps, label] = SK[r.state] || ["none", r.state], x = r.items[0], rt = s.routines.find((y) => y.name === r.routine);
+      const read = x ? Object.entries(x.swept || {}).map(([k, v]) => `${typeof v === "number" ? v.toLocaleString("en-US") : esc(JSON.stringify(v))} ${esc(k)}`).join(" · ") : "";
+      const body = x?.report ? `<details class="rp-body" open><summary>${esc(x.title || "This week's report")}</summary><div class="md"><p>${mdHtml(x.report)}</p></div></details>`
+        : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Hush. Add <code>"report"</code> with its text to the skill's heartbeat to read it here.</p>`;
+      const past = r.items.slice(1).map((y) => `<div class="line"><span class="name"><span>${new Date(y.ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}<span class="sub">${esc(y.title || y.note || Object.entries(y.swept || {}).map(([k, v]) => `${v} ${k}`).join(" · "))}</span></span></span><span class="meta"><span class="state" data-s="${y.status === "ok" ? "ok" : "warn"}">${y.status === "ok" ? "Delivered" : esc(y.status)}</span></span></div>`).join("");
+      return `<section class="rp">
+        <div class="rp-h"><span class="name"><b>${esc(r.id)}</b><small>${[rt ? esc(when(rt).replace(" UTC", "")) : "", x ? `last ${ago(x.ts)}` : "never sent", read].filter(Boolean).join(" · ")}</small></span><span class="state" data-s="${ps}">${label === "Running" ? "Delivered" : label}</span></div>
+        ${r.buckets.length ? `<div class="bars wk">${r.buckets.map((b) => `<i data-s="${b.s === "empty" ? "warn" : b.s}" title="${esc(barTip(r, b))}"></i>`).join("")}</div>` : ""}
+        ${body}
+        ${past ? `<div class="group more5 rp-past">${past}${more(r.items.length - 1)}</div>` : ""}
+      </section>`;
+    };
+    reportsView = head2 + `<div class="rps">${RP.map(card).join("")}</div>`;
+  }
+
   // Pull requests: lines added and removed per day, side by side
   let prHead = "";
   if (M?.prs?.per_day?.length && M.prs.added != null) {
@@ -2548,7 +2594,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("prs", `${vh("Pull requests", "Code merged per day, open PRs with their CI, and the latest merged and closed.")}${prHead}${prSection}`)}
       ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${incidents}`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
-      ${view("map", `${vh("Map", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
+      ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
+      ${view("services", `${vh("Services", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
@@ -2652,7 +2699,7 @@ async function insertBeat(repoId, b) {
   const status = ["ok", "degraded", "skipped"].includes(b.status) ? b.status : null;
   if (!b.monitor || !status) throw new Error("monitor and status (ok|degraded|skipped) are required");
   const ts = b.ts && !Number.isNaN(Date.parse(b.ts)) ? new Date(b.ts).toISOString() : new Date().toISOString();
-  const body = JSON.stringify({ source: b.source === "session" ? "session" : "skill", window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500) });
+  const body = JSON.stringify({ source: b.source === "session" ? "session" : "skill", window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500), ...(b.report ? { report: String(b.report).slice(0, 60000), title: String(b.title || "").slice(0, 140) } : {}) });
   await db.run("INSERT INTO heartbeats (repo_id, monitor, ts, status, body) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", repoId, String(b.monitor).slice(0, 80), ts, status, body);
 }
 

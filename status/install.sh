@@ -151,6 +151,10 @@ Always send one, even on failure. A degraded heartbeat is worth more than an inv
 and a monitor with no heartbeat shows as down. Put the count of what you read in `swept`
 under the monitor's `volume_key` from `.claude/factory.json`: an `ok` with zero volume is
 flagged as "said ok, read nothing".
+
+A skill that writes a report (a weekly summary, an email, a digest) also sends the report
+itself, so it can be read in Hush under Reports: add `"title"` and `"report"` (markdown, up to
+60,000 characters) to the same JSON.
 SKILL
 
 if [ ! -f .claude/factory.json ]; then

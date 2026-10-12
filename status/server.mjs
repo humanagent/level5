@@ -1613,6 +1613,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .cal-ev{position:absolute;height:20px;padding:0 6px;border-radius:5px;font-size:11px;line-height:20px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default;z-index:1}
 .cal-ev[data-s=ok]{background:rgba(47,179,107,.16);color:#1f7a49;box-shadow:inset 3px 0 0 var(--ok)}.cal-ev[data-s=miss]{background:rgba(229,72,77,.14);color:#b4282d;box-shadow:inset 3px 0 0 var(--bad)}.cal-ev[data-s=next]{background:var(--bg);color:var(--muted);border:1px dashed #c4c6cc}.cal-ev[data-s=unk]{background:#f1f2f4;color:var(--faint)}
 .wk-k[data-s=ok]{background:rgba(47,179,107,.16);box-shadow:inset 3px 0 0 var(--ok)}.wk-k[data-s=miss]{background:rgba(229,72,77,.14);box-shadow:inset 3px 0 0 var(--bad)}.wk-k[data-s=next]{background:var(--bg);border:1px dashed #c4c6cc}.wk-k{width:14px;height:12px;border-radius:3px;vertical-align:-1px}
+.settings{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:8px}.settings label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}.settings select{height:38px;min-width:320px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font:inherit;font-size:14px;color:var(--ink)}.settings button{height:38px;padding:0 16px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font:500 13.5px inherit;cursor:pointer}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -2005,8 +2006,13 @@ if(el.hasAttribute("title")){el.dataset.tip=el.getAttribute("title");el.removeAt
 const [h,...rest]=txt.split(" · ");t.innerHTML="<b>"+e(day(h))+"</b>"+rest.map(x=>"<div>"+e(x)+"</div>").join("");t.hidden=false});
 document.addEventListener("mousemove",ev=>{if(t.hidden)return;const w=t.offsetWidth,h=t.offsetHeight;let x=ev.clientX+14,y=ev.clientY+16;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-12;t.style.left=x+"px";t.style.top=y+"px"});
 document.addEventListener("mouseout",ev=>{if(cur&&!cur.contains(ev.relatedTarget)){t.hidden=true;cur=null}});addEventListener("scroll",()=>{t.hidden=true},{passive:true});
-const DW=["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"],DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],off=-new Date().getTimezoneOffset();
-const local=()=>{if(!off)return;document.querySelectorAll(".utc:not([data-lt])").forEach(el=>{el.dataset.lt=1;el.title=(el.title?el.title+" · ":"")+el.textContent.trim()+" UTC";el.textContent=el.textContent.replace(/(?:(Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays) )?(\\d{2}):(\\d{2})(?: UTC)?/g,(m,dw,h,mi)=>{let t=+h*60+ +mi+off,sh=0;if(t<0){t+=1440;sh=-1}if(t>=1440){t-=1440;sh=1}const hh=String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");return dw?DW[(DW.indexOf(dw)+sh+7)%7]+" "+hh:hh})})};
+const TZ=()=>{const a=document.querySelector("[data-tz]");return (a&&a.dataset.tz)||Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"};
+const parts=(d,tz)=>{const o={};for(const p of new Intl.DateTimeFormat("en-US",{timeZone:tz||TZ(),year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false,weekday:"short"}).formatToParts(d))o[p.type]=p.value;if(o.hour==="24")o.hour="00";return o};
+window.hushTime={TZ,parts};
+const DW=["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"],DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const local=()=>{const tz=TZ();if(tz==="UTC"||tz==="Etc/UTC")return;
+document.querySelectorAll(".utc:not([data-lt])").forEach(el=>{el.dataset.lt=1;el.title=(el.title?el.title+" · ":"")+el.textContent.trim()+(el.textContent.includes("UTC")?"":" UTC");el.textContent=el.textContent.replace(/(?:(Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays) )?(\\d{2}):(\\d{2})(?: UTC)?/g,(m,dw,h,mi)=>{const now=new Date(),wd=dw?DW.indexOf(dw):now.getUTCDay(),ref=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+((wd-now.getUTCDay()+7)%7),+h,+mi)),p=parts(ref,tz),lw=DS.indexOf(p.weekday);return (dw?DW[lw]+" ":"")+p.hour+":"+p.minute})});
+document.querySelectorAll("[data-t]:not([data-lt])").forEach(el=>{el.dataset.lt=1;const p=parts(new Date(el.dataset.t),tz);el.title=el.textContent;el.textContent=p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute})};
 local();document.addEventListener("hush:swap",local);
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-more]");if(!b)return;const g=b.parentElement,all=g.classList.toggle("all");b.textContent=all?"Show less":"Show all "+b.dataset.more})})()</script>`;
 // The Automations week as a calendar, drawn in the viewer's time zone: Monday to Sunday, hours
@@ -2015,15 +2021,17 @@ const CAL_JS = `<script>(()=>{
 const e=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const S={ok:"ran",miss:"should have run, did not",next:"scheduled",unk:"no record either way"};
 function draw(){const box=document.getElementById("cal");if(!box)return;const src=box.querySelector(".cal-data");if(!src)return;const runs=JSON.parse(src.textContent);
-const now=new Date(),mon=new Date(now.getFullYear(),now.getMonth(),now.getDate()-((now.getDay()+6)%7)),days=[...Array(7)].map((_,i)=>new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i));
-const key=d=>d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(),todayK=key(now),H=1.2;
-const by=days.map(d=>runs.map(r=>({...r,at:new Date(r.t)})).filter(r=>key(r.at)===key(d)).sort((a,b)=>a.at-b.at));
-const TOUCH=70,col=(list)=>{const out=[];for(const r of list){const m=r.at.getHours()*60+r.at.getMinutes();let lane=0;while(out.some(s=>s.lane===lane&&Math.abs(s.m-m)<TOUCH))lane++;out.push({...r,m,lane})}for(const o of out){const near=out.filter(x=>Math.abs(x.m-o.m)<TOUCH);o.lanes=Math.max(...near.map(x=>x.lane))+1}return out};
-const hh=d=>String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
-let h='<div class="cal-head">'+days.map((d,i)=>'<div class="'+(key(d)===todayK?"today":"")+'"><b>'+d.toLocaleDateString(undefined,{weekday:"short"})+'</b> '+d.getDate()+'<small>'+by[i].length+" run"+(by[i].length===1?"":"s")+'</small></div>').join("")+'</div><div class="cal-body" style="height:'+(24*60*H/4)+'px">';
+const T=window.hushTime,tz=T.TZ(),P=d=>T.parts(d,tz),DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const now=new Date(),pn=P(now),base=Date.UTC(+pn.year,+pn.month-1,+pn.day)-((DS.indexOf(pn.weekday)+6)%7)*864e5;
+const days=[...Array(7)].map((_,i)=>{const d=new Date(base+i*864e5);return{k:d.toISOString().slice(0,10),dow:DS[d.getUTCDay()],n:d.getUTCDate()}});
+const keyOf=d=>{const p=P(d);return p.year+"-"+p.month+"-"+p.day},todayK=pn.year+"-"+pn.month+"-"+pn.day,H=1.2,mins=d=>{const p=P(d);return +p.hour*60+ +p.minute};
+const by=days.map(d=>runs.map(r=>({...r,at:new Date(r.t)})).filter(r=>keyOf(r.at)===d.k).sort((a,b)=>a.at-b.at));
+const TOUCH=70,col=(list)=>{const out=[];for(const r of list){const m=mins(r.at);let lane=0;while(out.some(s=>s.lane===lane&&Math.abs(s.m-m)<TOUCH))lane++;out.push({...r,m,lane})}for(const o of out){const near=out.filter(x=>Math.abs(x.m-o.m)<TOUCH);o.lanes=Math.max(...near.map(x=>x.lane))+1}return out};
+const hh=d=>{const p=P(d);return p.hour+":"+p.minute};
+let h='<div class="cal-head">'+days.map((d,i)=>'<div class="'+(d.k===todayK?"today":"")+'"><b>'+d.dow+'</b> '+d.n+'<small>'+by[i].length+" run"+(by[i].length===1?"":"s")+'</small></div>').join("")+'</div><div class="cal-body" style="height:'+(24*60*H/4)+'px">';
 h+='<div class="cal-hours">'+[6,12,18].map(x=>'<span style="top:'+(x*60*H/4)+'px">'+String(x).padStart(2,"0")+':00</span>').join("")+'</div>';
-h+=days.map((d,i)=>{const placed=col(by[i]);const nowLine=key(d)===todayK?'<i class="cal-now" style="top:'+((now.getHours()*60+now.getMinutes())*H/4)+'px"></i>':"";
-return '<div class="cal-day'+(key(d)===todayK?" today":"")+'">'+nowLine+placed.map(p=>'<span class="cal-ev" data-s="'+p.s+'" style="top:'+(p.m*H/4)+'px;left:calc('+(p.lane*100/p.lanes)+'% + 3px);width:calc('+(100/p.lanes)+'% - 6px)" data-tip="'+e(p.n+" · "+hh(p.at)+" · "+S[p.s])+'">'+e(p.n)+'</span>').join("")+'</div>'}).join("")+'</div>';
+h+=days.map((d,i)=>{const placed=col(by[i]);const nowLine=d.k===todayK?'<i class="cal-now" style="top:'+(mins(now)*H/4)+'px"></i>':"";
+return '<div class="cal-day'+(d.k===todayK?" today":"")+'">'+nowLine+placed.map(p=>'<span class="cal-ev" data-s="'+p.s+'" style="top:'+(p.m*H/4)+'px;left:calc('+(p.lane*100/p.lanes)+'% + 3px);width:calc('+(100/p.lanes)+'% - 6px)" data-tip="'+e(p.n+" · "+hh(p.at)+" · "+S[p.s])+'">'+e(p.n)+'</span>').join("")+'</div>'}).join("")+'</div>';
 let v=box.querySelector(".cal-view");if(!v){v=document.createElement("div");v.className="cal-view";box.appendChild(v)}v.innerHTML=h}
 draw();document.addEventListener("hush:swap",draw)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
@@ -2113,7 +2121,7 @@ function heartbeatPage(origin, repoRow) {
     <section class="onboard"><h2>Heartbeat setup</h2>${heartbeatSetup(origin, repoRow.ingest_key, false)}</section>`);
 }
 
-function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
+function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const repoUrl = s.meta.url;
   const banner = s.overall === "ok" ? "All systems operational" : s.overall === "degraded" ? "Degraded performance" : "Monitors need attention";
   const monRows = s.monitors.map((m) => {
@@ -2230,7 +2238,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ${prTabs.map(([k, , rows]) => `<div class="group tab-panel more5" data-tab="${k}">${rows.join("") || `<div class="line"><span class="hint">No ${k} pull requests${k === "open" ? "" : " recently"}.</span></div>`}${more(rows.length)}</div>`).join("")}</div>`;
   // --- window contents: one <template> per entity; the window manager clones them -----------
   const kv = (rows) => `<dl class="kv">${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
-  const when2 = (ts) => (ts ? `${ago(ts)} <span class="faint">${new Date(ts).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : "never");
+  const when2 = (ts) => (ts ? `${ago(ts)} <span class="faint" data-t="${esc(new Date(ts).toISOString())}">${new Date(ts).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : "never");
   const statePill = (st, label) => `<span class="pill" data-s="${st}">${label}</span>`;
   const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > (r.gap_h || r.period_h) * 1.25 + 2;
   const wins = [];
@@ -2600,7 +2608,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       }
     }
     weekGrid = `<h2>This week</h2><div class="group cal" id="cal"><script type="application/json" class="cal-data">${JSON.stringify(calRuns).replace(/</g, "\\u003c")}</script></div>
-      <p class="sk-key"><span class="wk-k" data-s="ok"></span>ran <span class="wk-k" data-s="miss"></span>should have run, did not <span class="wk-k" data-s="next"></span>scheduled · your time zone</p><div style="height:14px"></div>`;
+      <p class="sk-key"><span class="wk-k" data-s="ok"></span>ran <span class="wk-k" data-s="miss"></span>should have run, did not <span class="wk-k" data-s="next"></span>scheduled · times in ${tz ? esc(tz.replace(/_/g, " ")) : "your browser's time zone"} · <a href="/settings">change</a></p><div style="height:14px"></div>`;
   }
 
   // Reports: the weekly ones. Unit: reports per week, delivered or missed.
@@ -2661,7 +2669,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
 
   const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
-  return page(`${s.repo} · hush`, `<div class="app">
+  return page(`${s.repo} · hush`, `<div class="app" data-tz="${esc(tz)}">
     <header class="topbar">
       <a class="logo" href="/">${MARK()}<span>hush</span></a>
       <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
@@ -2674,6 +2682,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       </div>
       <nav class="snav" aria-label="Sections">${NAV.map(navLink).join("")}</nav>
       <div class="side-foot">
+        ${user ? `<a href="/settings">${ico("automations")}<span>Settings</span></a>` : ""}
         <a href="#setup" data-nav="setup">${ico("setup")}<span>Setup</span>${onboarding ? badge("!", "warn") : ""}</a>
         ${user ? `<a href="/">${ico("overview")}<span>All repos</span></a>` : ""}
         <span class="updated">Updated ${ago(s.generated_at)}</span>
@@ -2746,7 +2755,7 @@ function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
       <span class="go">Open →</span></a>`;
   };
   return page("Repositories · hush", `<div class="app solo">
-    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
+    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><a class="tb-btn" href="/settings" style="text-decoration:none">Settings</a><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
     <main class="main">
       <header class="vh"><h1>Repositories</h1><p>Every repo Hush is installed on that your GitHub account can see. Numbers are the last ${WINDOW} days.</p></header>
       ${repos.length ? accounts.map((a) => `<h2>${esc(a.login)}</h2><div class="group repos-t">
@@ -2798,6 +2807,19 @@ const redirect = (res, to, headers = {}) => send(res, 303, "", { location: to, .
 // An ingest key resolves to its repo. A replaced key keeps working for 24 hours, so the
 // routines that carry it can be moved to the new one without losing heartbeats.
 const KEY_GRACE_H = 24;
+// The time zone a person reads Hush in ("" = whatever their browser says). Times are stored and
+// computed in UTC; the page converts what it prints.
+const TZS = new Set(Intl.supportedValuesOf("timeZone"));
+const tzCache = new Map();
+async function userTz(login) {
+  if (!login) return "";
+  if (tzCache.has(login)) return tzCache.get(login);
+  const r = await db.one("SELECT v FROM settings WHERE k = $1", `tz:${login}`);
+  const tz = r && TZS.has(r.v) ? r.v : "";
+  tzCache.set(login, tz);
+  return tz;
+}
+
 async function repoForKey(key) {
   if (!key) return null;
   const repo = await db.one("SELECT id FROM repos WHERE ingest_key = $1", key);
@@ -3089,6 +3111,23 @@ createServer(async (req, res) => {
       const out = items.map((e) => ({ ...e, id: Number(e.id), repo: names[Number(e.repo_id)], unread: e.at > seen && !read.has(Number(e.id)) }));
       return json(res, 200, { unread: out.filter((e) => e.unread).length, items: out });
     }
+    if (url.pathname === "/settings") {
+      if (!user) return redirect(res, "/auth/login");
+      if (req.method === "POST") {
+        if (req.headers["sec-fetch-site"] && req.headers["sec-fetch-site"] !== "same-origin") return send(res, 405, "POST from this page only");
+        const tz = new URLSearchParams((await readBody(req, 4e3)) || "").get("tz") || "";
+        if (tz && !TZS.has(tz)) return send(res, 400, "Unknown time zone");
+        if (tz) await setSetting(`tz:${user.login}`, tz); else await db.run("DELETE FROM settings WHERE k = $1", `tz:${user.login}`);
+        tzCache.delete(user.login);
+        return redirect(res, "/settings?saved=1");
+      }
+      const tz = await userTz(user.login);
+      const opts = [...TZS].sort().map((z) => `<option value="${esc(z)}"${z === tz ? " selected" : ""}>${esc(z.replace(/_/g, " "))}</option>`).join("");
+      return send(res, 200, page("Settings · hush", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Settings</b></nav></header>
+        <main class="main"><header class="vh"><h1>Settings</h1><p>For ${esc(user.login)}. Hush stores everything in UTC and shows it in this time zone.</p></header>
+        <form method="post" class="settings"><label><span>Time zone</span><select name="tz"><option value=""${tz ? "" : " selected"}>Use my browser's time zone</option>${opts}</select></label><button type="submit">Save</button>${url.searchParams.has("saved") ? `<span class="faint">Saved.</span>` : ""}</form>
+        <p class="hint" id="tz-now"></p></main></div><script>(()=>{const b=Intl.DateTimeFormat().resolvedOptions().timeZone;document.getElementById("tz-now").textContent="Your browser says "+b+"."})()</script>`));
+    }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
     const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
@@ -3161,8 +3200,9 @@ createServer(async (req, res) => {
       if (m[2]) return json(res, 200, fresh ? JSON.parse(saved.body) : await refresh(row));
       // ?partial=1 is the page's own background fetch: always a fresh read (deduped, and
       // the readers keep their own short caches).
-      if (url.searchParams.has("partial")) return send(res, 200, statusPage(fresh ? JSON.parse(saved.body) : await refresh(row), user, origin, row));
-      if (saved) return send(res, 200, statusPage(JSON.parse(saved.body), user, origin, row, { stale: !fresh }));
+      const tz = await userTz(user?.login);
+      if (url.searchParams.has("partial")) return send(res, 200, statusPage(fresh ? JSON.parse(saved.body) : await refresh(row), user, origin, row, { tz }));
+      if (saved) return send(res, 200, statusPage(JSON.parse(saved.body), user, origin, row, { stale: !fresh, tz }));
       refresh(row).catch((e) => console.error(e));
       return send(res, 200, skeletonPage(row.full_name));
     }

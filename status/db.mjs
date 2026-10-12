@@ -47,6 +47,19 @@ const SCHEMA = (pg) => `
     kind TEXT NOT NULL, title TEXT NOT NULL, detail TEXT NOT NULL, entity TEXT NOT NULL, dedupe TEXT NOT NULL);
   CREATE UNIQUE INDEX IF NOT EXISTS events_dedupe ON events(repo_id, dedupe);
   CREATE INDEX IF NOT EXISTS events_repo_at ON events(repo_id, at);
+  CREATE TABLE IF NOT EXISTS automations (
+    id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, repo_id BIGINT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL,
+    source TEXT NOT NULL, cron TEXT NOT NULL, command TEXT NOT NULL, model TEXT NOT NULL, skills TEXT NOT NULL,
+    state TEXT NOT NULL, state_why TEXT NOT NULL, last_run_at TEXT, next_run_at TEXT,
+    runs_30d INTEGER NOT NULL, missed_30d INTEGER NOT NULL, tokens_30d BIGINT NOT NULL, usd_30d DOUBLE PRECISION NOT NULL,
+    secs_30d BIGINT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE UNIQUE INDEX IF NOT EXISTS automations_key ON automations(repo_id, key);
+  CREATE TABLE IF NOT EXISTS automation_runs (
+    id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, automation_id BIGINT NOT NULL, repo_id BIGINT NOT NULL, at TEXT NOT NULL,
+    status TEXT NOT NULL, origin TEXT NOT NULL, tokens BIGINT, usd DOUBLE PRECISION, secs BIGINT, note TEXT NOT NULL,
+    url TEXT NOT NULL, dedupe TEXT NOT NULL);
+  CREATE UNIQUE INDEX IF NOT EXISTS automation_runs_dedupe ON automation_runs(automation_id, dedupe);
+  CREATE INDEX IF NOT EXISTS automation_runs_at ON automation_runs(automation_id, at);
 `;
 
 export async function openDb({ url, dataDir }) {

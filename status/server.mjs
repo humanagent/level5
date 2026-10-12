@@ -805,6 +805,63 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
   return { routines: hist, daily, reports, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
 }
 
+
+// Automations: each routine is one object, stored with its own state, cost, tokens and runs.
+// A run is put together from whatever it left behind: the session-end heartbeat, its skills'
+// heartbeats, the Claude Code cost row of that session, or the GitHub Actions run. Rebuilt on
+// every refresh and persisted, so the history outlives the 84 days of heartbeats read here.
+const autoKey = (name) => name.replace(/^App: /, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "routine";
+async function syncAutomations(repoRow, factory, routines, status, token, repo) {
+  const id = repoRow.id, now = Date.now(), since = new Date(now - 84 * 864e5).toISOString(), d30 = now - WINDOW * 864e5;
+  const beats = (await db.all("SELECT monitor, ts, status, body FROM heartbeats WHERE repo_id = $1 AND ts >= $2 ORDER BY ts", id, since)).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
+  const tokOf = (m) => Object.values(m || {}).reduce((a, t) => a + (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0), 0);
+  const costs = (await db.all("SELECT key, day, usd, body, at FROM costs WHERE repo_id = $1 AND source = 'claude-code' AND day >= $2", id, since.slice(0, 10))).map((r) => { const b = JSON.parse(r.body); return { key: r.key, name: b.name || "", at: r.at, usd: r.usd ?? sessionUsd(b.models, factory.prices), tok: tokOf(b.models), secs: Number(b.secs) || 0 }; });
+  const cmdOf = (r) => ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "";
+  const out = [];
+  for (const r of routines) {
+    const key = autoKey(r.name), cmd = cmdOf(r), skills = status?.routines?.[r.name]?.skills || [];
+    let runs = [];
+    if (r.source === "GitHub Actions") {
+      const file = (r.prompt || "").split("/").pop();
+      const list = await cached(`autoruns:${repo}:${file}`, 10 * 60e3, () => gh(token, `repos/${repo}/actions/workflows/${encodeURIComponent(file)}/runs?per_page=40`).catch(() => null));
+      runs = (list?.workflow_runs || []).filter((x) => x.status === "completed").map((x) => {
+        const start = x.run_started_at || x.created_at;
+        return { at: start, status: x.conclusion === "success" ? "ok" : x.conclusion === "failure" || x.conclusion === "timed_out" ? "failed" : String(x.conclusion || "unknown"), origin: `GitHub Actions (${x.event})`, tokens: null, usd: null, secs: Math.max(0, Math.round((Date.parse(x.updated_at) - Date.parse(start)) / 1000)), note: x.display_title || "", url: x.html_url || "", dedupe: `gh:${x.id}` };
+      });
+    } else {
+      const match = routineMatch(r), mine = beats.filter((b) => skills.includes(b.monitor) || match(b.monitor));
+      const clusters = [];
+      for (const b of mine) { const t = Date.parse(b.ts), c = clusters.at(-1); if (c && t - c.last < 3 * 36e5) { c.beats.push(b); c.last = t; } else clusters.push({ first: t, last: t, beats: [b] }); }
+      runs = clusters.map((c) => {
+        const sk = c.beats.filter((b) => b.source !== "session"), bad = sk.filter((b) => b.status !== "ok"), sess = c.beats.some((b) => b.source === "session");
+        const cs = costs.filter((x) => cmd && x.name === cmd && Math.abs(Date.parse(x.at) - c.last) < 4 * 36e5);
+        const sum = (k) => (cs.length ? cs.reduce((a, x) => a + (x[k] || 0), 0) : null);
+        return { at: new Date(c.first).toISOString(), status: bad.length ? "degraded" : "ok", origin: sess && sk.length ? "session + skills" : sess ? "session" : "skills",
+          tokens: sum("tok"), usd: sum("usd"), secs: sum("secs"),
+          note: bad.length ? `${bad.length} of ${sk.length} skills degraded: ${bad.map((b) => b.monitor).join(", ")}` : sk.length ? `${sk.length} skill${sk.length === 1 ? "" : "s"} reported ok` : (c.beats[0].note || "session ended"),
+          url: "", dedupe: `cc:${c.beats[0].ts}` };
+      });
+    }
+    // state, from the schedule's own buckets (missed = due and nothing arrived)
+    const b = status?.routines?.[r.name]?.buckets || [], due = b.filter((x) => x.s), last = runs.map((x) => x.at).sort().pop() || r.last_seen || null;
+    const missed = b.filter((x) => x.s === "miss").length, lastRun = runs.slice().sort((x, y) => (x.at < y.at ? 1 : -1))[0];
+    const [state, why] = !runs.length && !due.some((x) => x.s === "ok") ? ["not reporting", "no run of it has reached Hush"] : due.at(-1)?.s === "miss" ? ["missed", "the last scheduled run did not happen"] : lastRun && lastRun.status !== "ok" ? ["degraded", lastRun.note || `last run ${lastRun.status}`] : ["on schedule", due.length ? `${Math.round(((due.length - missed) / due.length) * 100)}% on time` : ""];
+    const in30 = runs.filter((x) => Date.parse(x.at) >= d30), s30 = (k) => in30.reduce((a, x) => a + (x[k] || 0), 0);
+    const row = { repo_id: id, key, name: r.name.replace(/^App: /, ""), source: r.source, cron: r.cron, command: r.source === "GitHub Actions" ? r.prompt : cmd ? `/${cmd}` : "", model: r.model || "", skills: JSON.stringify(skills), state, state_why: why, last_run_at: last, next_run_at: r.next_run || null, runs_30d: in30.length, missed_30d: missed, tokens_30d: s30("tokens"), usd_30d: Math.round(s30("usd") * 100) / 100, secs_30d: s30("secs"), updated_at: new Date().toISOString() };
+    await db.run(`INSERT INTO automations (repo_id, key, name, source, cron, command, model, skills, state, state_why, last_run_at, next_run_at, runs_30d, missed_30d, tokens_30d, usd_30d, secs_30d, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ON CONFLICT(repo_id, key) DO UPDATE SET name = excluded.name, source = excluded.source, cron = excluded.cron, command = excluded.command, model = excluded.model, skills = excluded.skills, state = excluded.state, state_why = excluded.state_why, last_run_at = excluded.last_run_at, next_run_at = excluded.next_run_at, runs_30d = excluded.runs_30d, missed_30d = excluded.missed_30d, tokens_30d = excluded.tokens_30d, usd_30d = excluded.usd_30d, secs_30d = excluded.secs_30d, updated_at = excluded.updated_at`,
+      ...Object.values(row));
+    const a = await db.one("SELECT id FROM automations WHERE repo_id = $1 AND key = $2", id, key);
+    for (const x of runs) await db.run(`INSERT INTO automation_runs (automation_id, repo_id, at, status, origin, tokens, usd, secs, note, url, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT(automation_id, dedupe) DO UPDATE SET status = excluded.status, origin = excluded.origin, tokens = excluded.tokens, usd = excluded.usd, secs = excluded.secs, note = excluded.note`,
+      a.id, id, x.at, x.status, x.origin, x.tokens, x.usd, x.secs, String(x.note).slice(0, 500), x.url, x.dedupe);
+    const recent = await db.all("SELECT at, status, origin, tokens, usd, secs, note, url FROM automation_runs WHERE automation_id = $1 ORDER BY at DESC LIMIT 25", a.id);
+    out.push({ id: Number(a.id), ...row, skills, buckets: b, weekly: !!status?.routines?.[r.name]?.weekly, routine: r.name, runs: recent });
+  }
+  return out;
+}
+
 async function snapshot(repoRow) {
   const repo = repoRow.full_name;
   const token = await installationToken(repoRow.installation_id);
@@ -826,6 +883,7 @@ async function snapshot(repoRow) {
     }) };
     if (!r.last_seen && w.last) [r.last_seen, r.evidence] = [w.last.at, "Actions run"];
   }
+  const automations = await syncAutomations(repoRow, factory, routines, skills, token, repo).catch((e) => (console.error("automations:", e.message), []));
   const bad = monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state));
   const warn = monitors.filter((m) => m.state === "warn");
   const lateRoutines = routines.filter((r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > (r.gap_h || r.period_h) * 1.25 + 2);
@@ -845,6 +903,7 @@ async function snapshot(repoRow) {
     queue,
     skills: factory.skills,
     status: skills,
+    automations,
     ci,
     metrics,
     costs: await readCosts(repoRow.id, factory.prices),
@@ -1130,7 +1189,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 17;
+const SNAP_V = 18;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1616,8 +1675,10 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .settings{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:8px}.settings label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}.settings select{height:38px;min-width:320px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font:inherit;font-size:14px;color:var(--ink)}.settings button{height:38px;padding:0 16px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font:500 13.5px inherit;cursor:pointer}
 .cal-card{position:fixed;z-index:120;width:280px;padding:12px 14px;background:var(--bg);border:1px solid #d1d5db;border-radius:12px;box-shadow:0 10px 28px -8px rgba(0,28,36,.32);font-size:12.5px;pointer-events:none}
 .cc-h{display:flex;justify-content:space-between;align-items:center;gap:8px}.cc-h b{font-size:14px}.cc-s{font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px}.cc-s[data-s=ok]{background:rgba(47,179,107,.14);color:#1f7a49}.cc-s[data-s=miss]{background:rgba(229,72,77,.12);color:#b4282d}.cc-s[data-s=next],.cc-s[data-s=unk]{background:#f1f2f4;color:var(--muted)}
-.cc-t{color:var(--muted);margin:3px 0 8px}.cc-run{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:6px}.cc-run span{display:flex;flex-direction:column;color:var(--faint);font-size:11px}.cc-run b{font-size:14px;color:var(--ink)}
+.cc-t{color:var(--muted);margin:3px 0 8px}.cc-bars{display:flex;gap:1.5px;height:18px;margin-bottom:2px}.cc-bars i{flex:1;border-radius:2px;background:#e6e7ea}.cc-bars i[data-s=ok]{background:var(--ok)}.cc-bars i[data-s=warn]{background:var(--warn)}.cc-bars i[data-s=miss]{background:var(--bad)}.cc-ax{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-bottom:8px}.cc-run{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:6px}.cc-run span{display:flex;flex-direction:column;color:var(--faint);font-size:11px}.cc-run b{font-size:14px;color:var(--ink)}
 .cc-kv div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.cc-kv span{color:var(--muted)}.cc-kv b{font-weight:500;text-align:right}.cc-f{margin-top:8px;color:var(--faint);font-size:11px}.cal-ev{cursor:pointer}
+.a-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 10px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.a-stats span{display:flex;flex-direction:column;font-size:11.5px;color:var(--faint)}.a-stats b{font-size:16px;color:var(--ink);font-weight:600}
+.ar-list{border:1px solid var(--line);border-radius:10px;overflow:hidden}.ar{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);font-size:12.5px}.ar:first-child{border-top:0}.ar-st{width:8px;height:8px;border-radius:50%}.ar-st[data-s=ok]{background:var(--ok)}.ar-st[data-s=warn]{background:var(--warn)}.ar-st[data-s=bad]{background:var(--bad)}.ar-main{display:flex;flex-direction:column;min-width:0}.ar-main b{font-weight:500}.ar-main .sub{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ar-num{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1707,7 +1768,7 @@ function order(){const vis=W.list.filter(w=>!w.min);vis.forEach((w,i)=>{w.el.sty
 function renderDock(){const d=dockEl();const mins=W.list.filter(w=>w.min);d.innerHTML=mins.map(w=>'<button type="button" class="win-chip" data-key="'+esc(w.key)+'"><span>'+esc(w.kind)+'</span> '+esc(w.title)+"</button>").join("");d.hidden=!mins.length}
 function clamp(f){const vw=innerWidth,vh=innerHeight;f.w=Math.max(MINW,Math.min(f.w,vw-16));f.h=Math.max(MINH,Math.min(f.h,vh-TOP-8));f.x=Math.max(8-f.w+120,Math.min(f.x,vw-120));f.y=Math.max(TOP-6,Math.min(f.y,vh-40));return f}
 function place(w){if(phone()){w.el.removeAttribute("style");order();return}const f=clamp(W.frames[w.key]);Object.assign(w.el.style,{left:f.x+"px",top:f.y+"px",width:f.w+"px",height:f.h+"px"});order()}
-function fill(w){if(w.ad)return;const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
+function fill(w){if(w.ad)return;const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;if(window.hushLocal)window.hushLocal();w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
 function focus(w){W.list.splice(W.list.indexOf(w),1);W.list.push(w);if(w.min){w.min=false;w.el.hidden=false;renderDock()}order()}
 function close(w){w.el.remove();W.list.splice(W.list.indexOf(w),1);order();renderDock();syncUrl()}
 function open(key,quiet){const had=W.list.find(w=>w.key===key);if(had){focus(had);return true}const ad=W.adhoc&&W.adhoc[key];const t=ad?{dataset:{kind:ad.kind,title:ad.title,href:""}}:tpl(key);if(!t)return false;
@@ -2016,8 +2077,8 @@ window.hushTime={TZ,parts};
 const DW=["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"],DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const local=()=>{const tz=TZ();if(tz==="UTC"||tz==="Etc/UTC")return;
 document.querySelectorAll(".utc:not([data-lt])").forEach(el=>{el.dataset.lt=1;el.title=(el.title?el.title+" · ":"")+el.textContent.trim()+(el.textContent.includes("UTC")?"":" UTC");el.textContent=el.textContent.replace(/(?:(Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays) )?(\\d{2}):(\\d{2})(?: UTC)?/g,(m,dw,h,mi)=>{const now=new Date(),wd=dw?DW.indexOf(dw):now.getUTCDay(),ref=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+((wd-now.getUTCDay()+7)%7),+h,+mi)),p=parts(ref,tz),lw=DS.indexOf(p.weekday);return (dw?DW[lw]+" ":"")+p.hour+":"+p.minute})});
-document.querySelectorAll("[data-t]:not([data-lt])").forEach(el=>{el.dataset.lt=1;const p=parts(new Date(el.dataset.t),tz);el.title=el.textContent;el.textContent=p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute})};
-local();document.addEventListener("hush:swap",local);
+document.querySelectorAll("[data-at]:not([data-lt])").forEach(el=>{el.dataset.lt=1;const d=new Date(el.dataset.at);if(isNaN(d))return;const p=parts(d,tz);el.title=el.textContent;el.textContent=p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute})};
+window.hushLocal=local;local();document.addEventListener("hush:swap",local);
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-more]");if(!b)return;const g=b.parentElement,all=g.classList.toggle("all");b.textContent=all?"Show less":"Show all "+b.dataset.more})})()</script>`;
 // The Automations week as a calendar, drawn in the viewer's time zone: Monday to Sunday, hours
 // down, each run a block at its time, coloured by what happened; the routine name on hover.
@@ -2044,7 +2105,8 @@ const until=t=>{if(!t)return "";const m=Math.round((Date.parse(t)-Date.now())/6e
 const tk=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?Math.round(n/1e3)+"k":String(n),hm=s=>s>=3600?Math.floor(s/3600)+" h "+Math.round(s%3600/60)+" min":Math.round(s/60)+" min";
 document.addEventListener("mouseover",ev=>{const b=ev.target.closest&&ev.target.closest(".cal-ev");if(!b){card.hidden=true;return}const box=document.getElementById("cal"),runs=JSON.parse(box.querySelector(".cal-data").textContent),meta=JSON.parse((box.querySelector(".cal-meta")||{}).textContent||"{}"),r=runs[+b.dataset.i];if(!r)return;const m=meta[r.n]||{},T=window.hushTime,p=T.parts(new Date(r.t));
 const row=(k,v)=>v?'<div><span>'+k+'</span><b>'+e(v)+'</b></div>':"";
-card.innerHTML='<div class="cc-h"><b>'+e(r.n)+'</b><span class="cc-s" data-s="'+r.s+'">'+S[r.s]+'</span></div><div class="cc-t">'+p.weekday+" "+p.day+"/"+p.month+" · "+p.hour+":"+p.minute+'</div>'+
+const bars=m.bars?'<div class="cc-bars">'+[...m.bars].map(c=>'<i data-s="'+({o:"ok",w:"warn",m:"miss"}[c]||"")+'"></i>').join("")+'</div><div class="cc-ax"><span>'+(m.weekly?"12 weeks":"30 days")+'</span><span>'+(m.weekly?"this week":"today")+'</span></div>':"";
+card.innerHTML='<div class="cc-h"><b>'+e(r.n)+'</b><span class="cc-s" data-s="'+r.s+'">'+S[r.s]+'</span></div><div class="cc-t">'+p.weekday+" "+p.day+"/"+p.month+" · "+p.hour+":"+p.minute+'</div>'+bars+
 (r.tok||r.usd||r.secs?'<div class="cc-run">'+(r.tok?'<span><b>'+tk(r.tok)+'</b>tokens</span>':"")+(r.usd?'<span><b>$'+r.usd.toFixed(2)+'</b>cost</span>':"")+(r.secs?'<span><b>'+hm(r.secs)+'</b>time</span>':"")+'</div>':"")+
 '<div class="cc-kv">'+row(m.src==="GitHub Actions"?"Workflow":"Command",m.cmd?(m.src==="GitHub Actions"?m.cmd:"/"+m.cmd):"")+row("Model",m.model)+row("Last run",ago(m.last))+row("Next run",until(m.next))+row("On time",m.on==null?"":m.on+"% in 30 days")+row("Skills",m.skills?String(m.skills):"")+row("Cost, 30 days",m.usd30?"$"+m.usd30.toFixed(2):"")+'</div><div class="cc-f">Click for the routine</div>';
 card.hidden=false;const rc=b.getBoundingClientRect(),w=card.offsetWidth,h=card.offsetHeight;let x=rc.right+8,y=rc.top;if(x+w>innerWidth-8)x=rc.left-w-8;if(y+h>innerHeight-8)y=innerHeight-h-8;card.style.left=Math.max(8,x)+"px";card.style.top=Math.max(52,y)+"px"});
@@ -2254,7 +2316,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     ${prTabs.map(([k, , rows]) => `<div class="group tab-panel more5" data-tab="${k}">${rows.join("") || `<div class="line"><span class="hint">No ${k} pull requests${k === "open" ? "" : " recently"}.</span></div>`}${more(rows.length)}</div>`).join("")}</div>`;
   // --- window contents: one <template> per entity; the window manager clones them -----------
   const kv = (rows) => `<dl class="kv">${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
-  const when2 = (ts) => (ts ? `${ago(ts)} <span class="faint" data-t="${esc(new Date(ts).toISOString())}">${new Date(ts).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : "never");
+  const when2 = (ts) => (ts ? `${ago(ts)} <span class="faint" data-at="${esc(new Date(ts).toISOString())}">${new Date(ts).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : "never");
   const statePill = (st, label) => `<span class="pill" data-s="${st}">${label}</span>`;
   const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > (r.gap_h || r.period_h) * 1.25 + 2;
   const wins = [];
@@ -2269,14 +2331,30 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       <p class="w-facts">${[m.last ? `Last run ${ago(m.last.ts)}` : "Never reported", routine ? `runs in <a href="#" data-open="routine:${esc(encodeURIComponent(routine.name))}">${esc(routine.name.replace(/^App: /, ""))}</a>` : "", m.filed.length ? `filed ${m.filed.slice(0, 5).map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ")}` : ""].filter(Boolean).join(" · ")}</p>
       ${m.history?.length ? `<details class="w-raw"><summary>Raw heartbeats (${m.history.length})</summary><div class="w-list">${m.history.map((b) => `<div><span class="pill sm" data-s="${b.status === "ok" ? "ok" : b.status === "degraded" ? "warn" : "bad"}">${b.status}</span><span class="faint">${ago(b.ts)}${b.source === "session" ? " · session" : ""}</span><span>${swept(b.swept)}${b.note ? ` <span class="faint">${esc(b.note)}</span>` : ""}</span></div>`).join("")}</div></details>` : ""}` });
   }
+  // the automation window: one object, everything about it
+  const AUTO = Object.fromEntries((s.automations || []).map((x) => [x.routine, x]));
+  const AST = { "on schedule": ["ok", "On schedule"], missed: ["bad", "Missed the last run"], degraded: ["warn", "Last run degraded"], "not reporting": ["none", "Not reporting"] };
+  const hmS = (sec) => (sec == null ? "–" : sec >= 3600 ? `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min` : sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec} s`);
   for (const r of s.routines) {
-    const late = isLate(r);
-    const [st, label] = !r.last_seen ? ["none", "No evidence"] : late ? ["bad", "Late"] : ["ok", "On schedule"];
-    const fed = s.monitors.filter((m) => m.routine === r.name);
-    wins.push({ key: `routine:${encodeURIComponent(r.name)}`, kind: r.source === "GitHub Actions" ? "Scheduled workflow" : "Routine", title: r.name.replace(/^App: /, ""), body: `
-      <div class="w-head">${statePill(st, label)}</div>
-      <p class="w-facts">${[esc(when(r)), r.last_seen ? `last run ${ago(r.last_seen)}` : "never ran", r.next_run ? `next ${until(r.next_run)}` : "", esc(r.model || "")].filter(Boolean).join(" · ")}</p>
-      ${fed.length ? `<h4>Monitors it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
+    const A = AUTO[r.name], fed = s.monitors.filter((m) => m.routine === r.name || (A?.skills || []).includes(m.id));
+    const [st, label] = A ? AST[A.state] || ["none", A.state] : ["none", "No data yet"];
+    const bk = A?.buckets || [];
+    const tipB = (x) => [x.label, { ok: "ran", warn: "ran, failed", miss: "should have run, did not", "": "nothing scheduled" }[x.s], x.usd ? usd(x.usd) : ""].filter(Boolean).join(" · ");
+    const runRow = (x) => `<div class="ar"><span class="ar-st" data-s="${x.status === "ok" ? "ok" : x.status === "degraded" ? "warn" : "bad"}"></span><span class="ar-main"><b data-at="${esc(x.at)}">${esc(new Date(x.at).toISOString().slice(0, 16).replace("T", " "))}</b><span class="sub">${esc(x.origin)}${x.note ? ` · ${esc(x.note)}` : ""}</span></span><span class="ar-num">${x.tokens ? `${tk(Number(x.tokens))} tok` : ""}${x.usd ? ` · ${usd(Number(x.usd))}` : ""}${x.secs ? ` · ${hmS(Number(x.secs))}` : ""}${x.url ? ` · <a href="${esc(x.url)}" target="_blank" rel="noopener">log</a>` : ""}</span></div>`;
+    wins.push({ key: `routine:${encodeURIComponent(r.name)}`, kind: "Automation", title: r.name.replace(/^App: /, ""), href: r.source === "GitHub Actions" ? `${repoUrl}/actions/workflows/${esc((r.prompt || "").split("/").pop())}` : "", body: `
+      <div class="w-head">${statePill(st, label)}${A?.state_why ? `<span class="w-why">${esc(A.state_why)}</span>` : ""}</div>
+      <p class="w-facts">${[A?.command ? `<code>${esc(A.command)}</code>` : "", `<span class="utc">${esc(when(r))}</span>`, r.model ? esc(r.model) : "", esc(r.source)].filter(Boolean).join(" · ")}</p>
+      <div class="a-stats">
+        <span><b>${A ? `${A.runs_30d}` : "–"}</b>runs in ${WINDOW} days${A?.missed_30d ? `, ${A.missed_30d} missed` : ""}</span>
+        <span><b>${A?.tokens_30d ? tk(Number(A.tokens_30d)) : "–"}</b>tokens</span>
+        <span><b>${A?.usd_30d ? usd(Number(A.usd_30d)) : "–"}</b>cost</span>
+        <span><b>${A?.secs_30d ? hmS(Number(A.secs_30d)) : "–"}</b>time</span>
+      </div>
+      ${bk.length ? `<div class="bars tall${A.weekly ? " wk" : ""}">${bk.map((x) => `<i data-s="${x.s}" title="${esc(tipB(x))}"></i>`).join("")}</div><div class="axis"><span>${A.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${A.weekly ? "this week" : "today"}</span></div>` : ""}
+      <p class="w-facts">${[A?.last_run_at ? `Last run ${ago(A.last_run_at)}` : "Never ran", r.next_run ? `next ${until(r.next_run)}` : ""].filter(Boolean).join(" · ")}</p>
+      <h4>Runs</h4>
+      ${A?.runs?.length ? `<div class="ar-list more5">${A.runs.map(runRow).join("")}${more(A.runs.length)}</div>` : `<p class="faint">No run recorded yet.</p>`}
+      ${fed.length ? `<h4>Skills it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
   }
   for (const w of s.ci || []) {
     const bars = w.days.map((d, i) => { const t = w.tips[i]; return `<i data-s="${d}" title="${t.ok + t.bad ? `${t.ok} passed, ${t.bad} failed` : "no runs"}"></i>`; }).join("");
@@ -2626,7 +2704,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     }
     const calMeta = Object.fromEntries(rows.map((x) => {
       const r = x.r, h = RH[r.name], b = h?.buckets || [], due = b.filter((y) => y.s);
-      return [r.name.replace(/^App: /, ""), { key: `routine:${encodeURIComponent(r.name)}`, cmd: r.source === "Claude Code" ? ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "" : r.prompt.replace(/^\.github\/workflows\//, ""), src: r.source, sched: when(r), model: r.model || "", last: r.last_seen, next: r.next_run, on: due.length ? Math.round((due.filter((y) => y.s !== "miss").length / due.length) * 100) : null, skills: h?.skills?.length || 0, usd30: h?.usd_30d || 0 }];
+      return [r.name.replace(/^App: /, ""), { key: `routine:${encodeURIComponent(r.name)}`, cmd: r.source === "Claude Code" ? ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "" : r.prompt.replace(/^\.github\/workflows\//, ""), src: r.source, sched: when(r), model: r.model || "", last: r.last_seen, next: r.next_run, on: due.length ? Math.round((due.filter((y) => y.s !== "miss").length / due.length) * 100) : null, skills: h?.skills?.length || 0, usd30: h?.usd_30d || 0, bars: b.map((y) => ({ ok: "o", warn: "w", empty: "w", miss: "m" })[y.s] || "_").join(""), weekly: !!h?.weekly }];
     }));
     weekGrid = `<div class="group cal" id="cal"><script type="application/json" class="cal-data">${JSON.stringify(calRuns).replace(/</g, "\\u003c")}</script><script type="application/json" class="cal-meta">${JSON.stringify(calMeta).replace(/</g, "\\u003c")}</script></div>
       <p class="sk-key"><span class="wk-k" data-s="ok"></span>ran <span class="wk-k" data-s="miss"></span>should have run, did not <span class="wk-k" data-s="next"></span>scheduled · times in ${tz ? esc(tz.replace(/_/g, " ")) : "your browser's time zone"} · <a href="/settings">change</a></p><div style="height:14px"></div>`;

@@ -23,6 +23,45 @@ const COST_ROUTINES = [
   ["/growth-report", "weekly", "4", "9M", "$6"],
 ];
 
+// Example code merged per day for the code tile: thousands of lines added and deleted, quieter on weekends.
+const MERGED_DAYS = [...Array(30)].map((_, i) => {
+  const add = Math.max(8, 52 + 18 * Math.sin(i / 3.1) + i * 0.9 - (i % 7 === 5 || i % 7 === 6 ? 30 : 0));
+  return [add, add * 0.24 + 4 * Math.cos(i / 2)];
+});
+const CODE = { prs: "3,218", agents: "91%", ci: "14,602", merge: "38 min", promos: "214" };
+
+// Example runs for the live Actions tile, the same panel the topbar opens: name, what, step, steps done, steps, seconds in.
+const LIVE = [
+  ["/fix-issues", "Fix #4127: retry on 429", "Run regression test", 6, 9, 192],
+  ["ci.yml", "PR #4131", "Unit tests", 3, 5, 74],
+  ["/pr-review", "Review #4129", "Read the diff", 2, 6, 41],
+];
+const LIVE_NEXT = [
+  ["deploy.yml", "main @ 9f3e2a1", "Build image", 0, 4],
+  ["/triage", "12 new issues", "Read issues", 0, 5],
+  ["e2e.yml", "PR #4133", "Start browsers", 0, 6],
+  ["/monitor", "errors, logs, cost", "Read sources", 0, 7],
+  ["ci.yml", "PR #4134", "Install", 0, 5],
+];
+
+// The 3D factory: one building per automation, sized by how much it runs. The degraded monitor glows.
+const FACTORY = [
+  ["/fix-issues", "routines", 1, "31 runs · 212M tokens"],
+  ["/monitor", "routines", 0.7, "30 runs · 96M tokens"],
+  ["/pr-review", "routines", 0.66, "30 runs · 71M tokens"],
+  ["/triage", "routines", 0.45, "60 runs · 22M tokens"],
+  ["/growth-report", "routines", 0.3, "4 runs · 9M tokens"],
+  ["errors", "monitors", 0.5, "daily · 100% ok"],
+  ["logs", "monitors", 0.46, "daily · 100% ok"],
+  ["cost", "monitors", 0.4, "daily · 100% ok"],
+  ["llm-traces", "monitors", 0.5, "daily · 96.7% ok"],
+  ["speed", "monitors", 0.55, "daily · 36.7% ok, degraded", 1],
+  ["ci.yml", "ci", 0.8, "4,812 runs"],
+  ["e2e.yml", "ci", 0.6, "1,904 runs"],
+  ["deploy.yml", "ci", 0.5, "612 runs"],
+  ["nightly.yml", "ci", 0.3, "30 runs"],
+];
+
 // What Hush connects to today: the four platforms first, the rest in one line under them.
 const LOGO_GH = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="#fff" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
 const LOGO_VERCEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3l10 17.5H2z"/></svg>`;
@@ -48,6 +87,16 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars =
   const maxDay = Math.max(...COST_DAYS.map((d) => d.reduce((a, b) => a + b, 0)));
   const costCols = COST_DAYS.map((d) => `<div class="cc">${d.map((v, i) => `<i style="height:${(v / maxDay) * 100}%;background:${COST_SRC[i][1]}"></i>`).join("")}</div>`).join("");
   const totals = COST_SRC.map(([n, c], i) => [n, c, COST_DAYS.reduce((a, d) => a + d[i], 0)]);
+
+  // bento tiles around the status page
+  const kl = (k) => (k >= 1000 ? (k / 1000).toFixed(2).replace(/0$/, "") + "M" : Math.round(k) + "k");
+  const addT = MERGED_DAYS.reduce((a, d) => a + d[0], 0), delT = MERGED_DAYS.reduce((a, d) => a + d[1], 0);
+  const maxA = Math.max(...MERGED_DAYS.map((d) => d[0])), maxD = Math.max(...MERGED_DAYS.map((d) => d[1]));
+  const mergedCols = MERGED_DAYS.map(([a, d]) => `<div class="mc"><span class="up"><i style="height:${(a / maxA) * 100}%"></i></span><span class="dn"><i style="height:${(d / maxD) * 100}%"></i></span></div>`).join("");
+  const monSmall = EXAMPLE.filter(([id]) => id !== "cost").map(([id, label, st, days, pct]) => `<div class="mt" data-s="${st}"><div class="mt-h"><span class="mon-id">${id}</span><span class="state" data-s="${st}">${st === "ok" ? "ok" : "degraded"}</span></div><b>${pct}%</b><div class="bars">${bars(days.slice(-14))}</div></div>`).join("");
+  const SPIN = `<svg class="gi spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="var(--warn)" stroke-opacity=".25" stroke-width="2.2"/><path d="M8 1.8a6.2 6.2 0 0 1 6.2 6.2" fill="none" stroke="var(--warn)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+  const dur = (s) => (s >= 60 ? Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s" : s + "s");
+  const liveRows = LIVE.map(([n, w, step, d, k, s]) => `<li class="lj" data-st="run"><span class="lj-i">${SPIN}</span><span class="lj-n"><b>${n}</b><small>${w}</small></span><span class="lj-s">${step} <em>${d}/${k}</em></span><span class="lj-t">${dur(s)}</span><span class="lj-bar"><i style="width:${Math.round((d / k) * 100)}%"></i></span></li>`).join("");
 
   const starLabel = stars == null ? "Star on GitHub" : `Star · ${stars >= 1000 ? (stars / 1000).toFixed(1).replace(/\.0$/, "") + "k" : stars}`;
   const cta = (dark = true) => `<div class="lcta">
@@ -199,10 +248,64 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 .lsec{padding:80px 16px 0}.cost-shot{grid-template-columns:minmax(0,1fr)}.cost-chart,.cost-runs{padding:18px 16px}.cost-cols{height:110px;gap:2px}
 .sheet{padding:16px 14px 4px}.sheet .line{flex-direction:column;gap:2px}.sheet .line .meta{text-align:left;max-width:none}.int-grid{grid-template-columns:minmax(0,1fr)}
 .lend{margin:80px 16px 0;padding:64px 20px}.lcta .lp{flex:1 1 auto}}
-</style></head><body class="land">
+
+/* bento: the status page big, and around it what's running, the monitors, the code merged and the report */
+.bento{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.tile{position:relative;display:flex;flex-direction:column;min-width:0;border-radius:16px;overflow:hidden;background:linear-gradient(180deg,#f6f5fd,#efedfb);box-shadow:inset 0 0 0 1px rgba(31,38,65,.06)}
+.tile-cap{padding:22px 24px 18px}.tile-cap h4{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:16.5px;font-weight:600;letter-spacing:-.4px;color:var(--l-ink)}.tile-cap p{margin:0;color:var(--l-muted);font-size:14px;line-height:1.5;text-wrap:pretty}
+.b-status{grid-column:1/3;grid-row:1/3}.b-live{grid-column:3;grid-row:1}.b-mon{grid-column:3;grid-row:2}.b-code{grid-column:1/3;grid-row:3}.b-rep{grid-column:3;grid-row:3}
+.tile.paint{padding:0}.b-status .tile-cap{padding:26px 28px 22px}.b-status .sheet{margin:auto 28px 0}
+/* live: the topbar and the panel it opens */
+.b-live{background:linear-gradient(180deg,#fdf3ea,#f6eefc)}
+.live-ui{margin:auto 16px 0;background:#fff;border-radius:12px 12px 0 0;box-shadow:0 24px 60px -30px rgba(40,24,110,.5);overflow:hidden}
+.mini-tb{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px 0 12px;border-bottom:1px solid var(--line);font-size:12.5px}
+.mini-tb .logo{font-size:13px;gap:6px}.mini-tb .logo svg{color:#f2702c;width:16px;height:16px}.mini-tb .crumb{color:var(--muted);flex:1;font:12px var(--mono)}
+.mini-tb .tb-acts{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--line);border-radius:7px;font:500 12px var(--f);background:rgba(15,16,20,.04)}.mini-tb .tb-ai{display:inline-flex}.mini-tb .gi,.lj .gi{width:13px;height:13px;margin:0}.mini-tb .tb-n{color:var(--warn);font-weight:600;font-variant-numeric:tabular-nums}.mini-tb .tb-n:empty{display:none}
+.live-pop{padding:10px 12px 6px}.live-hd{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px}.live-hd .live-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);margin:0}.live-meta{color:var(--faint);font-size:11.5px}
+.lj-list{list-style:none;margin:0;padding:0}
+.lj{display:grid;grid-template-columns:16px minmax(0,1fr) auto;grid-template-areas:"i n t" "i s s" ". b b";gap:1px 8px;align-items:center;padding:8px 0;border-top:1px solid var(--line2);font-size:12.5px}
+.lj:first-child{border-top:0}.lj-i{grid-area:i;display:inline-flex;align-self:start;margin-top:2px}.lj-n{grid-area:n;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lj-n b{font:500 12.5px var(--mono)}.lj-n small{color:var(--faint);margin-left:7px;font-size:11.5px}
+.lj-s{grid-area:s;color:var(--muted);font-size:11.5px}.lj-s em{font-style:normal;color:var(--faint)}.lj-t{grid-area:t;color:var(--muted);font:11.5px var(--mono);font-variant-numeric:tabular-nums}
+.lj-bar{grid-area:b;height:3px;border-radius:2px;background:var(--empty);overflow:hidden;margin-top:4px}.lj-bar i{display:block;height:100%;background:var(--warn);border-radius:2px;transition:width .6s var(--l-spring)}
+.lj[data-st=ok] .lj-bar i{background:var(--ok)}.lj[data-st=ok] .lj-s{color:var(--ok)}.lj[data-st=q]{opacity:.7}
+@media (prefers-reduced-motion:no-preference){.lj[data-st=ok]{animation:ljok 1.2s ease-out}}@keyframes ljok{from{background:#eaf7ef}}
+/* monitors */
+.mt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:auto 16px 16px}
+.mt{padding:12px;border-radius:10px;background:#fff;box-shadow:0 10px 30px -22px rgba(40,24,110,.6)}.mt-h{display:flex;justify-content:space-between;align-items:baseline;gap:6px}.mt-h .mon-id{font-size:12px}.mt .state{font-size:11.5px}
+.mt>b{display:block;margin:6px 0 2px;font-size:22px;font-weight:600;letter-spacing:-.04em}.mt[data-s=bad]>b{color:var(--bad)}.mt .bars{height:18px;gap:1.5px;margin-top:6px}
+/* code */
+.b-code{background:linear-gradient(160deg,#eef8f2,#f1effc 60%)}
+.code-ui{margin:auto 16px 16px;padding:22px 24px 16px;background:#fff;border-radius:12px;box-shadow:0 24px 60px -30px rgba(20,80,50,.4)}
+.code-big{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 14px}.code-big>b{font-size:56px;font-weight:600;letter-spacing:-.06em;line-height:1}.code-big>span{color:var(--muted);font-size:14px}.code-big .loc{font:500 14px var(--mono)}.code-big .add{color:var(--ok)}.code-big .del{color:var(--bad)}
+.code-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:18px 0 18px;background:var(--line);border-radius:10px;overflow:hidden}
+.code-stats span{display:flex;flex-direction:column;gap:2px;padding:10px 12px;background:#f8f8fb;font-size:12px;color:var(--muted)}.code-stats b{font-size:18px;font-weight:600;letter-spacing:-.03em;color:var(--l-ink)}
+.m-cols{display:flex;gap:3px;height:210px}.mc{flex:1;display:grid;grid-template-rows:72% 28%;gap:2px}.mc span{display:flex}.mc .up{align-items:flex-end}.mc .dn{align-items:flex-start}.mc i{display:block;width:100%;border-radius:2px}.mc .up i{background:var(--ok)}.mc .dn i{background:var(--bad);opacity:.75}
+.code-ui .axis{margin-top:8px}
+/* report: the email as it lands */
+.b-rep{background:#f1efea}.b-rep .tile-cap h4{color:#111113}
+.rep{margin:auto 16px 0}.rep-card{background:#fff;border-radius:14px 14px 0 0;overflow:hidden;font-family:Inter,var(--f);box-shadow:0 24px 60px -30px rgba(60,40,10,.35)}
+.rep-band{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#faf9f6;border-bottom:1px solid #e8e4dc;font-size:13px}.rep-h{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#111113;color:#fff;font-weight:700;font-size:12px}
+.rep-in{padding:16px 16px 12px}.rep-pill{display:inline-block;padding:3px 10px;border-radius:999px;background:#fdf1e1;color:#b45309;font-size:11.5px;font-weight:600}
+.rep-hl{margin:10px 0 2px;font-size:21px;font-weight:700;letter-spacing:-.03em;color:#111113}.rep-sub{margin:0;color:#55555c;font-size:12.5px}
+.rep-eb{margin:16px 0 7px;font:500 10px var(--mono);text-transform:uppercase;letter-spacing:.14em;color:#8a8a92}
+.rep-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);background:#f6f4f0;border-radius:10px}.rep-strip span{display:flex;flex-direction:column;padding:9px 11px;font-size:11px;color:#55555c}.rep-strip b{font-size:15px;font-weight:700;color:#111113;letter-spacing:-.02em}.rep-strip small{color:#8a8a92;font-size:10.5px}.rep-strip small.bad{color:#c0271d}
+.rep-strip i{font-style:normal}.rep-strip .g{color:#0f7a45}.rep-strip .r{color:#c0271d}
+.rep-l{list-style:none;margin:8px 0 0;padding:0}.rep-l li{display:flex;align-items:baseline;gap:8px;padding:3px 0;font-size:12.5px;color:#111113}.rep-l li::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#0f7a45;transform:translateY(-1px)}.rep-l li[data-t=alert]::before{background:#c0271d}.rep-l li[data-t=warn]::before{background:#b45309}
+.rep-l li span{flex:1;min-width:0}.rep-l em{font-style:normal;color:#8a8a92;font-size:11.5px;white-space:nowrap}
+/* the factory in 3D */
+.f3{position:relative;height:min(640px,72vh);border-radius:16px;overflow:hidden;background:radial-gradient(80% 70% at 50% 40%,#fbfaff 0,#ecebfa 70%,#e3e0f7 100%);box-shadow:inset 0 0 0 1px rgba(31,38,65,.06)}
+.f3 canvas{display:block;width:100%!important;height:100%!important;cursor:grab}.f3 canvas:active{cursor:grabbing}
+.f3-stat{position:absolute;left:20px;top:18px;z-index:2;display:flex;flex-direction:column;padding:12px 16px;border-radius:12px;background:rgba(255,255,255,.7);backdrop-filter:blur(12px);box-shadow:inset 0 0 0 1px var(--l-line);pointer-events:none}
+.f3-stat b{font-size:30px;font-weight:600;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums}.f3-stat span{color:var(--l-muted);font-size:12.5px;margin-top:4px}
+.f3-leg{position:absolute;right:16px;top:18px;z-index:2;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;pointer-events:none}.f3-leg span{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.7);backdrop-filter:blur(12px);font-size:12px;color:var(--l-ink);box-shadow:inset 0 0 0 1px var(--l-line)}.f3-leg i{width:9px;height:9px;border-radius:3px}
+.f3 .map-tip[hidden]{display:none}.f3-hint{position:absolute;left:20px;bottom:16px;z-index:2;font-size:12px;color:#8a8fa8;pointer-events:none}
+@media(max-width:980px){.bento{grid-template-columns:minmax(0,1fr)}.bento>.tile{grid-column:auto;grid-row:auto}.b-status .sheet{margin:auto 12px 0}.code-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.code-big>b{font-size:44px}.f3{height:460px}.f3-leg{display:none}}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@700&display=swap">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script></head><body class="land">
 
 <nav class="lnav" id="lnav"><a class="logo" href="/">${mark()}<span>hush</span></a>
-  <span class="lnav-r"><a class="t" href="#status">Status</a><a class="t" href="#costs">Costs</a><a class="t" href="#sources">Sources</a><a class="t" href="${REPO}" target="_blank" rel="noopener">GitHub</a>
+  <span class="lnav-r"><a class="t" href="#status">Status</a><a class="t" href="#costs">Costs</a><a class="t" href="#factory">Factory</a><a class="t" href="#sources">Sources</a><a class="t" href="${REPO}" target="_blank" rel="noopener">GitHub</a>
   ${viewer ? `<a class="lp alt" href="/landing">${esc(viewer)}</a><a class="lp pri" href="/">Enter →</a>` : `<a class="lp alt" href="/auth/login">Sign in</a><a class="lp pri" href="${install}">${GITHUB}<span>Install</span></a>`}</span>
 </nav>
 
@@ -227,16 +330,60 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
     <div><span class="ltag">${ICONS.sm("beat")} monitors</span><p class="lword">status</p></div>
     <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Hush checks them against your roster.</p>${cta()}</div>
   </div>
-  <h3 class="lfeat">${ICONS.sm("beat")} One page for the whole factory</h3>
-  <p class="lfeat-p">Every skill with 30 days of history, grouped by the routine that runs it. It flags the ones that died and the ones that said ok after reading nothing.</p>
-  <div class="paint a" aria-label="Example status page">
-    <div class="sheet">
-      <div class="chrome"><span class="l"><span class="dots"><i></i><i></i><i></i></span><b>acme/api</b></span><span>updated 2 min ago</span></div>
-      <div class="banner" data-s="down"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg><span>One monitor has been degraded for weeks</span></div>
-      <p class="banner-sub">Affected: speed. No other check would have said it: it flips between ok days and degraded days.</p>
-      <div class="group">${rows}</div>
+  <div class="bento">
+    <div class="tile b-status paint a" aria-label="Example status page">
+      <div class="tile-cap"><h4>${ICONS.sm("beat")} One page for the whole factory</h4><p>Every skill with 30 days of history. It flags the ones that died and the ones that said ok after reading nothing.</p></div>
+      <div class="sheet">
+        <div class="chrome"><span class="l"><span class="dots"><i></i><i></i><i></i></span><b>acme/api</b></span><span>updated 2 min ago</span></div>
+        <div class="banner" data-s="down"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg><span>One monitor has been degraded for weeks</span></div>
+        <p class="banner-sub">Affected: speed. No other check would have said it: it flips between ok days and degraded days.</p>
+        <div class="group">${rows}</div>
+      </div>
+    </div>
+
+    <div class="tile b-live" id="live">
+      <div class="tile-cap"><h4>${ICONS.sm("auto")} Automations, live</h4><p>What is running right now, one click from the top of every page.</p></div>
+      <div class="live-ui">
+        <div class="mini-tb"><span class="logo">${mark()}<span>hush</span></span><span class="crumb">acme/api</span><span class="tb-acts" data-on="1"><span class="tb-ai">${SPIN}</span><span>Actions</span><span class="tb-n">${LIVE.length}</span></span></div>
+        <div class="live-pop"><div class="live-hd"><b>Actions</b><span class="live-dot" data-on="1"></span><span class="live-meta">${LIVE.length} running · checked just now</span></div><ul class="lj-list">${liveRows}</ul></div>
+      </div>
+    </div>
+
+    <div class="tile b-mon">
+      <div class="tile-cap"><h4>${ICONS.sm("beat")} Monitors</h4><p>Each one reports when it ends. Two weeks at a glance.</p></div>
+      <div class="mt-grid">${monSmall}</div>
+    </div>
+
+    <div class="tile b-code">
+      <div class="tile-cap"><h4>${ICONS.sm("flow")} Code your agents merged</h4><p>Built for repos where agents ship more code than any team could review by hand.</p></div>
+      <div class="code-ui">
+        <div class="code-big"><b>${kl(addT + delT)}</b><span>lines merged in 30 days</span><span class="loc"><span class="add">+${kl(addT)}</span> <span class="del">−${kl(delT)}</span></span></div>
+        <div class="code-stats">
+          <span><b>${CODE.prs}</b>PRs merged</span><span><b>${CODE.agents}</b>by agents</span><span><b>${CODE.ci}</b>CI runs</span><span><b>${CODE.merge}</b>median to merge</span>
+        </div>
+        <div class="m-cols" aria-hidden="true">${mergedCols}</div>
+        <div class="axis"><span>30 days ago</span><span class="rule"></span><span>lines added and deleted per day</span><span class="rule"></span><span>today</span></div>
+      </div>
+    </div>
+
+    <div class="tile b-rep">
+      <div class="tile-cap"><h4>${ICONS.sm("doc")} Reports</h4><p>One day of the factory in one email, every morning.</p></div>
+      <div class="rep"><div class="rep-card">
+        <div class="rep-band"><span class="rep-h">h</span><b>Daily factory report</b></div>
+        <div class="rep-in">
+          <span class="rep-pill">Needs a look</span>
+          <p class="rep-hl">2 things to look at</p>
+          <p class="rep-sub">Sunday, 11 October · acme/api</p>
+          <div class="rep-eb">Automations</div>
+          <div class="rep-strip"><span><b>41</b>runs<small class="bad">1 missed</small></span><span><b>18.2M</b>tokens</span><span><b>$38.40</b>token cost</span></div>
+          <ul class="rep-l"><li data-t="alert"><span><b>/growth-report</b> did not run</span><em>0 9 * * 1</em></li><li data-t="warn"><span><b>speed</b>: degraded</span><em>4 of 7 days</em></li><li data-t="ok"><span>/fix-issues</span><em>3 PRs opened</em></li></ul>
+          <div class="rep-eb">Code</div>
+          <div class="rep-strip"><span><b>112</b>PRs merged<small>104 by agents</small></span><span><b><i class="g">+64k</i> <i class="r">−17k</i></b>lines</span></div>
+        </div>
+      </div></div>
     </div>
   </div>
+  <script type="application/json" id="live-data">${JSON.stringify({ live: LIVE, next: LIVE_NEXT })}</script>
   <span class="lex">Example with invented data.</span>
   <div class="trio">
     <div class="lmini"><h3 class="lfeat">${ICONS.sm("auto")} Install the app <span class="n">01</span></h3><p class="lfeat-p">On your account or your organization. Pick one repo, a few, or all of them, and change it later.</p></div>
@@ -265,6 +412,21 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
     </div>
   </div>
   <span class="lex">Example with invented data.</span>
+</section>
+
+<section class="lsec" id="factory">
+  <div class="lsec-head">
+    <div><span class="ltag">${ICONS.sm("auto")} in 3D</span><p class="lword">factory</p></div>
+    <div class="r"><h3>Your software factory, in 3D</h3><p>Every routine, monitor and workflow is a building, as tall as it runs. Pull requests drive down the road to main. The one that is failing glows red.</p></div>
+  </div>
+  <div class="f3" id="f3">
+    <div class="map-layer"></div><div class="map-tip" hidden></div>
+    <div class="f3-stat"><b id="f3-n">112</b><span>PRs merged today</span></div>
+    <div class="f3-leg"><span><i style="background:#f0a35e"></i>Routines</span><span><i style="background:#8b84f0"></i>Monitors</span><span><i style="background:#5fc3c9"></i>CI</span><span><i style="background:#262a3b"></i>main</span></div>
+    <span class="f3-hint">Drag to turn it</span>
+  </div>
+  <span class="lex">Example with invented data.</span>
+  <script type="application/json" id="f3-data">${JSON.stringify(FACTORY)}</script>
 </section>
 
 <section class="lsec" id="sources">
@@ -334,6 +496,164 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
   };
   let t; addEventListener("resize", () => { clearTimeout(t); t = setTimeout(draw, 120); }); draw();
 })();
+</script>
+<script>
+// The live Actions tile plays the topbar panel: running jobs step forward and their clocks tick,
+// a finished one turns green for a few seconds, then the next queued run takes its place.
+(() => {
+  const box = document.getElementById("live"); if (!box || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const D = JSON.parse(document.getElementById("live-data").textContent);
+  const STEPS = ["Install", "Build", "Read the diff", "Write the fix", "Run tests", "Run regression test", "Open the PR", "Upload"];
+  const I = {
+    run: '<svg class="gi spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="var(--warn)" stroke-opacity=".25" stroke-width="2.2"/><path d="M8 1.8a6.2 6.2 0 0 1 6.2 6.2" fill="none" stroke="var(--warn)" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    ok: '<svg class="gi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--ok)"/><path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    q: '<svg class="gi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-dasharray="2.4 2.2"/><circle cx="8" cy="8" r="2.6" fill="var(--warn)"/></svg>',
+  };
+  const dur = (s) => (s >= 60 ? Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s" : s + "s");
+  const mk = (r) => ({ n: r[0], w: r[1], step: r[2], d: r[3], k: r[4], s: r[5] || 0, done: 0 });
+  let runs = D.live.map(mk), qi = 0;
+  const next = () => { const r = mk(D.next[qi % D.next.length]); qi++; return r; };
+  let queued = next();
+  const list = box.querySelector(".lj-list"), count = box.querySelectorAll(".tb-n"), meta = box.querySelector(".live-meta");
+  const row = (r) => '<li class="lj" data-st="' + (r.done ? "ok" : "run") + '"><span class="lj-i">' + (r.done ? I.ok : I.run) + '</span><span class="lj-n"><b>' + r.n + "</b><small>" + r.w + '</small></span><span class="lj-s">' + (r.done ? "Done" : r.step + " <em>" + r.d + "/" + r.k + "</em>") + '</span><span class="lj-t">' + dur(r.s) + '</span><span class="lj-bar"><i style="width:' + Math.round((r.d / r.k) * 100) + '%"></i></span></li>';
+  const draw = () => {
+    const n = runs.filter((r) => !r.done).length;
+    list.innerHTML = runs.map(row).join("") + '<li class="lj" data-st="q"><span class="lj-i">' + I.q + '</span><span class="lj-n"><b>' + queued.n + "</b><small>" + queued.w + '</small></span><span class="lj-s">Queued</span><span class="lj-t"></span></li>';
+    count.forEach((c) => (c.textContent = n || ""));
+    meta.textContent = n + " running · checked just now";
+  };
+  setInterval(() => {
+    for (const r of runs) {
+      if (r.done) { r.done++; continue; }
+      r.s++;
+      if (Math.random() < 0.3) { r.d++; r.step = STEPS[(r.d + r.n.length) % STEPS.length]; if (r.d >= r.k) { r.d = r.k; r.done = 1; } }
+    }
+    runs = runs.map((r) => { if (r.done <= 3) return r; const q = queued; queued = next(); q.step = STEPS[q.n.length % STEPS.length]; return q; });
+    draw();
+  }, 1000);
+})();
+</script>
+<script type="module">
+// The factory in 3D, drawn like the services map: a tiled board, one building per automation (as
+// tall as it runs), a district each for routines, monitors and CI, and a road down the middle where
+// pull requests drive to main. The degraded monitor glows red. Built once it scrolls into view.
+const host = document.getElementById("f3");
+if (host) {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const go = async () => {
+    let THREE, OrbitControls;
+    try { THREE = await import("three"); ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js")); }
+    catch { host.querySelector(".f3-hint").textContent = "The 3D view could not load."; return; }
+    const items = JSON.parse(document.getElementById("f3-data").textContent);
+    const COLOR = { routines: 0xf0a35e, monitors: 0x8b84f0, ci: 0x5fc3c9 }, ROOF = { routines: 0xd9702c, monitors: 0x5b4dff, ci: 0x1f8f99 };
+    const W = () => host.clientWidth, H = () => host.clientHeight;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(W(), H());
+    host.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(-8, 20, 14); scene.add(sun);
+    const INK = 0x2a2a3a;
+    const outlined = (geo, color, pos) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+      m.position.copy(pos);
+      m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: INK })));
+      scene.add(m); return m;
+    };
+    // lots in rows of six, the middle column left for the road; main sits at the end of the road
+    const COLS = 7, ROAD = 3, CELL = 2.4, n = items.length;
+    const lots = []; for (let c = 0; lots.length < n; c++) if (c % COLS !== ROAD) lots.push([c % COLS, Math.floor(c / COLS)]);
+    const rows = lots.at(-1)[1] + 2, BW = COLS * CELL + 1.6, BD = rows * CELL + 1.6;
+    const ox = -BW / 2 + 0.8 + CELL / 2, oz = -BD / 2 + 0.8 + CELL / 2, rx = ox + ROAD * CELL;
+    outlined(new THREE.BoxGeometry(BW + 0.6, 0.5, BD + 0.6), 0xc9c5e6, new THREE.Vector3(0, -0.45, 0));
+    outlined(new THREE.BoxGeometry(BW, 0.2, BD), 0xf3f1fb, new THREE.Vector3(0, -0.1, 0));
+    const tiles = new THREE.GridHelper(Math.max(BW, BD), Math.round(Math.max(BW, BD) / (CELL / 2)), 0xdcd8f0, 0xdcd8f0); tiles.position.y = 0.005;
+    tiles.scale.set(BW / Math.max(BW, BD), 1, BD / Math.max(BW, BD)); scene.add(tiles);
+    outlined(new THREE.BoxGeometry(CELL * 0.7, 0.04, BD - 0.4), 0xdedaf0, new THREE.Vector3(rx, 0.02, 0));
+    for (let z = -BD / 2 + 0.8; z < BD / 2 - 0.6; z += 0.9) { const d = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.36), new THREE.MeshBasicMaterial({ color: 0xffffff })); d.position.set(rx, 0.06, z); scene.add(d); }
+    const roofTex = (txt, color) => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+      g.fillStyle = "#" + color.toString(16).padStart(6, "0"); g.beginPath(); g.roundRect(14, 14, 100, 100, 18); g.fill();
+      g.fillStyle = "#fff"; g.font = "700 " + (txt.length > 2 ? 34 : 46) + "px Kalam, system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 64, 68);
+      const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; };
+    const roof = (txt, color, size, x, top, z) => { const r = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: roofTex(txt, color), transparent: true }));
+      r.rotation.x = -Math.PI / 2; r.position.set(x, top + 0.012, z); scene.add(r); };
+    const blocks = [], labels = [];
+    items.forEach(([name, kind, k, what, alarm], i) => {
+      const [c, r] = lots[i], x = ox + c * CELL, z = oz + r * CELL, foot = 0.9 + 1.0 * k, h = 0.5 + 4.6 * k;
+      const body = outlined(new THREE.BoxGeometry(foot, h, foot), alarm ? 0xe5484d : COLOR[kind], new THREE.Vector3(x, h / 2, z));
+      roof(name.replace(/^\\//, "").replace(/\\.yml$/, "").slice(0, 3), alarm ? 0xb4232a : ROOF[kind], Math.min(0.95, foot * 0.6), x, h, z);
+      body.userData = { name, kind, what, alarm }; blocks.push(body);
+      labels.push({ text: name, pos: new THREE.Vector3(x, h + 0.25, z), alarm, rank: k });
+    });
+    // main: a tower on a podium where the road ends
+    const mz = oz + (rows - 1) * CELL;
+    outlined(new THREE.BoxGeometry(CELL * 2.2, 0.9, CELL * 0.9), 0x3a3f55, new THREE.Vector3(rx, 0.45, mz));
+    const main = outlined(new THREE.BoxGeometry(1.5, 5.4, 1.2), 0x262a3b, new THREE.Vector3(rx, 0.9 + 2.7, mz));
+    roof("main", 0xf2702c, 1.0, rx, 6.3, mz);
+    main.userData = { name: "main", kind: "branch", what: "where every PR lands" }; blocks.push(main);
+    labels.push({ text: "main", pos: new THREE.Vector3(rx, 6.6, mz), alarm: 0, rank: 9 });
+    // traffic: PRs leave a building, drive down the road and land on main; others idle around their lot
+    const cars = [], idle = [], counter = document.getElementById("f3-n");
+    let merged = Number(counter?.textContent || 0);
+    const spawn = (m) => { const lot = lots[Math.floor(Math.random() * n)]; m.userData = { t: 0, x0: ox + lot[0] * CELL, z0: oz + lot[1] * CELL, lane: Math.random() < 0.5 ? -0.28 : 0.28, v: 0.0016 + Math.random() * 0.0018 }; };
+    if (!still) {
+      for (let i = 0; i < 10; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0xf2702c })); spawn(m); m.userData.t = Math.random(); scene.add(m); cars.push(m); }
+      for (let i = 0; i < 18; i++) { const lot = lots[i % n], m = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.13), new THREE.MeshBasicMaterial({ color: 0x5b4dff })); m.userData = { cx: ox + lot[0] * CELL, cz: oz + lot[1] * CELL, a: Math.random() * 6.28, r: 0.95 + Math.random() * 0.25, v: 0.006 + Math.random() * 0.01 }; scene.add(m); idle.push(m); }
+    }
+    const sphere = new THREE.Box3().setFromObject(scene).getBoundingSphere(new THREE.Sphere());
+    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -300, 500);
+    const fit = () => { const a = W() / H(), v = sphere.radius * (a >= 1 ? 0.6 : 0.66 / a); cam.left = -v * a; cam.right = v * a; cam.top = v; cam.bottom = -v; cam.updateProjectionMatrix(); renderer.setSize(W(), H()); };
+    cam.position.set(sphere.center.x + 26, 30, sphere.center.z + 34); cam.lookAt(sphere.center); fit();
+    const controls = new OrbitControls(cam, renderer.domElement);
+    Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, autoRotate: !still, autoRotateSpeed: 0.5, enableZoom: false, enablePan: false, minPolarAngle: Math.PI * 0.2, maxPolarAngle: Math.PI * 0.34 });
+    controls.target.copy(sphere.center);
+    renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false), { once: true });
+    const layer = host.querySelector(".map-layer");
+    labels.sort((a, b) => (b.alarm || 0) - (a.alarm || 0) || b.rank - a.rank);
+    const tags = labels.map((l) => { const e = document.createElement("span"); e.className = "city-label" + (l.alarm ? " alarm" : ""); e.textContent = l.text; layer.appendChild(e); return { ...l, e }; });
+    const tip = host.querySelector(".map-tip");
+    const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let hover = null;
+    renderer.domElement.addEventListener("pointermove", (ev) => {
+      const r = renderer.domElement.getBoundingClientRect(); ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, cam);
+      const o = ray.intersectObjects(blocks, false)[0]?.object || null;
+      if (hover && hover !== o) hover.material.emissive.setHex(0);
+      hover = o; renderer.domElement.style.cursor = o ? "pointer" : "grab";
+      if (!o) { tip.hidden = true; return; }
+      o.material.emissive.setHex(0x2a2a2a);
+      const u = o.userData; tip.innerHTML = "<b></b><span></span>"; tip.children[0].textContent = u.name; tip.children[1].textContent = u.kind + " · " + u.what;
+      tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 240) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px"; tip.hidden = false;
+    });
+    renderer.domElement.addEventListener("pointerleave", () => { tip.hidden = true; if (hover) hover.material.emissive.setHex(0); hover = null; });
+    new ResizeObserver(fit).observe(host);
+    let seen = true; new IntersectionObserver((es) => (seen = es[0].isIntersecting)).observe(host);
+    const v3 = new THREE.Vector3(); let flash = 0;
+    const frame = (t) => {
+      controls.update();
+      for (const m of cars) { const u = m.userData; u.t += u.v;
+        // first a short hop from the lot to the road, then down the road to main
+        if (u.t < 0.2) { const k = u.t / 0.2; m.position.set(u.x0 + (rx + u.lane - u.x0) * k, 0.12, u.z0); }
+        else { const k = (u.t - 0.2) / 0.8; m.position.set(rx + u.lane, 0.12, u.z0 + (mz - 0.9 - u.z0) * k); }
+        if (u.t >= 1) { spawn(m); flash = 12; if (counter) counter.textContent = String(++merged); } }
+      for (const m of idle) { const u = m.userData; u.a += u.v; m.position.set(u.cx + Math.cos(u.a) * u.r, 0.1, u.cz + Math.sin(u.a) * u.r); }
+      main.material.emissive.setHex(flash > 0 ? 0x5a2a10 : 0); if (flash > 0) flash--;
+      if (!still) for (const b of blocks) if (b.userData.alarm) b.material.emissive.setHex(Math.sin(t / 220) > 0 ? 0x551100 : 0);
+      renderer.render(scene, cam);
+      const r = host.getBoundingClientRect(), placed = [];
+      for (const g of tags) {
+        v3.copy(g.pos).project(cam);
+        const x = (v3.x + 1) / 2 * r.width, y = (1 - v3.y) / 2 * r.height, w = g.w ??= g.e.offsetWidth, box = [x - w / 2, y - 22, x + w / 2, y];
+        const clash = placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
+        g.e.style.visibility = clash ? "hidden" : "visible"; if (!clash) placed.push(box);
+        g.e.style.transform = "translate(" + x + "px," + y + "px) translate(-50%,-100%)";
+      }
+    };
+    // the first frame is drawn right away, so the board shows even before the browser starts animating
+    const loop = (t) => { requestAnimationFrame(loop); if (seen && !document.hidden) frame(t); };
+    frame(0); requestAnimationFrame(loop);
+  };
+  const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: "300px" });
+  io.observe(host);
+}
 </script>
 </body></html>`;
 }

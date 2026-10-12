@@ -1567,6 +1567,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .rp .bars{margin:10px 0 4px}.rp-none{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rp-none code{font-size:11.5px}
 .rp-body{margin-top:10px}.rp-body summary{cursor:pointer;font-weight:600;font-size:13px}.rp-body .md{margin-top:6px;font-size:13px;line-height:1.55;color:var(--ink2);max-height:420px;overflow:auto}.rp-body .md h3,.rp-body .md h4,.rp-body .md h5{margin:10px 0 4px;font-size:13.5px}.rp-body .md ul{padding-left:18px;margin:4px 0}
 .rp-past{margin:12px 0 0;box-shadow:none;border:1px solid var(--line)}.rp-past .line{padding:8px 12px}
+.keybox{margin-top:28px}.keybox p{font-size:13.5px;color:var(--muted);max-width:720px;line-height:1.5}.keybox form{margin-top:10px}.btn-quiet{height:32px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px inherit;cursor:pointer}.btn-quiet:hover{background:rgba(15,16,20,.04)}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -2596,7 +2597,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
       ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
       ${view("services", `${vh("Services", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
-      ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
+      ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>
+        <section class="keybox"><h2>Ingest key</h2><p>Heartbeats and costs from this repo are sent with <code>${esc(repoRow.ingest_key.slice(0, 8))}…${esc(repoRow.ingest_key.slice(-4))}</code>. It can only write this repo's heartbeats and costs. If it leaked (committed to git, pasted somewhere), replace it: the old key keeps working for 24 hours so there is time to update wherever it is stored.</p><form method="post" action="/r/${esc(s.repo)}/key"><button type="submit" class="btn-quiet">Replace key</button></form></section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
     <aside class="askp" id="chat" data-repo="${esc(s.repo)}" aria-label="Assistant">
@@ -2694,6 +2696,25 @@ const send = (res, code, body, headers = {}) => {
 };
 const json = (res, code, obj) => send(res, code, JSON.stringify(obj), { "content-type": "application/json" });
 const redirect = (res, to, headers = {}) => send(res, 303, "", { location: to, ...headers });
+
+// An ingest key resolves to its repo. A replaced key keeps working for 24 hours, so the
+// routines that carry it can be moved to the new one without losing heartbeats.
+const KEY_GRACE_H = 24;
+async function repoForKey(key) {
+  if (!key) return null;
+  const repo = await db.one("SELECT id FROM repos WHERE ingest_key = $1", key);
+  if (repo) return repo;
+  const old = await db.one("SELECT v FROM settings WHERE k = $1", `prevkey:${createHash("sha256").update(key).digest("hex")}`);
+  const o = old && JSON.parse(old.v);
+  return o && Date.parse(o.until) > Date.now() ? { id: o.repo_id } : null;
+}
+async function replaceKey(repoId) {
+  const row = await db.one("SELECT ingest_key FROM repos WHERE id = $1", repoId);
+  const fresh = "fsk_" + randomBytes(24).toString("base64url");
+  await db.run("UPDATE repos SET ingest_key = $1 WHERE id = $2", fresh, repoId);
+  if (row?.ingest_key) await setSetting(`prevkey:${createHash("sha256").update(row.ingest_key).digest("hex")}`, JSON.stringify({ repo_id: repoId, until: new Date(Date.now() + KEY_GRACE_H * 36e5).toISOString() }));
+  return fresh;
+}
 
 async function insertBeat(repoId, b) {
   const status = ["ok", "degraded", "skipped"].includes(b.status) ? b.status : null;
@@ -2862,7 +2883,7 @@ createServer(async (req, res) => {
 
     if (url.pathname === "/api/inventory" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));
+      const repo = await repoForKey(key);
       if (!repo) return json(res, 401, { error: "invalid ingest key" });
       const list = [].concat(JSON.parse((await readBody(req, 4e6)) || "[]"));
       for (const it of list.slice(0, 5)) await db.run("INSERT INTO inventories (repo_id, kind, at, body) VALUES ($1, $2, $3, $4) ON CONFLICT (repo_id, kind) DO UPDATE SET at = excluded.at, body = excluded.body", repo.id, String(it.kind), new Date().toISOString(), JSON.stringify(cleanInventory(String(it.kind), it.data || {})));
@@ -2872,7 +2893,7 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/api/cost" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));
+      const repo = await repoForKey(key);
       if (!repo) return json(res, 401, { error: "invalid ingest key" });
       const body = JSON.parse((await readBody(req)) || "{}");
       const list = Array.isArray(body) ? body : [body];
@@ -2883,7 +2904,7 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      const repo = key && (await db.one("SELECT id FROM repos WHERE ingest_key = $1", key));
+      const repo = await repoForKey(key);
       if (!repo) return json(res, 401, { error: "invalid ingest key" });
       const body = JSON.parse((await readBody(req)) || "{}");
       const list = Array.isArray(body) ? body : [body];
@@ -2972,8 +2993,8 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
-    if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2]?.startsWith("/rules"))))) {
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2] === "/key" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
@@ -2994,6 +3015,12 @@ createServer(async (req, res) => {
           for (const [name, v] of parts) if (Number(v)) rows.push([r.day, r.source, svcShort(name), Math.round(Number(v) * 100) / 100]);
         }
         return json(res, 200, { today: new Date().toISOString().slice(0, 10), rows });
+      }
+      if (m[2] === "/key") {
+        // replacing the key is a deliberate, same-site form post; the old key keeps working for a day
+        if (req.method !== "POST" || (req.headers["sec-fetch-site"] && req.headers["sec-fetch-site"] !== "same-origin")) return send(res, 405, "POST from this page only");
+        await replaceKey(row.id);
+        return redirect(res, `/r/${row.full_name}?key=new#setup`);
       }
       if (m[2]?.startsWith("/rules")) {
         if (req.method !== "POST") return json(res, 200, await evalRules(row.id));

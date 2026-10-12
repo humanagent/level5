@@ -168,3 +168,33 @@ export function dailyReport(s, { origin = "", day } = {}) {
 
   return { day, subject: `${s.repo.split("/").pop()} · ${problems ? headline.toLowerCase() : "all clear"} · ${new Date(day + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}`, html, text, needs: problems };
 }
+
+// The same day as data, for a repo's own report skill: every number with the day before beside it,
+// so its template can show the change. Read with the repo's ingest key at GET /api/report.
+export function reportData(s, { origin = "", day } = {}) {
+  day = day || new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const before = new Date(Date.parse(day + "T00:00:00Z") - 864e5).toISOString().slice(0, 10);
+  const facts = (d) => {
+    const on = (ts) => ts && String(ts).slice(0, 10) === d;
+    const A = s.automations || [], dates = s.status?.daily?.dates || [], i = dates.indexOf(d);
+    const runs = A.flatMap((a) => (a.runs || []).filter((r) => on(r.at)).map((r) => ({ name: a.name, status: r.status, note: r.note || "", tokens: Number(r.tokens || 0), usd: Number(r.usd || 0), secs: Number(r.secs || 0) })));
+    const missed = A.filter((a) => !a.weekly && i >= 0 && a.buckets?.[a.buckets.length - dates.length + i]?.s === "miss").map((a) => a.name);
+    const cd = s.costs?.per_day?.find((p) => p.d === d), pd = s.metrics?.prs?.per_day?.find((p) => p.d === d), id = s.metrics?.issues?.per_day?.find((p) => p.d === d);
+    const merged = (s.queue?.merged || []).filter((p) => on(p.merged_at)), size = s.metrics?.prs?.size || {};
+    const ci = (s.ci || []).map((w) => { const k = (w.dates || []).indexOf(d); return { name: w.name, mins: k >= 0 ? w.mins?.[k] || 0 : 0, ok: k >= 0 ? w.tips?.[k]?.ok || 0 : 0, bad: k >= 0 ? w.tips?.[k]?.bad || 0 : 0 }; });
+    return {
+      automations: { runs: runs.length, ok: runs.filter((r) => r.status === "ok").map((r) => r.name), degraded: runs.filter((r) => r.status !== "ok").map((r) => ({ name: r.name, note: r.note })), missed, tokens: runs.reduce((a, r) => a + r.tokens, 0), usd: Math.round(runs.reduce((a, r) => a + r.usd, 0) * 100) / 100, secs: runs.reduce((a, r) => a + r.secs, 0) },
+      costs: cd ? { total: Math.round(cd.total * 100) / 100, by: Object.fromEntries(Object.entries(cd.by || {}).map(([k, v]) => [k, Math.round(v * 100) / 100])) } : null,
+      code: { merged: pd?.all ?? merged.length, by_agents: pd?.agents ?? 0, added: pd?.added ?? 0, deleted: pd?.deleted ?? 0,
+        opened: [...(s.queue?.prs || []), ...(s.queue?.merged || []), ...(s.queue?.closed || [])].filter((p) => on(p.created_at)).length,
+        promotions: (s.promotions?.history || []).filter((p) => on(p.merged_at)).length,
+        prs: merged.map((p) => ({ number: p.number, title: p.title, url: p.url, author: p.author || "", added: size[p.number]?.[0] ?? null, deleted: size[p.number]?.[1] ?? null })) },
+      ci: { mins: Math.round(ci.reduce((a, w) => a + w.mins, 0)), runs: ci.reduce((a, w) => a + w.ok + w.bad, 0), failing: ci.filter((w) => w.bad).map((w) => ({ name: w.name, failed: w.bad, runs: w.ok + w.bad })) },
+      issues: { opened: id?.opened ?? null, closed: id?.closed ?? null },
+    };
+  };
+  const today = facts(day), prev = facts(before);
+  const needs = (s.status?.groups || []).flatMap((g) => g.rows).filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state)).map((r) => ({ skill: r.id, state: r.state }));
+  return { repo: s.repo, day, before, url: `${origin}/r/${s.repo}`, generated_at: s.generated_at, open_issues: s.metrics?.issues?.open ?? null, needs, ...today, previous: prev,
+    reports: (s.status?.reports || []).flatMap((r) => r.items.filter((x) => String(x.ts).slice(0, 10) === day).map((x) => ({ report: r.id, title: x.title || "", note: x.note || "" }))) };
+}

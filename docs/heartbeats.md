@@ -32,7 +32,7 @@ status.
 
 The **ingest key** is created the first time someone opens the repo's page, and shown in its
 onboarding card (and at `/r/<owner>/<repo>/setup` afterwards). It can only post heartbeats and costs
-for that one repo. It reads nothing.
+for that one repo, and read that repo's daily report ([report.md](report.md)).
 
 **Replacing the key.** Setup has a "Replace key" button. The new key works at once and the old one
 keeps working for 24 hours, so there is time to update wherever it is stored before heartbeats stop.

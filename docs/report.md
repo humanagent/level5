@@ -21,5 +21,20 @@ the same in Gmail and Outlook.
 
 Preview any day at `/r/<owner>/<repo>/report?day=YYYY-MM-DD`.
 
-**Sending it every day is not wired yet**: Hush has no email provider configured. The report is ready
-to be sent by whatever provider is chosen.
+## For the repo's own report
+
+Hush sends no email. A repo that wants the report in its inbox gets the day as data and sends it
+with its own template and email path, from a daily routine:
+
+```
+GET /api/report?day=YYYY-MM-DD
+authorization: Bearer <ingest-key>
+```
+
+The day defaults to yesterday (UTC). The answer has `automations` (runs, ok, degraded, missed,
+tokens, usd, secs), `costs` (total and by provider, or null until providers report), `code` (merged,
+by agents, lines added and deleted, opened, promotions, and the merged PRs with their size), `ci`
+(minutes, runs, failing workflows), `issues` (opened, closed), `needs` (skills that need a look),
+`reports`, and `previous`: the same facts for the day before, to compare.
+
+This is the one thing an ingest key can **read**: a summary of its own repo, nothing else.

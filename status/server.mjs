@@ -22,7 +22,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, r
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
-import { dailyReport } from "./report.mjs";
+import { dailyReport, reportData } from "./report.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 // Local dev (npm run dev): signed in as DEV_USER, GitHub read with your own `gh` session instead of
@@ -3159,6 +3159,19 @@ createServer(async (req, res) => {
       for (const c of list) await insertCost(repo.id, c);
       await evalRules(repo.id, { fire: true }).catch((e) => console.error("rules:", e.message));
       return json(res, 200, { ok: true, stored: list.length });
+    }
+    // The day's report as data, for the repo's own report skill. The ingest key is the only key a
+    // routine holds, so it may read this one summary of its own repo (and nothing else).
+    if (url.pathname === "/api/report" && req.method === "GET") {
+      const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      const repo = await repoForKey(key);
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
+      const row = await db.one("SELECT * FROM repos WHERE id = $1", repo.id);
+      const saved = await db.one("SELECT body FROM snapshots WHERE repo_id = $1", row.id);
+      let snap = saved && JSON.parse(saved.body);
+      if (!snap || snap.v !== SNAP_V || Date.now() - Date.parse(snap.generated_at) > 15 * 60e3) snap = await refresh(row);
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("day") || "") ? url.searchParams.get("day") : undefined;
+      return json(res, 200, reportData(snap, { origin, day }));
     }
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");

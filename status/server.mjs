@@ -1130,7 +1130,7 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .line.pr .meta{display:flex;align-items:center;gap:8px}
 .agent-tag{font:500 11px var(--f);color:#fff;background:var(--ink);border-radius:6px;padding:1px 6px}
 @media(max-width:520px){.line.pr .meta code.branch{display:none}}
-.cost-cols{height:96px}.group a.line{text-decoration:none;color:inherit}.group a.line:hover{background:rgba(15,16,20,.03)}.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
+.cx-mini .cx-chart{min-height:260px}.cx-mini .cx-loading{padding:110px 0}.cx-mini .cx-legend{margin-top:6px}.group a.line{text-decoration:none;color:inherit}.group a.line:hover{background:rgba(15,16,20,.03)}.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
 .costs-fold{margin:-16px 0 32px}.cost-note{color:var(--faint);font-size:12px;margin-top:8px}.costs-fold .line .meta b{color:var(--ink);font-weight:600}
 .ci-live{margin-bottom:32px}
 :root{--sel:#f1f2f4}
@@ -1778,7 +1778,7 @@ for(const r of rows){const k=keyOf(r),s2=series[si[top.includes(k)?k:"Others"]],
 let prev=null;if(X.st.compare){const len=(D(b)-D(a))/864e5+1,pa=add(a,-len),pb=add(a,-1),pbk=buckets(pa,pb),pidx=Object.fromEntries(pbk.map((k,i)=>[k,i]));prev=pbk.map(()=>0);for(const r of X.data.rows)if(r[0]>=pa&&r[0]<=pb&&pass(r)){const i=pidx[bucketOf(r[0])];if(i!=null)prev[i]+=r[3]}prev={v:prev,a:pa,b:pb}}
 return {a,b,bk,series,tot,order,prev,total:Object.values(tot).reduce((x,y)=>x+y,0)}}
 function nice(m){if(m<=0)return 1;const p=Math.pow(10,Math.floor(Math.log10(m))),f=m/p;return(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p}
-function draw(){const R=root();if(!R||!X.data)return;const s=X.st,c=compute(),box=R.querySelector(".cx-chart"),W=Math.max(320,box.clientWidth),H=340,L=48,B=34,T=12,Rt=8,iw=W-L-Rt,ih=H-T-B,n=c.bk.length;
+function drawIn(R,mini){if(!R||!X.data)return;const s=X.st,c=compute(),box=R.querySelector(".cx-chart"),W=Math.max(320,box.clientWidth),H=mini?260:340,L=48,B=34,T=12,Rt=8,iw=W-L-Rt,ih=H-T-B,n=c.bk.length;
 const totals=c.bk.map((_,i)=>c.series.reduce((t,x)=>t+x.v[i],0));const mx=Math.max(...(s.mode==="line"?c.series.flatMap(x=>x.v):totals),...(c.prev?c.prev.v.slice(0,n):[]),0);const top=nice(mx*1.08),step=top/5;
 const X0=i=>L+(i+.5)*iw/n,bw=Math.max(3,Math.min(46,iw/n*.62)),Y=v=>T+ih-(v/top)*ih;let g="";
 for(let j=0;j<=5;j++){const y=Y(j*step);g+='<line class="grid" x1="'+L+'" x2="'+(W-Rt)+'" y1="'+y+'" y2="'+y+'"/><text class="yl" x="'+(L-8)+'" y="'+(y+4)+'">'+(step*j>=1000?Math.round(step*j/100)/10+"k":+(step*j).toFixed(step<1?2:0))+"</text>"}
@@ -1801,8 +1801,10 @@ svg.addEventListener("mouseleave",()=>{tip.hidden=true;svg.classList.remove("hov
 R.querySelector(".cx-legend").innerHTML=c.series.map(x=>'<span><i style="background:'+x.color+'"></i>'+e(x.k)+"</span>").join("")+(c.prev?'<span><i class="dash"></i>Previous period</span>':"");
 const ptot=c.prev?c.prev.v.reduce((a2,b2)=>a2+b2,0):0;
 R.querySelector(".cx-sub").innerHTML="<b>"+money(c.total)+"</b> total · "+label(c.a)+" to "+label(c.b)+(s.gran==="daily"?" · "+money(c.total/Math.max(1,n))+" a day":"")+(c.prev?" · previous period "+money(ptot)+(ptot?" ("+(c.total>=ptot?"+":"")+Math.round((c.total/ptot-1)*100)+"%)":""):"");
-R.querySelector(".cx-table").innerHTML=c.order.length?'<table><thead><tr><th>'+(s.group==="provider"?"Provider":s.group==="none"?"":"Service")+"</th><th>Total</th><th>Share</th></tr></thead><tbody>"+c.order.slice(0,25).map(k=>'<tr><td>'+e(k)+"</td><td>"+money(c.tot[k])+'</td><td><span class="bar"><i style="width:'+(c.tot[k]/c.total*100).toFixed(1)+'%"></i></span>'+(c.tot[k]/c.total*100).toFixed(1)+"%</td></tr>").join("")+"</tbody></table>":'<p class="cx-note">No costs match these filters.</p>';
+if(mini)return;R.querySelector(".cx-table").innerHTML=c.order.length?'<table><thead><tr><th>'+(s.group==="provider"?"Provider":s.group==="none"?"":"Service")+"</th><th>Total</th><th>Share</th></tr></thead><tbody>"+c.order.slice(0,25).map(k=>'<tr><td>'+e(k)+"</td><td>"+money(c.tot[k])+'</td><td><span class="bar"><i style="width:'+(c.tot[k]/c.total*100).toFixed(1)+'%"></i></span>'+(c.tot[k]/c.total*100).toFixed(1)+"%</td></tr>").join("")+"</tbody></table>":'<p class="cx-note">No costs match these filters.</p>';
 panel(c)}
+// the Status page shows the same chart, fixed: last 30 days, daily, stacked by service, no filters
+function draw(){drawIn(root());const h=document.getElementById("cx-home");if(h&&X.data){const k=X.st;X.st={...DEF};try{drawIn(h,true)}finally{X.st=k}}}
 function panel(c){const R=root(),s=X.st;R.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===s.mode));R.querySelectorAll("[data-time]").forEach(b=>{b.classList.toggle("on",s.compare);b.setAttribute("aria-pressed",s.compare)});
 for(const k of ["range","gran","group","from","to"]){const el=R.querySelector('[data-k="'+k+'"]');if(el&&document.activeElement!==el)el.value=s[k]||(k==="from"?c.a:k==="to"?c.b:el.value)}
 R.querySelector(".cx-custom").hidden=s.range!=="custom";R.querySelector('[data-note="range"]').textContent="Displaying "+label(c.a)+" to "+label(c.b);
@@ -1815,7 +1817,7 @@ const chips=[...s.services.map(v=>["svc",v,v]),...s.providers.map(v=>["prov",v,N
 R.querySelector(".cx-fchips").innerHTML=chips.map(([t,v,l])=>'<button type="button" class="fchip" data-rm="'+t+'" data-v="'+e(v)+'">'+(t==="svc"?"Service":"Provider")+" is <b>"+e(l)+'</b><span aria-hidden="true">×</span></button>').join("");
 R.querySelector(".cx-clear").hidden=!chips.length;R.querySelector(".cx-filters").hidden=!chips.length}
 function set(p){Object.assign(X.st,p);save();draw()}
-async function fetchData(){const R=root();if(!R)return;try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/costs",{credentials:"same-origin"});if(r.ok){X.data=await r.json();X.at=Date.now();draw()}}catch(x){}}
+async function fetchData(){if(!root()&&!document.getElementById("cx-home"))return;try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/costs",{credentials:"same-origin"});if(r.ok){X.data=await r.json();X.at=Date.now();draw()}}catch(x){}}
 document.addEventListener("click",ev=>{const R=root();if(!R||!R.contains(ev.target)){document.querySelectorAll(".ms-pop").forEach(p=>p.hidden=true);return}
 const m=ev.target.closest("[data-mode]");if(m)return set({mode:m.dataset.mode});const t=ev.target.closest("[data-time]");if(t)return set({compare:!X.st.compare});
 const rm=ev.target.closest("[data-rm]");if(rm){const v=rm.dataset.v;return set(rm.dataset.rm==="svc"?{services:X.st.services.filter(x=>x!==v)}:{providers:X.st.providers.filter(x=>x!==v)})}
@@ -1828,14 +1830,14 @@ if(el.dataset.svc!=null){const v=el.dataset.svc,l=X.st.services.filter(x=>x!==v)
 if(el.dataset.prov!=null){const v=el.dataset.prov,l=X.st.providers.filter(x=>x!==v);if(el.checked)l.push(v);return set({providers:l})}});
 document.addEventListener("input",ev=>{if(ev.target.classList&&ev.target.classList.contains("ms-q")&&X.data)panel(compute())});
 addEventListener("resize",()=>{clearTimeout(X.rt);X.rt=setTimeout(draw,120)});
-addEventListener("hashchange",()=>{if(location.hash==="#costs")draw()});
+addEventListener("hashchange",()=>draw());
 document.addEventListener("hush:swap",()=>{if(Date.now()-X.at>12e4)fetchData();else draw()});
 if(X.data)draw();else fetchData()})()</script>`;
 const SEC_JS = `<script>(()=>{if(window.hushSec)return;window.hushSec=1;
 document.addEventListener("input",ev=>{if(!ev.target.classList||!ev.target.classList.contains("sec-q"))return;const q=ev.target.value.trim().toLowerCase();document.querySelectorAll(".sec-m tr[data-k]").forEach(r=>r.hidden=q&&!r.dataset.k.includes(q))});
 document.addEventListener("change",ev=>{if(ev.target.classList&&ev.target.classList.contains("sl-cb"))document.querySelectorAll(".roles-g").forEach(g=>g.classList.toggle("show-sl",ev.target.checked))})})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx"') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -2264,10 +2266,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="stat"><b>${usd(C.yesterday)}</b><span>Yesterday</span><small>${usd(C.avg7)} a day over the last 7</small></div>
       <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud session${C.sessions_30d === 1 ? "" : "s"}</small></div>
       <div class="stat"><b>${topRoutines.length ? usd(topRoutines[0].usd_30d) : "–"}</b><span>${topRoutines.length ? `Top routine: ${esc(topRoutines[0].name)}` : "Per routine"}</span><small>${topRoutines.slice(1).map((g) => `${esc(g.name)} ${usd(g.usd_30d)}`).join(" · ") || (topRoutines.length ? "" : "no session costs yet")}</small></div>
-      <div class="chart" aria-label="Spend per day by provider">
-        <div class="cols cost-cols">${C.per_day.slice(-WINDOW).map((p) => { const max = Math.max(1e-9, ...C.per_day.slice(-WINDOW).map((x) => x.total)); const parts = C.sources.filter((k) => p.by[k]); return `<div title="${p.d} · ${usd(p.total)}${parts.length ? " · " + parts.map((k) => `${srcName(k)} ${usd(p.by[k])}`).join(", ") : ""}"><i class="stack" style="height:${(p.total / max) * 100}%">${parts.map((k) => `<em style="height:${(p.by[k] / p.total) * 100}%;background:${srcColor(k)}"></em>`).join("")}</i></div>`; }).join("")}</div>
-        <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span>${C.sources.map((k) => `<span><span class="key" style="background:${srcColor(k)}"></span>${srcName(k)}</span>`).join("")}<span class="rule"></span><span>today</span></div>
-      </div>
+      <div class="chart cx cx-mini" id="cx-home"><div class="cx-sub" hidden></div><div class="cx-chart" role="img" aria-label="Spend per day by service"><div class="cx-loading">Loading cost data…</div></div><div class="cx-legend"></div></div>
     </div>`;
   const statusView = `
         <div class="banner" data-s="${stOverall}">${stOverall === "ok" ? CHECK : ALERT}<span>${nAlerts ? `${plural(nAlerts, "thing")} need${nAlerts === 1 ? "s" : ""} a look` : "Nothing needs attention"}</span></div>

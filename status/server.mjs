@@ -1692,6 +1692,11 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .main h1,.main .cx-head h2{letter-spacing:-.03em}
 .tb-ask,.tb-acts,.btn-quiet{border-radius:999px;padding-inline:12px}.btn{border-radius:999px}
 .snav a,.side-foot a{border-radius:8px}
+.vh-act{margin:-6px 0 18px}
+.rt-fire form,.nr-form{display:grid;gap:8px}.nr-form{gap:12px}.nr-form label{display:grid;gap:5px;font-size:12.5px;color:var(--muted)}.nr-form label[hidden]{display:none}
+.rt-fire input,.rt-fire textarea,.nr-form input,.nr-form textarea,.nr-form select{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:13px var(--f)}
+.rt-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rt-msg{font-size:12.5px;color:var(--muted)}.rt-row .btn-plain{margin-left:auto}
+.nr-cmd{padding:12px 14px;border-radius:10px;background:#14161f;color:#e9eaf0;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ALERT = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg>`;
@@ -1827,6 +1832,30 @@ const a=ev.target.closest(".notif-i");if(a){if(a.classList.contains("unread"))ma
 if(!ev.target.closest("#notif-panel"))toggle(false)});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")toggle(false)});
 document.addEventListener("hush:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
+// Routines from Hush: fill each .rt-fire box with its trigger (save one, run now, remove it), and
+// turn the New routine form into a /hush-setup command to copy.
+const TRIG_JS = `<script>(()=>{if(window.hushTrig)return;window.hushTrig=1;
+const base=()=>location.pathname.replace(/[/]$/,"");let cache=null,at=0;
+const e=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
+async function load(force){if(!force&&cache&&Date.now()-at<15e3)return cache;const r=await fetch(base()+"/triggers",{credentials:"same-origin"});cache=r.ok?await r.json():{};at=Date.now();return cache}
+async function post(path,body){const r=await fetch(base()+path,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+function draw(box,t){
+if(!t){box.innerHTML='<p class="rt-hint">Give this routine an API trigger on claude.ai (open the routine, add a trigger, choose API), then paste its URL and token here. Hush keeps the token sealed and only uses it to start the routine.</p><form class="rt-form"><input name="url" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" required><input name="token" type="password" placeholder="sk-ant-…" required autocomplete="off"><div class="rt-row"><button class="btn-sm" type="submit">Save trigger</button><span class="rt-msg"></span></div></form>';return}
+const last=t.last_fired_at?(t.last_error?"Last try "+ago(t.last_fired_at)+": "+e(t.last_error):"Last started "+ago(t.last_fired_at)+" by "+e(t.last_fired_by)+(t.last_session_url?' · <a href="'+e(t.last_session_url)+'" target="_blank" rel="noopener">open the session</a>':"")):"Trigger saved "+ago(t.created_at)+" by "+e(t.created_by);
+box.innerHTML='<form class="rt-run"><textarea name="text" rows="2" placeholder="Optional: what this run should look at (an issue, a PR, an alert)"></textarea><div class="rt-row"><button class="btn-sm" type="submit">Run now</button><span class="rt-msg">'+last+'</span><button class="btn-plain danger" type="button" data-rt-remove>Remove trigger</button></div></form>'}
+async function sync(force){const boxes=[...document.querySelectorAll(".rt-fire")].filter(b=>force||!b.dataset.ready);if(!boxes.length)return;boxes.forEach(b=>b.dataset.ready=1);const all=await load(force).catch(()=>({}));boxes.forEach(b=>draw(b,all[b.dataset.routine]))}
+new MutationObserver(()=>sync(false)).observe(document.body,{childList:true,subtree:true});sync(false);
+document.addEventListener("submit",async ev=>{const f=ev.target,box=f.closest&&f.closest(".rt-fire");if(!box)return;ev.preventDefault();const msg=f.querySelector(".rt-msg"),btn=f.querySelector("[type=submit]");btn.disabled=true;
+try{if(f.classList.contains("rt-form")){msg.textContent="Saving…";await post("/triggers",{routine:box.dataset.routine,url:f.elements.url.value,token:f.elements.token.value})}else{msg.textContent="Starting…";await post("/fire",{routine:box.dataset.routine,text:f.elements.text.value})}
+await sync(true)}catch(x){msg.textContent=x.message;btn.disabled=false}});
+document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-rt-remove]");if(!b)return;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to remove";return}const box=b.closest(".rt-fire");await post("/triggers",{routine:box.dataset.routine,remove:true}).catch(()=>{});sync(true)});
+const q=s=>'"'+String(s).replace(/["\\\\]/g,"")+'"';
+function cmd(f){const v=n=>f.elements[n].value.trim(),custom=v("preset")==="custom",cron=custom?v("cron"):v("preset");f.querySelector("[data-cron]").hidden=!custom;
+f.querySelector("[data-cmd]").textContent=v("name")&&v("what")?"/hush-setup add "+q(v("name"))+" --cron "+q(cron||"0 13 * * *")+" --model "+v("model")+" -- "+v("what").replace(/\\s+/g," "):"Fill in a name and what it does."}
+["input","change"].forEach(t=>document.addEventListener(t,ev=>{const f=ev.target.closest&&ev.target.closest(".nr-form");if(f)cmd(f)}));
+document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-nr-copy]");if(!b)return;const t=b.closest(".nr-form").querySelector("[data-cmd]").textContent;if(!t.startsWith("/"))return;try{await navigator.clipboard.writeText(t);b.textContent="Copied"}catch(x){}});
+})()</script>`;
 const RULES_JS = `<script>(()=>{if(window.hushRules)return;window.hushRules=1;
 const base=()=>location.pathname.replace(/[/]$/,"")+"/rules";
 function deps(f){const v=n=>f.elements[n]&&f.elements[n].value;const sess=v("measure")==="session_tokens",fc=v("period")==="forecast",spike=!sess&&!fc&&v("cond")==="spike";
@@ -2125,7 +2154,7 @@ card.hidden=false;const rc=b.getBoundingClientRect(),w=card.offsetWidth,h=card.o
 addEventListener("scroll",()=>{card.hidden=true},{passive:true});
 draw();document.addEventListener("hush:swap",draw)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('id="cal"') ? CAL_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('class="rt-fire"') || body.includes('class="nr-form"') ? TRIG_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('id="cal"') ? CAL_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -2364,10 +2393,23 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       </div>
       ${bk.length ? `<div class="bars tall${A.weekly ? " wk" : ""}">${bk.map((x) => `<i data-s="${x.s}" title="${esc(tipB(x))}"></i>`).join("")}</div><div class="axis"><span>${A.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${A.weekly ? "this week" : "today"}</span></div>` : ""}
       <p class="w-facts">${[A?.last_run_at ? `Last run ${ago(A.last_run_at)}` : "Never ran", r.next_run ? `next ${until(r.next_run)}` : ""].filter(Boolean).join(" · ")}</p>
+      ${r.source === "GitHub Actions" ? "" : `<h4>Run from Hush</h4><div class="rt-fire" data-routine="${esc(r.name)}"></div>`}
       <h4>Runs</h4>
       ${A?.runs?.length ? `<div class="ar-list more5">${A.runs.map(runRow).join("")}${more(A.runs.length)}</div>` : `<p class="faint">No run recorded yet.</p>`}
       ${fed.length ? `<h4>Skills it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
   }
+  // New routine: there is no API to create a routine, so Hush writes the /hush-setup command that does it
+  wins.push({ key: "new:routine", kind: "Automation", title: "New routine", body: `
+      <form class="nr-form" onsubmit="return false">
+        <label>Name<input name="name" placeholder="Logs sweep" maxlength="60"></label>
+        <label>What it does<textarea name="what" rows="4" placeholder="Every day, read the production logs from the last 24 h, file an issue for each new error pattern, and stay silent when there is none."></textarea></label>
+        <label>When<select name="preset"><option value="0 13 * * *">Every day at 13:00 UTC</option><option value="0 13 * * 1-5">Weekdays at 13:00 UTC</option><option value="0 12 * * 1">Mondays at 12:00 UTC</option><option value="0 */6 * * *">Every 6 hours</option><option value="custom">Custom cron</option></select></label>
+        <label data-cron hidden>Cron (UTC)<input name="cron" placeholder="0 13 * * *"></label>
+        <label>Model<select name="model"><option>sonnet</option><option>opus</option><option>haiku</option></select></label>
+        <p class="faint">Paste this in Claude Code at the repo root. It adds a new <code>hush-*</code> skill and its roster entry in one PR, changing nothing else. After the merge, <code>/hush-setup routines</code> creates the routine in your Claude account.</p>
+        <div class="nr-cmd" data-cmd>Fill in a name and what it does.</div>
+        <div><button class="btn-sm" type="button" data-nr-copy>Copy command</button></div>
+      </form>` });
   for (const w of s.ci || []) {
     const bars = w.days.map((d, i) => { const t = w.tips[i]; return `<i data-s="${d}" title="${t.ok + t.bad ? `${t.ok} passed, ${t.bad} failed` : "no runs"}"></i>`; }).join("");
     wins.push({ key: `workflow:${encodeURIComponent(w.path)}`, kind: "Workflow", title: w.name, href: w.last?.url || `${repoUrl}/actions`, body: `
@@ -2804,7 +2846,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       ${view("status", statusView)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
         ${s.monitors.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
-      ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}${weekGrid || `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
+      ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}<div class="vh-act"><button type="button" class="btn-quiet" data-open="new:routine">New routine</button></div>${weekGrid || `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "Minutes spent per day, every workflow over the last 30 days, and what goes to production.")}
         ${ciMinutes}
         ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}
@@ -3292,8 +3334,8 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
-    if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2] === "/key" || m[2]?.startsWith("/rules"))))) {
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/triggers|\/fire|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2] === "/key" || m[2] === "/triggers" || m[2] === "/fire" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
@@ -3328,6 +3370,42 @@ createServer(async (req, res) => {
         if (req.method !== "POST" || (req.headers["sec-fetch-site"] && req.headers["sec-fetch-site"] !== "same-origin")) return send(res, 405, "POST from this page only");
         await replaceKey(row.id);
         return redirect(res, `/r/${row.full_name}?key=new#setup`);
+      }
+      if (m[2] === "/triggers" || m[2] === "/fire") {
+        // Run a Claude Code routine from Hush. There is no API to create or edit routines, only to fire
+        // one that has an API trigger: the person pastes that trigger's URL and token here once. The token
+        // is sealed at rest, never sent back to the page, and only ever posted to Anthropic's fire URL.
+        if (req.method === "GET") {
+          const list = await db.all("SELECT routine, url, created_by, created_at, last_fired_at, last_fired_by, last_session_url, last_error FROM routine_triggers WHERE repo_id = $1", row.id);
+          return json(res, 200, Object.fromEntries(list.map((t) => [t.routine, { ...t, url: t.url.replace(/routines\/([\w-]{4})[\w-]*\//, "routines/$1…/") }])));
+        }
+        if (req.headers["sec-fetch-site"] && req.headers["sec-fetch-site"] !== "same-origin") return json(res, 403, { error: "from this page only" });
+        const b = JSON.parse((await readBody(req, 7e4)) || "{}");
+        const routine = String(b.routine || "").slice(0, 200);
+        if (!routine) return json(res, 400, { error: "which routine?" });
+        if (m[2] === "/triggers") {
+          if (b.remove) { await db.run("DELETE FROM routine_triggers WHERE repo_id = $1 AND routine = $2", row.id, routine); return json(res, 200, { ok: true }); }
+          const fireUrl = String(b.url || "").trim(), token = String(b.token || "").trim();
+          if (!/^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/[\w-]{6,80}\/fire$/.test(fireUrl)) return json(res, 422, { error: "That is not a routine's API trigger URL. It looks like https://api.anthropic.com/v1/claude_code/routines/…/fire" });
+          if (!/^sk-ant-[\w-]{20,300}$/.test(token)) return json(res, 422, { error: "That is not a routine trigger token. It starts with sk-ant-." });
+          await db.run("DELETE FROM routine_triggers WHERE repo_id = $1 AND routine = $2", row.id, routine);
+          await db.run("INSERT INTO routine_triggers (repo_id, routine, url, token, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6)", row.id, routine, fireUrl, seal(token), user.login, new Date().toISOString());
+          return json(res, 200, { ok: true });
+        }
+        const t = await db.one("SELECT * FROM routine_triggers WHERE repo_id = $1 AND routine = $2", row.id, routine);
+        if (!t) return json(res, 404, { error: "This routine has no API trigger in Hush yet." });
+        if (t.last_fired_at && Date.now() - Date.parse(t.last_fired_at) < 20e3) return json(res, 429, { error: "It was started a few seconds ago. Give it a moment." });
+        const text = typeof b.text === "string" ? b.text.slice(0, 65536) : "";
+        let out, err = null;
+        try {
+          const r = await fetch(t.url, { method: "POST", headers: { authorization: `Bearer ${open(t.token)}`, "anthropic-version": "2023-06-01", "anthropic-beta": "experimental-cc-routine-2026-04-01", "content-type": "application/json" }, body: JSON.stringify(text ? { text } : {}), signal: AbortSignal.timeout(20e3) });
+          out = await r.json().catch(() => ({}));
+          if (!r.ok) err = r.status === 401 ? "Anthropic rejected the token: it may have been regenerated. Paste the new one." : r.status === 429 ? "The routine's hourly limit is reached. Try again later." : r.status === 400 ? "Anthropic refused the run: the routine may be paused." : `Anthropic answered ${r.status}${out?.error?.message ? `: ${out.error.message}` : ""}`;
+        } catch (e) { err = `Could not reach Anthropic: ${e.message}`; }
+        const now = new Date().toISOString(), sessionUrl = !err ? String(out?.claude_code_session_url || "") : null;
+        await db.run("UPDATE routine_triggers SET last_fired_at = $1, last_fired_by = $2, last_session_url = $3, last_error = $4 WHERE repo_id = $5 AND routine = $6", now, user.login, sessionUrl, err, row.id, routine);
+        await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", row.id, now, err ? "bad" : "ok", "routine", `${routine.replace(/^App: /, "")} ${err ? "could not start" : "started from Hush"}`, err || `by ${user.login}${text ? `: ${text.slice(0, 140)}` : ""}`, `routine:${encodeURIComponent(routine)}`, `fire:${routine}:${now}`);
+        return err ? json(res, 502, { error: err }) : json(res, 200, { ok: true, session_url: sessionUrl });
       }
       if (m[2]?.startsWith("/rules")) {
         if (req.method !== "POST") return json(res, 200, await evalRules(row.id));

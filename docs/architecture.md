@@ -76,6 +76,8 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `GET /r/<owner>/<repo>/live` | Live Actions plus the heartbeat count. |
 | `GET /r/<owner>/<repo>/setup` | Heartbeat setup for the repo. |
 | `POST /r/<owner>/<repo>/key` | Replace the repo's ingest key (same-site form post); the old one works 24 h more. |
+| `GET /r/<owner>/<repo>/triggers`, `POST` | The routines that can be run from Hush; POST saves or removes one's API trigger (same-site only). The token is sealed and never sent back. |
+| `POST /r/<owner>/<repo>/fire` | Run a routine now through its API trigger, with an optional text for the run (same-site only). |
 | `POST /r/<owner>/<repo>/rules` | Create, edit, pause or delete a price rule; `{text}` makes one from a sentence. |
 | `GET /settings`, `POST` | The signed-in person's settings: their time zone. |
 | `GET /r/<owner>/<repo>/report?day=YYYY-MM-DD` | The daily factory report for one UTC day (default yesterday), as the email renders it. |

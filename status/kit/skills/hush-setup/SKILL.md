@@ -1,7 +1,7 @@
 ---
 name: hush-setup
 description: Set up a software factory that Hush watches, from nothing or on top of what the repo already has. Reads the repo, proposes monitors, a pulse and a daily report, adds them as new hush-* skills and workflows, adds them to the roster, opens one PR, and creates the Claude Code routines once it is merged. Never edits code it did not write. Use for "hush setup", "set up my factory", "install monitors", "create my routines".
-argument-hint: "[--dry] [routines]"
+argument-hint: "[--dry] [routines] [add \"<name>\" --cron \"<cron>\" --model <model> -- <what it does>]"
 allowed-tools: Bash(git *), Bash(gh *), Bash(ls *), Bash(cat *), Bash(cp *), Bash(mkdir *), Bash(jq *), Bash(node *), Bash(curl *), Bash(.claude/hooks/hush.sh *), Read, Write, Edit, Glob, Grep, Skill
 ---
 
@@ -26,7 +26,28 @@ Read this first and keep to it. A setup that breaks it is worse than no setup.
 4. **Never invent a credential.** If a piece needs a token the repo does not have, say which one
    and where it goes. Do not guess, do not copy one from another service.
 
-With `--dry`, stop after step 2. With `routines`, skip to step 6 (the PR is already merged).
+With `--dry`, stop after step 2. With `routines`, skip to step 6 (the PR is already merged). With
+`add`, follow "Add one routine" below instead of steps 1 to 4.
+
+## Add one routine
+
+`/hush-setup add "Logs sweep" --cron "0 13 * * *" --model sonnet -- <what it does>` comes from the
+New routine form in Hush. It adds one routine and the skill it runs, and nothing else.
+
+1. Run the preflight (step 0).
+2. The id is `hush-` plus the name in kebab case (`hush-logs-sweep`). If
+   `.claude/skills/<id>/` exists, stop and ask.
+3. Write `.claude/skills/<id>/SKILL.md` from the description: a frontmatter (`name`, a one line
+   `description` that says what it does and when to use it, `allowed-tools` for what it needs),
+   then the steps. Keep to the house rules: silence is the default output, a GitHub issue only for
+   something worth reading (deduped by title, labelled `hush:<id>`), never invent a credential, and
+   **always end with a heartbeat**:
+   `.claude/hooks/hush.sh beat <id> <ok|degraded|skipped> '{"swept":{"<what it counted>":<n>},"filed":[...],"note":"..."}'`.
+   Say which credentials it needs at the top, and send `skipped` when one is missing.
+4. Append to `.claude/factory.json`: a monitor `{ "id": "<id>", "cadence": "<daily or weekly from the cron>", "volume_key": "<what it counted>", "routine": "Hush: <Name>" }`
+   and a routine `{ "name": "Hush: <Name>", "cron": "<cron>", "prompt": "/<id>", "model": "<model>" }`.
+5. Open the PR as in step 5, titled `Hush: add <Name>`, then stop: after the merge,
+   `/hush-setup routines` creates it (step 6) and runs it once (step 7).
 
 ## 0. Preflight
 

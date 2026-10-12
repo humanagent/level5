@@ -72,3 +72,22 @@ and log link), and the skills it runs, each opening its own window.
   and has no skills of its own sends nothing, and shows as not reporting.
 - **Tokens and cost**: the `SessionEnd` hook, which posts the session's token usage.
 - **Duration**: the same hook, from the first and last timestamp in the transcript (`secs`).
+
+## Run and create from Hush
+
+Claude Code has no API to create, edit or pause a routine. It has one to start a routine that has an
+API trigger, so that is what Hush does:
+
+- **Run now.** Open a Claude Code routine's window, paste its API trigger (the URL and the
+  `sk-ant-…` token from the routine's settings on claude.ai) under "Run from Hush", and it gets a
+  Run now button with an optional text for that run (an issue, a PR, an alert). The token is sealed
+  at rest, never sent back to the page, and only posted to Anthropic's fire URL. Every run started
+  from Hush, and every one that failed to start, goes to the bell. Anthropic allows 30 starts per
+  routine and 100 per account an hour; Hush adds a 20 s pause between starts of the same routine.
+- **New routine.** The button on Automations opens a form (name, what it does, when, model) that
+  writes a `/hush-setup add …` command. Pasted in Claude Code, it adds the `hush-*` skill and its
+  roster entry in one PR; after the merge, `/hush-setup routines` creates the routine in the
+  person's Claude account. Hush itself stays read-only on the repo.
+
+Pausing, editing and deleting a routine stay on claude.ai.
+

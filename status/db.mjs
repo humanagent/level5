@@ -60,6 +60,10 @@ const SCHEMA = (pg) => `
     url TEXT NOT NULL, dedupe TEXT NOT NULL);
   CREATE UNIQUE INDEX IF NOT EXISTS automation_runs_dedupe ON automation_runs(automation_id, dedupe);
   CREATE INDEX IF NOT EXISTS automation_runs_at ON automation_runs(automation_id, at);
+  CREATE TABLE IF NOT EXISTS routine_triggers (
+    repo_id BIGINT NOT NULL, routine TEXT NOT NULL, url TEXT NOT NULL, token TEXT NOT NULL,
+    created_by TEXT NOT NULL, created_at TEXT NOT NULL, last_fired_at TEXT, last_fired_by TEXT,
+    last_session_url TEXT, last_error TEXT, PRIMARY KEY (repo_id, routine));
 `;
 
 export async function openDb({ url, dataDir }) {

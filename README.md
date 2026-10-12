@@ -6,21 +6,28 @@ https://factory-status.fly.dev or [run your own](#run-and-deploy).
 
 ## What it shows per repo
 
-- **Monitors**: heartbeats from the skills that run on a routine, judged as operational, degraded,
-  chronically degraded, "said ok, read nothing", or down. 30 daily bars, or 12 weekly bars for
-  weekly monitors.
-- **Routines**: declared in `.claude/factory.json` (or the older `cloud-routine.md` table), plus
-  scheduled GitHub Actions, with their next run and the evidence that the last one ran.
-- **Actions, live**: runs in progress with their jobs, the current step and ticking timers, and
-  the last runs that finished.
-- **Last 30 days**: PRs merged (and the share merged by agents), median time to merge, issues
-  closed against opened, CI pass rate, merges per day.
-- **CI**: every active workflow with 30 days of pass/fail bars.
-- **Costs**: daily spend per provider (AWS, Vercel, Neon...) and tokens per Claude Code session.
-- **Pull requests**: open (with CI), merged and closed, and open issues.
+Every section opens with its own unit per day.
 
-- **Assistant**: ask anything about the repo; answers come from all of the above.
-- **Repositories**: every repo you can see, by account, with its numbers side by side.
+- **Status**: only what needs a look (skills that missed or degraded, failing CI, late routines,
+  firing price rules, critical security findings), then costs and the last 30 days.
+- **Monitors**: each skill's heartbeats, judged against its own schedule: operational, degraded,
+  chronically degraded, "said ok, read nothing", missed, down, or no heartbeat yet.
+- **Automations**: the week as a calendar in your time zone, one block per scheduled run, coloured by
+  what happened. Each automation is one stored object with its state, runs, tokens, cost and time
+  ([docs/automations.md](docs/automations.md)).
+- **CI**: minutes per day by workflow, every workflow's 30-day bars, and what is waiting for
+  production.
+- **Pull requests**: lines added and removed per day; open (with CI), merged (with their size) and
+  closed.
+- **Issues**: opened and closed per day, and what is open.
+- **Costs**: price rules written as sentences, then daily spend per provider and service, and tokens
+  per Claude Code session.
+- **Reports**: what the weekly routines delivered, week by week, and the latest report.
+- **Services**: the factory as a city, one building per service sized by spend.
+
+Around it: **Actions** in the top bar (runs in progress and the latest finished), **Ask** (an
+assistant panel that reads all of the above), the bell (notifications), **Settings** (your time
+zone), and **Repositories** (every repo you can see, by account, side by side).
 
 ## How the data gets in
 
@@ -43,7 +50,8 @@ https://factory-status.fly.dev or [run your own](#run-and-deploy).
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
-- [How Hush judges](docs/judging.md): monitor states, routine evidence, the banner, CI and metrics.
+- [Automations](docs/automations.md): each scheduled job as one stored object, its runs, state and calendar.
+- [How Hush judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
 
 ## Layout

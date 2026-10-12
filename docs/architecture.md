@@ -26,7 +26,8 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | GitHub App auth: manifest setup, app JWT, installation tokens, user OAuth | `server.mjs`, "GitHub App" |
 | Readers: factory files, CI, metrics, queue, live Actions | `readFactory`, `readCi`, `readMetrics`, `readQueue`, `readLive` |
 | Judging | `judge`, `routineState`, `snapshot` ([judging.md](judging.md)) |
-| HTML | `statusPage` (a left-nav app: Overview, Monitors, Automations, CI, Pull requests, Issues, Costs, Setup, one view per URL hash), `skeletonPage`, `heartbeatSetup`, `landing.mjs` |
+| Automations | `syncAutomations` ([automations.md](automations.md)) |
+| HTML | `statusPage` (a left-nav app, one view per URL hash: Status, Monitors, Automations, CI, Pull requests, Issues, Costs, Reports, Services, Setup), `skeletonPage`, `heartbeatSetup`, `landing.mjs` |
 | Heartbeat client | `install.sh` ([heartbeats.md](heartbeats.md)) |
 
 ## Storage
@@ -41,22 +42,28 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | `snapshots` | The last full snapshot per repo, so a page opens instantly. Versioned by `SNAP_V`. |
 | `price_rules` | Cost alarms per repo: name, config (provider, measure, period, condition, limits, days, dates, severity), enabled. |
 | `inventories` | Security inventory per repo and kind (`aws-iam`, `infisical`): names and metadata only. |
+| `automations` | One row per scheduled job: state, schedule, command, skills, 30-day runs, misses, tokens, cost, time. Unique on `(repo_id, key)`. |
+| `automation_runs` | Each run of an automation: when, status, origin, tokens, cost, duration, note, link. Unique on `(automation_id, dedupe)`. |
 | `events` | Notifications: one row per change (monitor state, late routine, CI broken or fixed, PR opened or merged, issue opened, spend jump). Unique on `(repo_id, dedupe)`. |
-| `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed. |
+| `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed; each person's time zone (`tz:<login>`); replaced ingest keys during their 24 h grace (`prevkey:<sha256>`). |
 
 ## Loading a repo page
 
 1. Auth: the session cookie names the user; their installations (cached 3 min) must cover the repo.
 2. If a snapshot is stored, the page renders from it at once. If it is older than 60 s, the page is
    marked stale and fetches `?partial=1` in the background, then swaps in the fresh render.
-3. With no snapshot yet, a skeleton renders at once and the first read runs in the background.
+3. With no snapshot yet, a skeleton in the real app shell renders at once and the first read runs in
+   the background; the page reloads itself once the snapshot is ready, so every script loads.
 4. A snapshot is one GitHub read per repo at a time (concurrent requests share it). Readers keep
    their own caches: factory files, CI and metrics 10 min, the queue 1 min, live Actions 6 s.
 5. The page refreshes itself every 2 minutes and when the tab regains focus. Open sections stay open.
 
-The live Actions panel polls `/r/<repo>/live` every 8 s while a run is in progress (or while
-onboarding waits for its first heartbeat) and every 30 s otherwise. When a run finishes, the rest
-of the page refreshes.
+The **Actions** button in the top bar polls `/r/<repo>/live` every 8 s while a run is in progress
+(or while onboarding waits for its first heartbeat) and every 30 s otherwise: a spinner and a count
+while runs are going, the last result otherwise, and a dropdown with the running jobs and the latest
+finished runs. When a run finishes, the rest of the page refreshes.
+
+HTML is served `no-store`, so a browser never shows an old build of a page.
 
 ## Routes
 
@@ -68,6 +75,10 @@ of the page refreshes.
 | `GET /api/notifications`, `POST` | The signed-in person's notifications; POST marks them read. |
 | `GET /r/<owner>/<repo>/live` | Live Actions plus the heartbeat count. |
 | `GET /r/<owner>/<repo>/setup` | Heartbeat setup for the repo. |
+| `POST /r/<owner>/<repo>/key` | Replace the repo's ingest key (same-site form post); the old one works 24 h more. |
+| `POST /r/<owner>/<repo>/rules` | Create, edit, pause or delete a price rule; `{text}` makes one from a sentence. |
+| `GET /settings`, `POST` | The signed-in person's settings: their time zone. |
+| `GET /landing` | The landing, also when signed in (it then says Enter instead of Sign in). |
 | `POST /r/<owner>/<repo>/ask` | The assistant: streams an answer as plain text. |
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
 | `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
@@ -84,7 +95,7 @@ of the page refreshes.
 - **No personal tokens stored for reads.** Reads use short-lived installation tokens. The user's
   OAuth token is only used to list which installations they can see.
 - **A user sees a repo only if one of their installations covers it.**
-- **Ingest keys can only write heartbeats** for their one repo.
+- **Ingest keys can only write heartbeats and costs** for their one repo, and can be replaced.
 - Secrets at rest are sealed with `SECRET`. Losing `SECRET` means re-creating the app via `/setup`.
 
 ## Notifications
@@ -95,16 +106,23 @@ the last 7 days every 10 minutes, so events accrue between visits (while the mac
 Each person sees the events of every repo their installations cover; opening the panel marks them
 read. An entry links to the repo and opens the entity's window.
 
+## Time zone
+
+Everything is stored and computed in UTC. Each person picks a time zone in Settings (default: the
+browser's), and the page prints schedules, the week calendar, missed-run labels and exact times in
+it; hovering shows the UTC original. Per-day charts still group by UTC day.
+
 ## Floating windows
 
-Clicking a monitor, routine, workflow, pull request or issue opens it in its own window, after the
+Clicking a monitor, automation, workflow, pull request or issue opens it in its own window, after the
 admin's PanelHost: one window per entity, drag by the title bar, resize from any edge, cascade from
 the right, focus on click, minimize to a dock, no zoom, no scrim. Windows survive section changes
 and background refreshes, and the open set is in the URL (`?w=`).
 
 ## Assistant
 
-A section of the repo page. Each question is one OpenRouter call (`HUSH_MODEL`, default
+A panel on the right of the repo page, opened from Ask in the top bar; it stays open across sections
+and refreshes, and the page makes room for it. Each question is one OpenRouter call (`HUSH_MODEL`, default
 `openai/gpt-6.1-sol`) whose system prompt carries everything Hush has on the repo: the snapshot,
 30 days of heartbeats with their notes and volumes, the cost rows, and a one-line summary of every
 other repo the person can see. The conversation lives in the page only; nothing is stored.
@@ -128,6 +146,8 @@ On start-up Hush brings older data forward, once each:
 ## Known gaps
 
 - **Backups depend on the storage.** On Neon they come with it; on the local SQLite there are none.
-- **No alerts.** Hush shows state; it does not notify yet.
+- **Notifications only in the app.** The bell and price rules notify inside Hush; nothing is sent
+  by email or chat yet.
+- **Per-day charts are UTC days**, whatever the viewer's time zone.
 - **No deploy pipeline.** Deploys are manual `fly deploy`.
 - The GitHub App is still named "Factory Status …" and the domain is `factory-status.fly.dev`.

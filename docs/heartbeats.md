@@ -25,13 +25,18 @@ The body is one heartbeat or an array of them.
 | `note` | no | One line, up to 500 chars. |
 | `source` | no | `skill` (default) or `session`. Session beats come from the `SessionEnd` hook. |
 | `ts` | no | ISO time. Defaults to now. A repeated `(monitor, ts)` is ignored, so retries are safe. |
+| `title`, `report` | no | A report the run produced (a weekly summary, an email), as markdown up to 60,000 characters. Shown under Reports. |
 
 Responses: `200 {"ok":true,"stored":n}`, `401` for an unknown key, `400` for a missing monitor or
 status.
 
 The **ingest key** is created the first time someone opens the repo's page, and shown in its
-onboarding card (and at `/r/<owner>/<repo>/setup` afterwards). It can only post heartbeats for that
-one repo. It reads nothing.
+onboarding card (and at `/r/<owner>/<repo>/setup` afterwards). It can only post heartbeats and costs
+for that one repo. It reads nothing.
+
+**Replacing the key.** Setup has a "Replace key" button. The new key works at once and the old one
+keeps working for 24 hours, so there is time to update wherever it is stored before heartbeats stop.
+Replace it whenever it leaked: committed to git, pasted somewhere.
 
 ## The installer
 
@@ -51,12 +56,24 @@ Run at the repo root, then commit `.claude/`. It writes, and changes nothing els
 
 It needs `node` (to merge `settings.json`) and must run at the root of a git repo.
 
+**Where the key lives.** Committing `.claude/hush.json` puts a live key in the repo's history: anyone
+with a clone can post fake heartbeats. In a repo that keeps secrets in a vault, set `HUSH_URL` and
+`HUSH_KEY` there instead, gitignore `.claude/hush.json`, and let the environment provide them:
+
+- **Claude Code cloud routines:** the variables a session-start hook exports into `$CLAUDE_ENV_FILE`
+  reach the commands the session runs (so skill heartbeats work), but **not the `SessionEnd` hook**.
+  Have the session-start hook also write `.claude/hush.json` inside the container (not committed), so
+  `hush.sh session-end` finds the key.
+- **GitHub Actions:** pass both to the job that calls `hush.sh`, and make sure its checkout includes
+  `.claude/hooks/hush.sh` (a sparse checkout that leaves it out skips the copy silently).
+
 ## Two ways a routine reports
 
 **Automatic: the `SessionEnd` hook.** When a Claude Code session ends in the cloud
 (`CLAUDE_CODE_REMOTE=true`), `hush.sh session-end` reads the transcript, takes the first slash
 command the session ran (`/fix-issues`), and posts `{monitor: "fix-issues", status: "ok", source:
-"session"}`. Local sessions send nothing. This proves the routine ran, not that it went well. A
+"session"}`, and the session's token usage by model and its duration (see [costs.md](costs.md)).
+Local sessions send nothing. This proves the routine ran, not that it went well. A
 session beat named after a declared routine counts as that routine's run and does not create a
 monitor row of its own. Routines whose prompt is free text, with no slash command, send nothing
 this way.

@@ -10,13 +10,15 @@ The `SessionEnd` hook installed by `install.sh` reads the session transcript whe
 ends and posts its token usage by model:
 
 ```json
-{ "source": "claude-code", "key": "<session_id>", "name": "fix-issues", "turns": 6,
+{ "source": "claude-code", "key": "<session_id>", "name": "fix-issues", "turns": 6, "secs": 1260,
   "models": { "claude-sonnet-4-5": { "input": 216, "output": 70555, "cache_write_5m": 0, "cache_write_1h": 322734, "cache_read": 19673294 } } }
 ```
 
 - Each assistant message counts once (by message id), so streamed partial lines are not double counted.
 - `name` is the first slash command that is not a Claude Code built-in (`/clear`, `/compact`,
   `/model`... are skipped).
+- `secs` is the session's duration, from the first to the last timestamp in the transcript. It is
+  the "time" of an automation run ([automations.md](automations.md)).
 - Subagent transcripts are separate files and are not counted yet.
 - Local sessions send nothing.
 
@@ -84,8 +86,14 @@ tokens (input, cached, output) and estimated dollars.
 
 ## Price rules
 
-Alarms on spend and tokens, under Costs. Each rule measures one number over one period and sends a
-notification (the bell) when it crosses its limit, at most once per period.
+Alarms on spend and tokens, at the top of Costs. Each rule measures one number over one period and
+sends a notification (the bell) when it crosses its limit, at most once per period.
+
+**Written as a sentence.** Type it the way you would say it ("tell me when AWS goes over $50 a day on
+weekdays", "urgent if the month-end forecast passes 1500") and Hush turns it into a rule: the
+assistant's model fills the fields below, and the server validates every field before saving, so it
+cannot store anything else. Rules are listed as sentences ("When AWS spend goes over $50 in a day, on
+weekdays"); clicking one opens the fields to edit.
 
 | Field | Options |
 | --- | --- |
@@ -102,7 +110,7 @@ Rules are checked every time the repo refreshes and every time costs are posted.
 current value against its limit. They belong to the repo: a rule id is only accepted together with
 the repo it was created on.
 
-## Map
+## Services
 
 The factory as a city, after the map in the "Build your own software factory" post: a tiled board
 with a road down the middle, one outlined building per service (each AWS service from the Cost

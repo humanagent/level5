@@ -1,7 +1,8 @@
 # Security
 
-A section that shows AWS IAM and the secrets in Infisical, with findings. **Hush never receives a
-secret value or a credential**: only names and metadata.
+An inventory of AWS IAM and the secret names in Infisical, judged into findings. **Hush never
+receives a secret value or a credential**: only names and metadata. There is no Security section in
+the app: critical and high findings show as one alert on Status, and new ones are notifications.
 
 ## How the inventory gets in
 

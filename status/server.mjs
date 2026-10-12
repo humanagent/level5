@@ -1130,7 +1130,7 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .line.pr .meta{display:flex;align-items:center;gap:8px}
 .agent-tag{font:500 11px var(--f);color:#fff;background:var(--ink);border-radius:6px;padding:1px 6px}
 @media(max-width:520px){.line.pr .meta code.branch{display:none}}
-.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
+.cost-cols{height:96px}.group a.line{text-decoration:none;color:inherit}.group a.line:hover{background:rgba(15,16,20,.03)}.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
 .costs-fold{margin:-16px 0 32px}.cost-note{color:var(--faint);font-size:12px;margin-top:8px}.costs-fold .line .meta b{color:var(--ink);font-weight:600}
 .ci-live{margin-bottom:32px}
 :root{--sel:#f1f2f4}
@@ -2264,6 +2264,10 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="stat"><b>${usd(C.yesterday)}</b><span>Yesterday</span><small>${usd(C.avg7)} a day over the last 7</small></div>
       <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud session${C.sessions_30d === 1 ? "" : "s"}</small></div>
       <div class="stat"><b>${topRoutines.length ? usd(topRoutines[0].usd_30d) : "–"}</b><span>${topRoutines.length ? `Top routine: ${esc(topRoutines[0].name)}` : "Per routine"}</span><small>${topRoutines.slice(1).map((g) => `${esc(g.name)} ${usd(g.usd_30d)}`).join(" · ") || (topRoutines.length ? "" : "no session costs yet")}</small></div>
+      <div class="chart" aria-label="Spend per day by provider">
+        <div class="cols cost-cols">${C.per_day.slice(-WINDOW).map((p) => { const max = Math.max(1e-9, ...C.per_day.slice(-WINDOW).map((x) => x.total)); const parts = C.sources.filter((k) => p.by[k]); return `<div title="${p.d} · ${usd(p.total)}${parts.length ? " · " + parts.map((k) => `${srcName(k)} ${usd(p.by[k])}`).join(", ") : ""}"><i class="stack" style="height:${(p.total / max) * 100}%">${parts.map((k) => `<em style="height:${(p.by[k] / p.total) * 100}%;background:${srcColor(k)}"></em>`).join("")}</i></div>`; }).join("")}</div>
+        <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span>${C.sources.map((k) => `<span><span class="key" style="background:${srcColor(k)}"></span>${srcName(k)}</span>`).join("")}<span class="rule"></span><span>today</span></div>
+      </div>
     </div>`;
   const statusView = `
         <div class="banner" data-s="${stOverall}">${stOverall === "ok" ? CHECK : ALERT}<span>${nAlerts ? `${plural(nAlerts, "thing")} need${nAlerts === 1 ? "s" : ""} a look` : "Nothing needs attention"}</span></div>

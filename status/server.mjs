@@ -1998,6 +1998,9 @@ if(el.hasAttribute("title")){el.dataset.tip=el.getAttribute("title");el.removeAt
 const [h,...rest]=txt.split(" · ");t.innerHTML="<b>"+e(day(h))+"</b>"+rest.map(x=>"<div>"+e(x)+"</div>").join("");t.hidden=false});
 document.addEventListener("mousemove",ev=>{if(t.hidden)return;const w=t.offsetWidth,h=t.offsetHeight;let x=ev.clientX+14,y=ev.clientY+16;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-12;t.style.left=x+"px";t.style.top=y+"px"});
 document.addEventListener("mouseout",ev=>{if(cur&&!cur.contains(ev.relatedTarget)){t.hidden=true;cur=null}});addEventListener("scroll",()=>{t.hidden=true},{passive:true});
+const DW=["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"],DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],off=-new Date().getTimezoneOffset();
+const local=()=>{if(!off)return;document.querySelectorAll(".utc:not([data-lt])").forEach(el=>{el.dataset.lt=1;el.title=(el.title?el.title+" · ":"")+el.textContent.trim()+" UTC";el.textContent=el.textContent.replace(/(?:(Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays) )?(\\d{2}):(\\d{2})(?: UTC)?/g,(m,dw,h,mi)=>{let t=+h*60+ +mi+off,sh=0;if(t<0){t+=1440;sh=-1}if(t>=1440){t-=1440;sh=1}const hh=String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");return dw?DW[(DW.indexOf(dw)+sh+7)%7]+" "+hh:hh})})};
+local();document.addEventListener("hush:swap",local);
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-more]");if(!b)return;const g=b.parentElement,all=g.classList.toggle("all");b.textContent=all?"Show less":"Show all "+b.dataset.more})})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
@@ -2130,7 +2133,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       : failed && b.at(-1)?.s === "warn" ? ["bad", "Last run failed", 0]
       : ["ok", "On schedule", 1];
     const tip = (x) => [x.label, { ok: x.failed ? `${x.runs} runs, ${x.failed} failed` : x.runs > 1 ? `ran ${x.runs} times` : "ran", warn: `${x.failed} of ${x.runs} runs failed`, miss: "should have run, did not", "": "nothing scheduled" }[x.s], x.usd ? usd(x.usd) : ""].filter(Boolean).join(" · ");
-    const facts = [cmd ? `/${esc(cmd)}` : r.source === "GitHub Actions" ? esc(r.prompt.replace(/^\.github\/workflows\//, "")) : "", esc(when(r).replace(" UTC", "")), r.next_run ? `next ${until(r.next_run)}` : ""].filter(Boolean).join(" · ");
+    const facts = [cmd ? `/${esc(cmd)}` : r.source === "GitHub Actions" ? esc(r.prompt.replace(/^\.github\/workflows\//, "")) : "", `<span class="utc">${esc(when(r))}</span>`, r.next_run ? `next ${until(r.next_run)}` : ""].filter(Boolean).join(" · ");
     const hint = st === "none" ? `<p class="rt-hint">${r.source === "Claude Code" ? `No heartbeat. <a href="#setup">Install the hook</a>` : "No runs in the window."}</p>` : "";
     return { rank, html: `<div class="row rt openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0">
       <div class="rt-top"><span class="name"><b>${esc(r.name.replace(/^App: /, ""))}</b><small>${facts}</small></span><span class="state" data-s="${st}">${label}</span></div>
@@ -2563,12 +2566,12 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       const runSeries = topN((AD?.routines || []).map((r) => ({ name: r.name, v: r.runs })));
       return tokSeries.length ? dayChart(AD.dates, tokSeries, (n) => tk(n) + " tokens") : dayChart(AD?.dates || [], runSeries, (n) => plural(n, "run"));
     })());
-    const cell = (c, d) => !c.s ? `<td></td>` : `<td class="wk-c" data-s="${c.s}" title="${esc([d, c.n > 1 ? `${c.n} runs from ${c.t}` : c.t + " UTC", { ok: "ran", miss: "should have run, did not", next: "scheduled", unk: "no record either way" }[c.s]].join(" · "))}"><span>${{ ok: "✓", miss: "✕", next: "○", unk: "·" }[c.s]}</span>${c.n > 1 ? `<small>×${c.n}</small>` : `<small>${c.t}</small>`}</td>`;
+    const cell = (c, d) => !c.s ? `<td></td>` : `<td class="wk-c" data-s="${c.s}" title="${esc([d, c.n > 1 ? `${c.n} runs from ${c.t}` : c.t + " UTC", { ok: "ran", miss: "should have run, did not", next: "scheduled", unk: "no record either way" }[c.s]].join(" · "))}"><span>${{ ok: "✓", miss: "✕", next: "○", unk: "·" }[c.s]}</span>${c.n > 1 ? `<small>×${c.n}</small>` : `<small class="utc">${c.t}</small>`}</td>`;
     const perDay = week.map((_, i) => rows.reduce((a, x) => a + (x.cells[i].s ? x.cells[i].n || 1 : 0), 0));
     weekGrid = `<h2>This week</h2><div class="group wk-wrap"><table class="wk"><thead><tr><th></th>${week.map((d) => `<th class="${d === today ? "today" : ""}">${new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })}<small>${new Date(d + "T12:00:00Z").getUTCDate()}</small></th>`).join("")}</tr></thead>
-      <tbody>${rows.map((x) => `<tr><th class="openable" data-open="routine:${esc(encodeURIComponent(x.r.name))}" role="button" tabindex="0">${esc(x.r.name.replace(/^App: /, ""))}<small>${esc(when(x.r).replace(" UTC", ""))}</small></th>${x.cells.map((c, i) => cell(c, week[i])).join("")}</tr>`).join("")}</tbody>
+      <tbody>${rows.map((x) => `<tr><th class="openable" data-open="routine:${esc(encodeURIComponent(x.r.name))}" role="button" tabindex="0">${esc(x.r.name.replace(/^App: /, ""))}<small class="utc">${esc(when(x.r))}</small></th>${x.cells.map((c, i) => cell(c, week[i])).join("")}</tr>`).join("")}</tbody>
       <tfoot><tr><th>Runs</th>${perDay.map((n, i) => `<td class="${week[i] === today ? "today" : ""}">${n || ""}</td>`).join("")}</tr></tfoot></table></div>
-      <p class="sk-key"><span class="wk-k" data-s="ok">✓</span> ran <span class="wk-k" data-s="miss">✕</span> should have run, did not <span class="wk-k" data-s="next">○</span> scheduled · times in UTC</p>`;
+      <p class="sk-key"><span class="wk-k" data-s="ok">✓</span> ran <span class="wk-k" data-s="miss">✕</span> should have run, did not <span class="wk-k" data-s="next">○</span> scheduled · times in your time zone</p>`;
   }
 
   // Reports: the weekly ones. Unit: reports per week, delivered or missed.
@@ -2594,7 +2597,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Hush. Add <code>"report"</code> with its text to the skill's heartbeat to read it here.</p>`;
       const past = r.items.slice(1).map((y) => `<div class="line"><span class="name"><span>${new Date(y.ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}<span class="sub">${esc(y.title || y.note || Object.entries(y.swept || {}).map(([k, v]) => `${v} ${k}`).join(" · "))}</span></span></span><span class="meta"><span class="state" data-s="${y.status === "ok" ? "ok" : "warn"}">${y.status === "ok" ? "Delivered" : esc(y.status)}</span></span></div>`).join("");
       return `<section class="rp">
-        <div class="rp-h"><span class="name"><b>${esc(r.id)}</b><small>${[rt ? esc(when(rt).replace(" UTC", "")) : "", x ? `last ${ago(x.ts)}` : "never sent", read].filter(Boolean).join(" · ")}</small></span><span class="state" data-s="${ps}">${label === "Running" ? "Delivered" : label}</span></div>
+        <div class="rp-h"><span class="name"><b>${esc(r.id)}</b><small>${[rt ? `<span class="utc">${esc(when(rt))}</span>` : "", x ? `last ${ago(x.ts)}` : "never sent", read].filter(Boolean).join(" · ")}</small></span><span class="state" data-s="${ps}">${label === "Running" ? "Delivered" : label}</span></div>
         ${r.buckets.length ? `<div class="bars wk">${r.buckets.map((b) => `<i data-s="${b.s === "empty" ? "warn" : b.s}" title="${esc(barTip(r, b))}"></i>`).join("")}</div>` : ""}
         ${body}
         ${past ? `<div class="group more5 rp-past">${past}${more(r.items.length - 1)}</div>` : ""}

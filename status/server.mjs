@@ -2799,7 +2799,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
         ${promoSection}`)}
       ${view("prs", `${vh("Pull requests", "Code merged per day, open PRs with their CI, and the latest merged and closed.")}${prHead}${prSection}`)}
       ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${incidents}`)}
-      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${rulesSection}${costs || costsEmpty}`)}
+      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
       ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
       ${view("services", `${vh("Services", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>
@@ -2972,6 +2972,7 @@ Rules:
 - Monitor states: alive = operational, warn = degraded (last run not ok), degraded = chronically degraded, lying = said ok but read nothing, dead = silent past its window, retired = gone from the roster.
 - Bars are oldest to newest, one char per day (or week for weekly monitors): ok, degraded, skipped, "-" = no run.
 - Costs: provider rows are real daily spend; Claude Code dollars are estimates at API list prices.
+- Price rules (cost alarms) are made here, by you, with your tools. When ${user.login} asks to be told, alerted, warned or notified about spend or tokens, create the rule; when they ask what alarms exist, list them; to stop one, delete it. After a change, confirm in one sentence that repeats the rule as it was saved. Never invent a rule you did not create with a tool.
 
 ## Snapshot of ${row.full_name}
 ${JSON.stringify(lean)}
@@ -2984,6 +2985,44 @@ ${costs.map((c) => { const x = JSON.parse(c.body); return `${c.day} ${c.source} 
 
 ## Other repos ${user.login} can see
 ${brief.join("\n") || "none"}`;
+}
+// The assistant can make, list and delete price rules: alarms are asked for in words, not in a form.
+const RULE_TOOLS = [
+  { type: "function", function: { name: "create_price_rule", description: "Create a cost alarm for this repo. It notifies when the measure crosses the limit, at most once per period.", parameters: { type: "object", required: ["name", "config"], properties: {
+    name: { type: "string", description: "Short title, e.g. 'AWS over $50 a day'" },
+    config: { type: "object", description: "source: 'any' or a provider (aws, vercel, neon, claude-code...); measure: usd | tokens (Claude Code tokens) | session_tokens (one session); period: day | week (rolling 7 days) | month (month to date) | forecast (month-end projection); cond: above (over amount) | spike (pct % over the average of the previous `days` days); amount: number; pct: number; days: number; service: substring of a service name or ''; dow: weekdays it applies to, Sunday=0, [] = every day, weekdays = [1,2,3,4,5]; from/to: YYYY-MM-DD or ''; severity: warn | bad" } } } } },
+  { type: "function", function: { name: "list_price_rules", description: "List this repo's cost alarms with their current value against the limit.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "delete_price_rule", description: "Delete one of this repo's cost alarms by id.", parameters: { type: "object", required: ["id"], properties: { id: { type: "number" } } } } },
+];
+async function runRuleTool(row, user, name, args) {
+  if (name === "list_price_rules") return (await evalRules(row.id)).map((r) => ({ id: r.id, rule: ruleSummary(r.config), name: r.name, enabled: r.enabled, value: r.value, limit: r.limit, over: r.over, last_fired_at: r.last_fired_at }));
+  if (name === "delete_price_rule") { await db.run("DELETE FROM price_rules WHERE id = $1 AND repo_id = $2", Number(args.id), row.id); refresh(row).catch(() => {}); return { deleted: Number(args.id) }; }
+  if (name === "create_price_rule") {
+    const config = ruleConfig(args.config || {}), nm = String(args.name || ruleSummary(config)).trim().slice(0, 80);
+    await db.run("INSERT INTO price_rules (repo_id, name, config, enabled, created_by, created_at) VALUES ($1, $2, $3, 1, $4, $5)", row.id, nm, JSON.stringify(config), user.login, new Date().toISOString());
+    refresh(row).catch(() => {});
+    return { created: nm, rule: ruleSummary(config) };
+  }
+  return { error: `unknown tool ${name}` };
+}
+// One answer: up to three rounds of tool calls, then the text. Plain text back, like askStream.
+async function askWithTools(res, system, messages, origin, row, user) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return send(res, 503, "The assistant is not configured on this Hush (OPENROUTER_API_KEY is missing).", { "content-type": "text/plain; charset=utf-8" });
+  const convo = [{ role: "system", content: system }, ...messages];
+  for (let round = 0; round < 4; round++) {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "http-referer": origin, "x-title": "Hush" }, body: JSON.stringify({ model: ASK_MODEL, messages: convo, tools: RULE_TOOLS }) });
+    if (!r.ok) return send(res, 502, `The model did not answer (${r.status}). ${(await r.text().catch(() => "")).slice(0, 300)}`, { "content-type": "text/plain; charset=utf-8" });
+    const msg = (await r.json()).choices?.[0]?.message || {};
+    if (!msg.tool_calls?.length || round === 3) return send(res, 200, msg.content || "", { "content-type": "text/plain; charset=utf-8" });
+    convo.push({ role: "assistant", content: msg.content || "", tool_calls: msg.tool_calls });
+    for (const c of msg.tool_calls) {
+      let args = {};
+      try { args = JSON.parse(c.function?.arguments || "{}"); } catch {}
+      const out = await runRuleTool(row, user, c.function?.name, args).catch((e) => ({ error: e.message }));
+      convo.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify(out) });
+    }
+  }
 }
 async function askStream(res, system, messages, origin) {
   const key = process.env.OPENROUTER_API_KEY;
@@ -3290,7 +3329,7 @@ createServer(async (req, res) => {
         let system = await askContext(row, snap, user, repos);
         // a chat window opened from something on the page: what that thing shows, as the person sees it
         if (focus && typeof focus.text === "string") system += `\n\n## What ${user.login} is looking at right now\n${String(focus.title || "").slice(0, 200)}\n${focus.text.slice(0, 6000)}\n\nThey opened this from the page. When they ask for a summary: three or four short sentences in plain words, no headings, no list. Say what it is, whether it is fine or not and why, and the one thing to do if anything. Then answer follow-ups about it, still briefly.`;
-        return askStream(res, system, clean, origin);
+        return askWithTools(res, system, clean, origin, row, user);
       }
       let saved = await db.one("SELECT at, body FROM snapshots WHERE repo_id = $1", row.id);
       if (saved && JSON.parse(saved.body).v !== SNAP_V) saved = null;

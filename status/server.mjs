@@ -1606,6 +1606,13 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .wk tbody th{text-align:left;font-weight:600;min-width:170px}.wk tbody tr:last-child td,.wk tbody tr:last-child th{border-bottom:1px solid var(--line)}.wk tfoot th{text-align:left;color:var(--muted);font-weight:500}.wk tfoot td{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}.wk tfoot td,.wk tfoot th{border-bottom:0}
 .wk .today{background:rgba(94,106,210,.06)}.wk-c span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-size:12px;font-weight:700}.wk-c small{display:block;margin-top:2px;color:var(--faint);font-size:10.5px}
 .wk-c[data-s=ok] span,.wk-k[data-s=ok]{background:rgba(47,179,107,.14);color:var(--ok)}.wk-c[data-s=miss] span,.wk-k[data-s=miss]{background:rgba(229,72,77,.14);color:var(--bad)}.wk-c[data-s=next] span,.wk-k[data-s=next]{border:1.5px dashed #c4c6cc;color:var(--faint)}.wk-c[data-s=unk] span{color:var(--faint)}.wk-k{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px}
+.cal{padding:0;overflow:hidden}.cal-head{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line)}.cal-head>div{padding:10px 12px;font-size:13px;color:var(--muted);border-left:1px solid var(--line)}.cal-head>div:first-child{border-left:0}.cal-head b{color:var(--ink);font-weight:600}.cal-head small{display:block;color:var(--faint);font-size:11.5px;margin-top:2px}.cal-head .today{background:rgba(94,106,210,.06)}.cal-head .today b{color:#5e6ad2}
+.cal-body{position:relative;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:repeating-linear-gradient(to bottom,transparent 0,transparent calc(6 * 18px - 1px),var(--line) calc(6 * 18px - 1px),var(--line) calc(6 * 18px))}
+.cal-hours{position:absolute;inset:0;pointer-events:none}.cal-hours span{position:absolute;left:4px;transform:translateY(2px);font-size:10px;color:var(--faint)}
+.cal-day{position:relative;border-left:1px solid var(--line)}.cal-day:first-of-type{border-left:0}.cal-day.today{background:rgba(94,106,210,.04)}.cal-now{position:absolute;left:0;right:0;height:2px;background:#5e6ad2;z-index:2}
+.cal-ev{position:absolute;height:20px;padding:0 6px;border-radius:5px;font-size:11px;line-height:20px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default;z-index:1}
+.cal-ev[data-s=ok]{background:rgba(47,179,107,.16);color:#1f7a49;box-shadow:inset 3px 0 0 var(--ok)}.cal-ev[data-s=miss]{background:rgba(229,72,77,.14);color:#b4282d;box-shadow:inset 3px 0 0 var(--bad)}.cal-ev[data-s=next]{background:var(--bg);color:var(--muted);border:1px dashed #c4c6cc}.cal-ev[data-s=unk]{background:#f1f2f4;color:var(--faint)}
+.wk-k[data-s=ok]{background:rgba(47,179,107,.16);box-shadow:inset 3px 0 0 var(--ok)}.wk-k[data-s=miss]{background:rgba(229,72,77,.14);box-shadow:inset 3px 0 0 var(--bad)}.wk-k[data-s=next]{background:var(--bg);border:1px dashed #c4c6cc}.wk-k{width:14px;height:12px;border-radius:3px;vertical-align:-1px}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -2002,8 +2009,25 @@ const DW=["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Sat
 const local=()=>{if(!off)return;document.querySelectorAll(".utc:not([data-lt])").forEach(el=>{el.dataset.lt=1;el.title=(el.title?el.title+" · ":"")+el.textContent.trim()+" UTC";el.textContent=el.textContent.replace(/(?:(Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays) )?(\\d{2}):(\\d{2})(?: UTC)?/g,(m,dw,h,mi)=>{let t=+h*60+ +mi+off,sh=0;if(t<0){t+=1440;sh=-1}if(t>=1440){t-=1440;sh=1}const hh=String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");return dw?DW[(DW.indexOf(dw)+sh+7)%7]+" "+hh:hh})})};
 local();document.addEventListener("hush:swap",local);
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-more]");if(!b)return;const g=b.parentElement,all=g.classList.toggle("all");b.textContent=all?"Show less":"Show all "+b.dataset.more})})()</script>`;
+// The Automations week as a calendar, drawn in the viewer's time zone: Monday to Sunday, hours
+// down, each run a block at its time, coloured by what happened; the routine name on hover.
+const CAL_JS = `<script>(()=>{
+const e=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const S={ok:"ran",miss:"should have run, did not",next:"scheduled",unk:"no record either way"};
+function draw(){const box=document.getElementById("cal");if(!box)return;const src=box.querySelector(".cal-data");if(!src)return;const runs=JSON.parse(src.textContent);
+const now=new Date(),mon=new Date(now.getFullYear(),now.getMonth(),now.getDate()-((now.getDay()+6)%7)),days=[...Array(7)].map((_,i)=>new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i));
+const key=d=>d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate(),todayK=key(now),H=1.2;
+const by=days.map(d=>runs.map(r=>({...r,at:new Date(r.t)})).filter(r=>key(r.at)===key(d)).sort((a,b)=>a.at-b.at));
+const TOUCH=70,col=(list)=>{const out=[];for(const r of list){const m=r.at.getHours()*60+r.at.getMinutes();let lane=0;while(out.some(s=>s.lane===lane&&Math.abs(s.m-m)<TOUCH))lane++;out.push({...r,m,lane})}for(const o of out){const near=out.filter(x=>Math.abs(x.m-o.m)<TOUCH);o.lanes=Math.max(...near.map(x=>x.lane))+1}return out};
+const hh=d=>String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+let h='<div class="cal-head">'+days.map((d,i)=>'<div class="'+(key(d)===todayK?"today":"")+'"><b>'+d.toLocaleDateString(undefined,{weekday:"short"})+'</b> '+d.getDate()+'<small>'+by[i].length+" run"+(by[i].length===1?"":"s")+'</small></div>').join("")+'</div><div class="cal-body" style="height:'+(24*60*H/4)+'px">';
+h+='<div class="cal-hours">'+[6,12,18].map(x=>'<span style="top:'+(x*60*H/4)+'px">'+String(x).padStart(2,"0")+':00</span>').join("")+'</div>';
+h+=days.map((d,i)=>{const placed=col(by[i]);const nowLine=key(d)===todayK?'<i class="cal-now" style="top:'+((now.getHours()*60+now.getMinutes())*H/4)+'px"></i>':"";
+return '<div class="cal-day'+(key(d)===todayK?" today":"")+'">'+nowLine+placed.map(p=>'<span class="cal-ev" data-s="'+p.s+'" style="top:'+(p.m*H/4)+'px;left:calc('+(p.lane*100/p.lanes)+'% + 3px);width:calc('+(100/p.lanes)+'% - 6px)" data-tip="'+e(p.n+" · "+hh(p.at)+" · "+S[p.s])+'">'+e(p.n)+'</span>').join("")+'</div>'}).join("")+'</div>';
+let v=box.querySelector(".cal-view");if(!v){v=document.createElement("div");v.className="cal-view";box.appendChild(v)}v.innerHTML=h}
+draw();document.addEventListener("hush:swap",draw)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('id="cal"') ? CAL_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -2128,7 +2152,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     const onTime = due.length ? Math.round((due.filter((x) => x.s !== "miss").length / due.length) * 100) : null;
     const lastFire = (() => { const t = new Date(r.next_run || Date.now()); t.setTime(t.getTime() - r.period_h * 36e5); return r.period_h >= 24 * 6 ? `${fullDay(DOW[t.getUTCDay()])} ${t.toISOString().slice(11, 16)}` : t.toISOString().slice(11, 16); })();
     const [st, label, rank] = !r.last_seen && !due.length ? ["none", r.source === "Claude Code" ? "Not reporting" : "No runs found", 2]
-      : missedLast ? ["bad", `Missed the ${lastFire} run`, 0]
+      : missedLast ? ["bad", `Missed the <span class="utc">${lastFire}</span> run`, 0]
       : missRecent ? ["warn", `Missed ${missRecent} of the last ${recent.length}`, 0]
       : failed && b.at(-1)?.s === "warn" ? ["bad", "Last run failed", 0]
       : ["ok", "On schedule", 1];
@@ -2566,12 +2590,17 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       const runSeries = topN((AD?.routines || []).map((r) => ({ name: r.name, v: r.runs })));
       return tokSeries.length ? dayChart(AD.dates, tokSeries, (n) => tk(n) + " tokens") : dayChart(AD?.dates || [], runSeries, (n) => plural(n, "run"));
     })());
-    const cell = (c, d) => !c.s ? `<td></td>` : `<td class="wk-c" data-s="${c.s}" title="${esc([d, c.n > 1 ? `${c.n} runs from ${c.t}` : c.t + " UTC", { ok: "ran", miss: "should have run, did not", next: "scheduled", unk: "no record either way" }[c.s]].join(" · "))}"><span>${{ ok: "✓", miss: "✕", next: "○", unk: "·" }[c.s]}</span>${c.n > 1 ? `<small>×${c.n}</small>` : `<small class="utc">${c.t}</small>`}</td>`;
-    const perDay = week.map((_, i) => rows.reduce((a, x) => a + (x.cells[i].s ? x.cells[i].n || 1 : 0), 0));
-    weekGrid = `<h2>This week</h2><div class="group wk-wrap"><table class="wk"><thead><tr><th></th>${week.map((d) => `<th class="${d === today ? "today" : ""}">${new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })}<small>${new Date(d + "T12:00:00Z").getUTCDate()}</small></th>`).join("")}</tr></thead>
-      <tbody>${rows.map((x) => `<tr><th class="openable" data-open="routine:${esc(encodeURIComponent(x.r.name))}" role="button" tabindex="0">${esc(x.r.name.replace(/^App: /, ""))}<small class="utc">${esc(when(x.r))}</small></th>${x.cells.map((c, i) => cell(c, week[i])).join("")}</tr>`).join("")}</tbody>
-      <tfoot><tr><th>Runs</th>${perDay.map((n, i) => `<td class="${week[i] === today ? "today" : ""}">${n || ""}</td>`).join("")}</tr></tfoot></table></div>
-      <p class="sk-key"><span class="wk-k" data-s="ok">✓</span> ran <span class="wk-k" data-s="miss">✕</span> should have run, did not <span class="wk-k" data-s="next">○</span> scheduled · times in your time zone</p>`;
+    const calRuns = [];
+    for (const x of rows) {
+      const a2 = x.a, h = RH[x.r.name];
+      for (let i = -1; i < 8; i++) {
+        const d = new Date(mon.getTime() + i * DAYMS).toISOString().slice(0, 10);
+        const ran = (() => { const k = di(d); if (a2 && k >= 0) return a2.runs[k] > 0; if (h?.buckets?.length === WINDOW && k >= 0) return ["ok", "warn"].includes(h.buckets[k]?.s); return null; })();
+        for (const t of fires(x.r.cron, d)) calRuns.push({ n: x.r.name.replace(/^App: /, ""), t, s: ran ? "ok" : Date.parse(t) > Date.now() - 2 * 36e5 ? "next" : ran === null ? "unk" : "miss" });
+      }
+    }
+    weekGrid = `<h2>This week</h2><div class="group cal" id="cal"><script type="application/json" class="cal-data">${JSON.stringify(calRuns).replace(/</g, "\\u003c")}</script></div>
+      <p class="sk-key"><span class="wk-k" data-s="ok"></span>ran <span class="wk-k" data-s="miss"></span>should have run, did not <span class="wk-k" data-s="next"></span>scheduled · your time zone</p><div style="height:14px"></div>`;
   }
 
   // Reports: the weekly ones. Unit: reports per week, delivered or missed.

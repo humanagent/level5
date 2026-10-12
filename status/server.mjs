@@ -2494,10 +2494,9 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}
         ${s.routines.length ? `<div class="group grid2 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
-      ${view("ci", `${vh("CI", "How code reaches production: minutes spent, promotions, what is running now, and every workflow over the last 30 days.")}
+      ${view("ci", `${vh("CI", "Minutes spent per day, and every workflow over the last 30 days.")}
         ${ciMinutes}
-        ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}
-        ${promoSection}`)}
+        ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}`)}
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
       ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}

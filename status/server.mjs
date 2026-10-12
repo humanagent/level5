@@ -352,6 +352,18 @@ async function readMetrics(token, repo, ci, issuesOpen) {
       }
     } catch (e) { console.error("pr sizes:", e.message); }
     const sz = (p, k) => size[p.number]?.[k] || 0;
+    const issueDays = { opened: {}, closed: {} };
+    try {
+      for (const [k, q, f] of [["opened", `repo:${repo} is:issue created:>=${since}`, "createdAt"], ["closed", `repo:${repo} is:issue closed:>=${since}`, "closedAt"]]) {
+        let after = null;
+        for (let i = 0; i < 5; i++) {
+          const d = await ghql(token, `query($q:String!,$a:String){search(query:$q,type:ISSUE,first:100,after:$a){pageInfo{hasNextPage endCursor}nodes{...on Issue{createdAt closedAt}}}}`, { q, a: after });
+          for (const n of d.search.nodes) if (n?.[f]) issueDays[k][n[f].slice(0, 10)] = (issueDays[k][n[f].slice(0, 10)] || 0) + 1;
+          if (!d.search.pageInfo.hasNextPage) break;
+          after = d.search.pageInfo.endCursor;
+        }
+      }
+    } catch (e) { console.error("issue days:", e.message); }
     const hours = merged.map((p) => (Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5).sort((a, b) => a - b);
     const median = (xs) => (xs.length ? xs[Math.floor(xs.length / 2)] : null);
     const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
@@ -362,7 +374,7 @@ async function readMetrics(token, repo, ci, issuesOpen) {
     const ages = issuesOpen.map((i) => (Date.now() - Date.parse(i.created_at)) / 864e5).sort((a, b) => a - b);
     return {
       prs: { opened: prOpened, merged: prMerged, closed_unmerged: prClosedUnmerged, median_merge_h: median(hours), agent_share: merged.length ? Math.round((merged.filter((p) => AGENT_BRANCH.test(p.head.ref)).length / merged.length) * 100) : null, per_day: perDay, added: merged.reduce((a, p) => a + sz(p, 0), 0), deleted: merged.reduce((a, p) => a + sz(p, 1), 0), median_lines: median(churn), sized: churn.length, size },
-      issues: { opened: issOpened, closed: issClosed, open: issuesOpen.length, median_age_d: median(ages) },
+      issues: { opened: issOpened, closed: issClosed, open: issuesOpen.length, median_age_d: median(ages), per_day: days.map((d) => ({ d, opened: issueDays.opened[d] || 0, closed: issueDays.closed[d] || 0 })) },
       ci: { runs, pass_rate: runs ? Math.round((passed / runs) * 1000) / 10 : null, failing_now: ci.filter((w) => w.last?.conclusion === "failure").map((w) => w.name) },
     };
   });
@@ -679,7 +691,7 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
   const beats = (await db.all("SELECT monitor, ts, status, body FROM heartbeats WHERE repo_id = $1 AND ts >= $2", repoId, since)).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
   const firstRows = await db.all("SELECT monitor, MIN(ts) AS t FROM heartbeats WHERE repo_id = $1 GROUP BY monitor", repoId);
   const first = Object.fromEntries(firstRows.map((r) => [r.monitor, Date.parse(r.t)]));
-  const sess = (await db.all("SELECT day, usd, body FROM costs WHERE repo_id = $1 AND source = 'claude-code' AND day >= $2", repoId, since.slice(0, 10))).map((r) => { const b = JSON.parse(r.body); return { name: b.name || "session", day: r.day, usd: r.usd ?? sessionUsd(b.models, prices) }; });
+  const sess = (await db.all("SELECT day, usd, body FROM costs WHERE repo_id = $1 AND source = 'claude-code' AND day >= $2", repoId, since.slice(0, 10))).map((r) => { const b = JSON.parse(r.body); return { name: b.name || "session", day: r.day, usd: r.usd ?? sessionUsd(b.models, prices), tok: Object.values(b.models || {}).reduce((a, t) => a + (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0), 0) }; });
   const cfg = Object.fromEntries((factory.monitors || []).map((m) => [m.id, m]));
   const cc = routines.filter((r) => r.source === "Claude Code");
   const cmdOf = (r) => ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "";
@@ -767,7 +779,13 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
     const usd30 = cmd ? usdIn([cmd], now - WINDOW * 864e5, now + 864e5) : 0;
     hist[r.name] = { weekly, buckets, skills: skillIds, usd_30d: usd30, usd_run: runs30 && usd30 ? usd30 / runs30 : null };
   }
-  return { routines: hist, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
+  const dates = [...Array(WINDOW)].map((_, i) => new Date(day0 + (i - (WINDOW - 1)) * 864e5).toISOString().slice(0, 10));
+  const daily = { dates, routines: cc.map((r) => {
+    const cmd = cmdOf(r), match = routineMatch(r), skillIds = hist[r.name]?.skills || [];
+    const mine = beats.filter((b) => skillIds.includes(b.monitor) || match(b.monitor));
+    return { name: r.name.replace(/^App: /, ""), tokens: dates.map((d) => sess.filter((x) => x.name === cmd && x.day === d).reduce((a, x) => a + x.tok, 0)), runs: dates.map((d) => { const today = mine.filter((b) => b.ts.slice(0, 10) === d); return Math.max(today.filter((b) => b.source === "session").length, today.length ? 1 : 0); }) };
+  }) };
+  return { routines: hist, daily, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
 }
 
 async function snapshot(repoRow) {
@@ -1073,7 +1091,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 14;
+const SNAP_V = 15;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1541,7 +1559,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .htip{position:fixed;z-index:200;pointer-events:none;max-width:300px;padding:10px 12px;background:var(--bg);border:1px solid #d1d5db;border-radius:10px;box-shadow:0 8px 24px -6px rgba(0,28,36,.3);font-size:13px;line-height:1.45;color:var(--ink)}.htip b{display:block;margin-bottom:4px;font-size:13.5px}.htip div{color:var(--muted)}
 .cols:hover>div:not(:hover) i,.bars:hover>i:not(:hover){opacity:.45}.cols i,.bars i{transition:opacity .12s}
 .stats5{grid-template-columns:repeat(5,minmax(0,1fr))}.stat b.loc span{font-size:inherit}.loc .add{color:var(--ok)}.loc.sm{font:500 12px var(--mono);white-space:nowrap}.loc .del{color:var(--bad)}@media(max-width:1000px){.stats5{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.ci-cols{height:140px}.ci-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px;color:var(--muted)}.ci-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.ci-cols,.day-cols{height:140px}.day-cols>div.grp{display:flex;align-items:flex-end;gap:1px}.day-cols>div.grp i{flex:1;border-radius:2px 2px 0 0;min-height:0}.ci-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px;color:var(--muted)}.ci-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);overflow:hidden}.grid3>*{background:var(--bg)}.grid3 .bars{gap:1.5px}
 @media(max-width:1100px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.grid3{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
@@ -2436,29 +2454,97 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${costBlock}
         ${metrics}`;
 
-  // CI minutes per day, stacked by workflow (top 7, the rest as Others)
+  // Every section opens the same way: a row of numbers in the section's own unit, then that unit
+  // per day for 30 days. series: [{ name, color, v: [per day] }]; stacked, or side by side ("grouped").
+  const PAL = ["#5e6ad2", "#26b5ce", "#4cb782", "#f2c94c", "#f2994a", "#eb5757", "#bb87fc"];
+  const topN = (list, n = 7) => { const tot = (x) => x.v.reduce((a, b) => a + b, 0); const r = list.filter((x) => tot(x) > 0).sort((a, b) => tot(b) - tot(a)); const out = r.slice(0, n).map((x, i) => ({ ...x, color: x.color || PAL[i % PAL.length] })); if (r.length > n) out.push({ name: "Others", color: "#c4c6cc", v: r[0].v.map((_, i) => r.slice(n).reduce((a, x) => a + x.v[i], 0)) }); return out; };
+  const dayChart = (dates, series, fmt, { grouped = false, extra = () => "" } = {}) => {
+    if (!dates?.length || !series.length) return "";
+    const tot = dates.map((_, i) => series.reduce((a, x) => a + (x.v[i] || 0), 0));
+    const mx = Math.max(1e-9, ...(grouped ? series.flatMap((x) => x.v) : tot));
+    const tip = (d, i) => [d, grouped ? "" : `${fmt(tot[i])} in total`, ...series.filter((x) => x.v[i] > 0).sort((a, b) => (grouped ? 0 : b.v[i] - a.v[i])).map((x) => `${x.name}: ${fmt(x.v[i])}`), extra(i)].filter(Boolean).join(" · ");
+    const col = (d, i) => grouped
+      ? `<div class="grp" title="${esc(tip(d, i))}">${series.map((x) => `<i style="height:${((x.v[i] || 0) / mx) * 100}%;background:${x.color}"></i>`).join("")}</div>`
+      : `<div title="${esc(tip(d, i))}"><i class="stack" style="height:${(tot[i] / mx) * 100}%">${series.map((x) => (x.v[i] > 0 ? `<em style="height:${(x.v[i] / tot[i]) * 100}%;background:${x.color}"></em>` : "")).join("")}</i></div>`;
+    return `<div class="chart"><div class="cols day-cols">${dates.map(col).join("")}</div>
+      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>today</span></div>
+      <div class="ci-legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div></div>`;
+  };
+  const tile = (big, label, small = "") => `<div class="stat"><b>${big}</b><span>${label}</span><small>${small}</small></div>`;
+  const head = (tiles, chart) => `<div class="group stats">${tiles.join("")}${chart}</div>`;
+  const mm = (m) => (m >= 600 ? `${Math.round(m / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`);
+  const num = (n) => Math.round(n).toLocaleString("en-US");
+
+  // CI: minutes per day by workflow
   const CIW = (s.ci || []).filter((w) => w.mins);
   let ciMinutes = "";
   if (CIW.length) {
-    const PAL = ["#5e6ad2", "#26b5ce", "#4cb782", "#f2c94c", "#f2994a", "#eb5757", "#bb87fc"];
-    const tot = (w) => w.mins.reduce((a, b) => a + b, 0);
-    const ranked = [...CIW].sort((a, b) => tot(b) - tot(a));
-    const series = ranked.slice(0, 7).map((w, i) => ({ name: w.name, color: PAL[i], v: w.mins }));
-    if (ranked.length > 7) series.push({ name: "Others", color: "#c4c6cc", v: ranked[0].mins.map((_, i) => ranked.slice(7).reduce((a, w) => a + w.mins[i], 0)) });
+    const series = topN(CIW.map((w) => ({ name: w.name, v: w.mins })));
     const dates = CIW[0].dates || [];
-    const dayTot = dates.map((_, i) => series.reduce((a, x) => a + x.v[i], 0));
-    const all = dayTot.reduce((a, b) => a + b, 0), mx = Math.max(1, ...dayTot);
-    const mm = (m) => (m >= 600 ? `${Math.round(m / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`);
-    const last7 = dayTot.slice(-8, -1).reduce((a, b) => a + b, 0) / 7;
-    ciMinutes = `<div class="group stats">
-      <div class="stat"><b>${mm(all)}</b><span>CI time in ${WINDOW} days</span><small>${Math.round(all).toLocaleString("en-US")} minutes, wall clock</small></div>
-      <div class="stat"><b>${mm(dayTot.at(-2) || 0)}</b><span>Yesterday</span><small>${mm(last7)} a day over the last 7</small></div>
-      <div class="stat"><b>${esc(series[0].name)}</b><span>Most time</span><small>${mm(tot(ranked[0]))}, ${Math.round((tot(ranked[0]) / Math.max(1, all)) * 100)}% of all</small></div>
-      <div class="stat"><b>${(s.ci || []).reduce((a, w) => a + w.runs, 0).toLocaleString("en-US")}</b><span>Runs</span><small>${mm(all / Math.max(1, (s.ci || []).reduce((a, w) => a + w.runs, 0)))} each on average</small></div>
-      <div class="chart"><div class="cols ci-cols">${dates.map((d, i) => `<div title="${d} · ${mm(dayTot[i])} in total${series.filter((x) => x.v[i] >= 0.5).sort((a, b) => b.v[i] - a.v[i]).map((x) => ` · ${esc(x.name)}: ${mm(x.v[i])}`).join("")}"><i class="stack" style="height:${(dayTot[i] / mx) * 100}%">${series.map((x) => (x.v[i] > 0 ? `<em style="height:${(x.v[i] / dayTot[i]) * 100}%;background:${x.color}"></em>` : "")).join("")}</i></div>`).join("")}</div>
-      <div class="axis"><span>${WINDOW} days ago</span><span class="rule"></span><span>today</span></div>
-      <div class="ci-legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div></div>
-    </div>`;
+    const dayTot = dates.map((_, i) => series.reduce((a, x) => a + x.v[i], 0)), all = dayTot.reduce((a, b) => a + b, 0);
+    const runs = (s.ci || []).reduce((a, w) => a + w.runs, 0), top = series[0];
+    ciMinutes = head([
+      tile(mm(all), `CI time in ${WINDOW} days`, `${num(all)} minutes, wall clock`),
+      tile(mm(dayTot.at(-2) || 0), "Yesterday", `${mm(dayTot.slice(-8, -1).reduce((a, b) => a + b, 0) / 7)} a day over the last 7`),
+      tile(esc(top.name), "Most time", `${mm(top.v.reduce((a, b) => a + b, 0))}, ${Math.round((top.v.reduce((a, b) => a + b, 0) / Math.max(1, all)) * 100)}% of all`),
+      tile(num(runs), "Runs", `${mm(all / Math.max(1, runs))} each on average`),
+    ], dayChart(dates, series, mm));
+  }
+
+  // Monitors: skill runs per day, by how they went
+  const dailyRows = (s.status?.groups || []).flatMap((g) => g.rows).filter((r) => !r.weekly && r.buckets.length === WINDOW);
+  const mDates = s.status?.daily?.dates || [];
+  let monHead = "";
+  if (dailyRows.length && mDates.length) {
+    const cnt = (k) => mDates.map((_, i) => dailyRows.filter((r) => k.includes(r.buckets[i]?.s)).length);
+    const ok = cnt(["ok"]), bad = cnt(["warn", "empty"]), miss = cnt(["miss"]);
+    const sum = (a) => a.reduce((x, y) => x + y, 0), due = sum(ok) + sum(bad) + sum(miss);
+    monHead = head([
+      tile(num(sum(ok) + sum(bad)), `Skill runs in ${WINDOW} days`, `${dailyRows.length} daily skills`),
+      tile(due ? Math.round((sum(ok) / due) * 100) + "%" : "–", "Ran clean", "of the runs that were due"),
+      tile(num(sum(bad)), "Degraded or read nothing", ""),
+      tile(num(sum(miss)), "Missed", "should have run, did not"),
+    ], dayChart(mDates, [{ name: "Ran", color: "#4cb782", v: ok }, { name: "Degraded or read nothing", color: "#f2994a", v: bad }, { name: "Missed", color: "#eb5757", v: miss }], (n) => plural(n, "skill")));
+  }
+
+  // Automations: Claude Code tokens per day by routine (runs per day until sessions report tokens)
+  const AD = s.status?.daily;
+  let autoHead = "";
+  if (AD?.routines?.length) {
+    const tokSeries = topN(AD.routines.map((r) => ({ name: r.name, v: r.tokens })));
+    const runSeries = topN(AD.routines.map((r) => ({ name: r.name, v: r.runs })));
+    const toks = tokSeries.reduce((a, x) => a + x.v.reduce((p, q) => p + q, 0), 0), runs = runSeries.reduce((a, x) => a + x.v.reduce((p, q) => p + q, 0), 0);
+    const missed = Object.values(s.status.routines || {}).reduce((a, h) => a + h.buckets.filter((b) => b.s === "miss").length, 0);
+    autoHead = head([
+      tile(toks ? tk(toks) : "–", `Claude Code tokens in ${WINDOW} days`, toks ? `${tk(toks / WINDOW)} a day` : "no session has reported tokens yet"),
+      tile(ST.usd_30d ? usd(ST.usd_30d) : "–", "Token cost", "at API list prices"),
+      tile(num(runs), `Routine runs in ${WINDOW} days`, `${AD.routines.length} routines`),
+      tile(num(missed), "Missed runs", "should have run, did not"),
+    ], toks ? dayChart(AD.dates, tokSeries, (n) => tk(n) + " tokens") : dayChart(AD.dates, runSeries, (n) => plural(n, "run")));
+  }
+
+  // Pull requests: lines added and removed per day, side by side
+  let prHead = "";
+  if (M?.prs?.per_day?.length && M.prs.added != null) {
+    const pd = M.prs.per_day;
+    prHead = head([
+      tile(num(M.prs.merged ?? 0), `PRs merged in ${WINDOW} days`, `${M.prs.agent_share == null ? "" : `${M.prs.agent_share}% by agents · `}${M.prs.opened ?? 0} opened`),
+      tile(`<span class="loc"><span class="add">+${kn(M.prs.added)}</span> <span class="del">−${kn(M.prs.deleted)}</span></span>`, "Lines changed", `${kn(Math.round((M.prs.added + M.prs.deleted) / WINDOW))} a day`),
+      tile(M.prs.median_lines == null ? "–" : num(M.prs.median_lines), "Median PR, lines", ""),
+      tile(dur(M.prs.median_merge_h), "Median time to merge", `${M.prs.closed_unmerged ?? 0} closed without merge`),
+    ], dayChart(pd.map((d) => d.d), [{ name: "Added", color: "#4cb782", v: pd.map((d) => d.added || 0) }, { name: "Removed", color: "#eb5757", v: pd.map((d) => d.deleted || 0) }], (n) => num(n) + " lines", { grouped: true, extra: (i) => `${pd[i].all} merged` }));
+  }
+
+  // Issues: opened and closed per day, side by side
+  let issueHead = "";
+  if (M?.issues?.per_day?.length) {
+    const pd = M.issues.per_day, o = pd.reduce((a, d) => a + d.opened, 0), c = pd.reduce((a, d) => a + d.closed, 0);
+    issueHead = head([
+      tile(num(o), `Opened in ${WINDOW} days`, `${(o / WINDOW).toFixed(1)} a day`),
+      tile(num(c), "Closed", c >= o ? "closing faster than opening" : "opening faster than closing"),
+      tile(num(M.issues.open), "Open now", M.issues.median_age_d == null ? "" : `median age ${Math.round(M.issues.median_age_d)} d`),
+      tile(o ? Math.round((c / o) * 100) + "%" : "–", "Closed per opened", ""),
+    ], dayChart(pd.map((d) => d.d), [{ name: "Opened", color: "#5e6ad2", v: pd.map((d) => d.opened) }, { name: "Closed", color: "#4cb782", v: pd.map((d) => d.closed) }], (n) => plural(n, "issue"), { grouped: true }));
   }
 
   const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
@@ -2484,16 +2570,16 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <main class="main">
       ${winTemplates}
       ${view("status", statusView)}
-      ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}
+      ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
         ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
-      ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}
+      ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}${autoHead}
         ${s.routines.length ? `<div class="group grid2 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "Minutes spent per day, every workflow over the last 30 days, and what goes to production.")}
         ${ciMinutes}
         ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}
         ${promoSection}`)}
-      ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
-      ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
+      ${view("prs", `${vh("Pull requests", "Code merged per day, open PRs with their CI, and the latest merged and closed.")}${prHead}${prSection}`)}
+      ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<div class="incidents">${incidents}</div>`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
       ${view("map", `${vh("Map", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("security", `${vh("Security", "AWS IAM and the secrets in Infisical. Names and metadata only: Hush never receives a secret value.")}${secSection}`)}

@@ -1492,6 +1492,8 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .rt .rt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rt .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rt .name b{font-size:14.5px;font-weight:600}.rt .name small{color:var(--muted);font-size:12.5px}.rt .name small a{color:var(--muted);text-decoration:none}.rt .name small a:hover{color:var(--ink)}.rt .name code{font-size:12px}
 .rt-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 10px}.rt-stats span{display:flex;flex-direction:column;font-size:11.5px;color:var(--faint)}.rt-stats b{font-size:14px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .rt-hint{margin:8px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rt-hint code{font-size:11.5px}
+.w-facts{margin:12px 0 0;font-size:13px;color:var(--muted)}.w-facts a{color:var(--ink)}.w-raw{margin-top:14px;font-size:12.5px}.w-raw summary{cursor:pointer;color:var(--faint)}.w-raw .w-list{margin-top:8px}
+.win:not(.adhoc) .win-body{flex:none;max-height:45%}.win:not(.adhoc) .win-chat{flex:1;max-height:none}
 .win-chat{flex:none;display:flex;flex-direction:column;gap:8px;max-height:52%;border-top:1px solid var(--line);padding:10px 14px 12px;background:#fbfbfc}
 .win.adhoc .win-body{display:none}.win.adhoc .win-chat{flex:1;max-height:none;border-top:0;background:var(--bg)}
 .wc-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5}
@@ -1608,7 +1610,7 @@ return true}
 
 const md=t=>esc(t).replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/\\x60([^\\x60\\n]+)\\x60/g,"<code>$1</code>").replace(/^[-*] (.+)$/gm,"<li>$1</li>").replace(/(<li>.*<\\/li>\\n?)+/g,m=>"<ul>"+m.replace(/\\n/g,"")+"</ul>").replace(/\\n{2,}/g,"<br><br>").replace(/\\n/g,"<br>");
 const SUMMARY="Give me a concise, simple summary of what I'm looking at.";
-function ctxOf(w){const b=w.el.querySelector(".win-body");return ((w.ad?w.ad.text:b?b.innerText:"")||"").replace(/\\n{3,}/g,"\\n\\n").slice(0,6000)}
+function ctxOf(w){const b=w.el.querySelector(".win-body");return ((w.ad?w.ad.text:b?b.textContent.replace(/[ \\t]+/g," "):"")||"").replace(/\\n{3,}/g,"\\n\\n").slice(0,6000)}
 function drawChat(w){const log=w.el.querySelector(".wc-log");log.innerHTML=w.msgs.filter(m=>!m.hidden).map(m=>'<div class="wc-m '+m.role+(m.err?" err":"")+'">'+(m.role==="user"?esc(m.content):md(m.content)||'<span class="typing"><i></i><i></i><i></i></span>')+"</div>").join("");log.scrollTop=log.scrollHeight;w.el.querySelector(".wc-ask button").disabled=!!w.busy}
 async function talk(w,q,hidden){if(w.busy||!q.trim())return;w.busy=true;w.msgs.push({role:"user",content:q.trim(),hidden});const a={role:"assistant",content:""};w.msgs.push(a);drawChat(w);
 try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/ask",{method:"POST",headers:{"content-type":"application/json"},credentials:"same-origin",body:JSON.stringify({focus:{title:w.kind+": "+w.title,text:ctxOf(w)},messages:w.msgs.filter(m=>m!==a&&!m.err).map(({role,content})=>({role,content}))})});
@@ -2120,9 +2122,8 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     wins.push({ key: `monitor:${m.id}`, kind: "Monitor", title: m.id, body: `
       <div class="w-head">${statePill(ps, label)}${m.why ? `<span class="w-why">${esc(m.why)}</span>` : ""}</div>
       <div class="bars tall">${bars}</div><div class="axis"><span>${m.span}</span><span class="rule"></span><span>today</span></div>
-      ${kv([["Cadence", m.cadence], ["Runs", `${m.runs} in the window`], ["Routine", routine ? `<a href="#" data-open="routine:${esc(encodeURIComponent(routine.name))}">${esc(routine.name.replace(/^App: /, ""))}</a>` : m.routine ? esc(m.routine) : ""], ["Last heartbeat", when2(m.last?.ts)], ["Read", swept(m.last?.swept)], ["Filed", m.filed.map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ") || `nothing in ${WINDOW} days`]])}
-      ${m.last?.note ? `<p class="w-note">${esc(m.last.note)}</p>` : ""}
-      ${m.history?.length ? `<h4>Last ${m.history.length} heartbeats</h4><div class="w-list">${m.history.map((b) => `<div><span class="pill sm" data-s="${b.status === "ok" ? "ok" : b.status === "degraded" ? "warn" : "bad"}">${b.status}</span><span class="faint">${ago(b.ts)}${b.source === "session" ? " · session" : ""}</span><span>${swept(b.swept)}${b.note ? ` <span class="faint">${esc(b.note)}</span>` : ""}</span></div>`).join("")}</div>` : ""}` });
+      <p class="w-facts">${[m.last ? `Last run ${ago(m.last.ts)}` : "Never reported", routine ? `runs in <a href="#" data-open="routine:${esc(encodeURIComponent(routine.name))}">${esc(routine.name.replace(/^App: /, ""))}</a>` : "", m.filed.length ? `filed ${m.filed.slice(0, 5).map((x) => `<a href="${repoUrl}/issues/${x}" target="_blank" rel="noopener">#${x}</a>`).join(" ")}` : ""].filter(Boolean).join(" · ")}</p>
+      ${m.history?.length ? `<details class="w-raw"><summary>Raw heartbeats (${m.history.length})</summary><div class="w-list">${m.history.map((b) => `<div><span class="pill sm" data-s="${b.status === "ok" ? "ok" : b.status === "degraded" ? "warn" : "bad"}">${b.status}</span><span class="faint">${ago(b.ts)}${b.source === "session" ? " · session" : ""}</span><span>${swept(b.swept)}${b.note ? ` <span class="faint">${esc(b.note)}</span>` : ""}</span></div>`).join("")}</div></details>` : ""}` });
   }
   for (const r of s.routines) {
     const late = isLate(r);
@@ -2130,7 +2131,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     const fed = s.monitors.filter((m) => m.routine === r.name);
     wins.push({ key: `routine:${encodeURIComponent(r.name)}`, kind: r.source === "GitHub Actions" ? "Scheduled workflow" : "Routine", title: r.name.replace(/^App: /, ""), body: `
       <div class="w-head">${statePill(st, label)}</div>
-      ${kv([["Runs", esc(r.prompt)], ["Schedule", `${esc(when(r))} <code>${esc(r.cron)}</code>`], ["Next run", r.next_run ? `${until(r.next_run)} <span class="faint">${new Date(r.next_run).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : ""], ["Last run", when2(r.last_seen)], ["Evidence", esc(r.evidence || "none")], ["Model", esc(r.model || "")], ["Source", esc(r.source)]])}
+      <p class="w-facts">${[esc(when(r)), r.last_seen ? `last run ${ago(r.last_seen)}` : "never ran", r.next_run ? `next ${until(r.next_run)}` : "", esc(r.model || "")].filter(Boolean).join(" · ")}</p>
       ${fed.length ? `<h4>Monitors it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
   }
   for (const w of s.ci || []) {

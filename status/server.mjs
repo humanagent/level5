@@ -1614,6 +1614,10 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .cal-ev[data-s=ok]{background:rgba(47,179,107,.16);color:#1f7a49;box-shadow:inset 3px 0 0 var(--ok)}.cal-ev[data-s=miss]{background:rgba(229,72,77,.14);color:#b4282d;box-shadow:inset 3px 0 0 var(--bad)}.cal-ev[data-s=next]{background:var(--bg);color:var(--muted);border:1px dashed #c4c6cc}.cal-ev[data-s=unk]{background:#f1f2f4;color:var(--faint)}
 .wk-k[data-s=ok]{background:rgba(47,179,107,.16);box-shadow:inset 3px 0 0 var(--ok)}.wk-k[data-s=miss]{background:rgba(229,72,77,.14);box-shadow:inset 3px 0 0 var(--bad)}.wk-k[data-s=next]{background:var(--bg);border:1px dashed #c4c6cc}.wk-k{width:14px;height:12px;border-radius:3px;vertical-align:-1px}
 .settings{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:8px}.settings label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}.settings select{height:38px;min-width:320px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font:inherit;font-size:14px;color:var(--ink)}.settings button{height:38px;padding:0 16px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font:500 13.5px inherit;cursor:pointer}
+.cal-card{position:fixed;z-index:120;width:280px;padding:12px 14px;background:var(--bg);border:1px solid #d1d5db;border-radius:12px;box-shadow:0 10px 28px -8px rgba(0,28,36,.32);font-size:12.5px;pointer-events:none}
+.cc-h{display:flex;justify-content:space-between;align-items:center;gap:8px}.cc-h b{font-size:14px}.cc-s{font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px}.cc-s[data-s=ok]{background:rgba(47,179,107,.14);color:#1f7a49}.cc-s[data-s=miss]{background:rgba(229,72,77,.12);color:#b4282d}.cc-s[data-s=next],.cc-s[data-s=unk]{background:#f1f2f4;color:var(--muted)}
+.cc-t{color:var(--muted);margin:3px 0 8px}.cc-run{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:6px}.cc-run span{display:flex;flex-direction:column;color:var(--faint);font-size:11px}.cc-run b{font-size:14px;color:var(--ink)}
+.cc-kv div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.cc-kv span{color:var(--muted)}.cc-kv b{font-weight:500;text-align:right}.cc-f{margin-top:8px;color:var(--faint);font-size:11px}.cal-ev{cursor:pointer}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -2020,19 +2024,31 @@ document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.clos
 const CAL_JS = `<script>(()=>{
 const e=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const S={ok:"ran",miss:"should have run, did not",next:"scheduled",unk:"no record either way"};
-function draw(){const box=document.getElementById("cal");if(!box)return;const src=box.querySelector(".cal-data");if(!src)return;const runs=JSON.parse(src.textContent);
+function draw(){const box=document.getElementById("cal");if(!box)return;const src=box.querySelector(".cal-data");if(!src)return;const runs=JSON.parse(src.textContent),meta=JSON.parse((box.querySelector(".cal-meta")||{}).textContent||"{}");
 const T=window.hushTime,tz=T.TZ(),P=d=>T.parts(d,tz),DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const now=new Date(),pn=P(now),base=Date.UTC(+pn.year,+pn.month-1,+pn.day)-((DS.indexOf(pn.weekday)+6)%7)*864e5;
 const days=[...Array(7)].map((_,i)=>{const d=new Date(base+i*864e5);return{k:d.toISOString().slice(0,10),dow:DS[d.getUTCDay()],n:d.getUTCDate()}});
 const keyOf=d=>{const p=P(d);return p.year+"-"+p.month+"-"+p.day},todayK=pn.year+"-"+pn.month+"-"+pn.day,H=1.2,mins=d=>{const p=P(d);return +p.hour*60+ +p.minute};
-const by=days.map(d=>runs.map(r=>({...r,at:new Date(r.t)})).filter(r=>keyOf(r.at)===d.k).sort((a,b)=>a.at-b.at));
+const by=days.map(d=>runs.map(r=>({...r,src:r,at:new Date(r.t)})).filter(r=>keyOf(r.at)===d.k).sort((a,b)=>a.at-b.at));
 const TOUCH=70,col=(list)=>{const out=[];for(const r of list){const m=mins(r.at);let lane=0;while(out.some(s=>s.lane===lane&&Math.abs(s.m-m)<TOUCH))lane++;out.push({...r,m,lane})}for(const o of out){const near=out.filter(x=>Math.abs(x.m-o.m)<TOUCH);o.lanes=Math.max(...near.map(x=>x.lane))+1}return out};
 const hh=d=>{const p=P(d);return p.hour+":"+p.minute};
 let h='<div class="cal-head">'+days.map((d,i)=>'<div class="'+(d.k===todayK?"today":"")+'"><b>'+d.dow+'</b> '+d.n+'<small>'+by[i].length+" run"+(by[i].length===1?"":"s")+'</small></div>').join("")+'</div><div class="cal-body" style="height:'+(24*60*H/4)+'px">';
 h+='<div class="cal-hours">'+[6,12,18].map(x=>'<span style="top:'+(x*60*H/4)+'px">'+String(x).padStart(2,"0")+':00</span>').join("")+'</div>';
 h+=days.map((d,i)=>{const placed=col(by[i]);const nowLine=d.k===todayK?'<i class="cal-now" style="top:'+(mins(now)*H/4)+'px"></i>':"";
-return '<div class="cal-day'+(d.k===todayK?" today":"")+'">'+nowLine+placed.map(p=>'<span class="cal-ev" data-s="'+p.s+'" style="top:'+(p.m*H/4)+'px;left:calc('+(p.lane*100/p.lanes)+'% + 3px);width:calc('+(100/p.lanes)+'% - 6px)" data-tip="'+e(p.n+" · "+hh(p.at)+" · "+S[p.s])+'">'+e(p.n)+'</span>').join("")+'</div>'}).join("")+'</div>';
+return '<div class="cal-day'+(d.k===todayK?" today":"")+'">'+nowLine+placed.map(p=>'<span class="cal-ev" data-s="'+p.s+'" data-i="'+runs.indexOf(p.src)+'" data-open="'+e((meta[p.n]||{}).key||"")+'" style="top:'+(p.m*H/4)+'px;left:calc('+(p.lane*100/p.lanes)+'% + 3px);width:calc('+(100/p.lanes)+'% - 6px)">'+e(p.n)+'</span>').join("")+'</div>'}).join("")+'</div>';
 let v=box.querySelector(".cal-view");if(!v){v=document.createElement("div");v.className="cal-view";box.appendChild(v)}v.innerHTML=h}
+// hover card: the run, then the routine
+const card=document.createElement("div");card.className="cal-card";card.hidden=true;document.body.appendChild(card);
+const ago=t=>{if(!t)return "never";const m=Math.round((Date.now()-Date.parse(t))/6e4);return m<60?m+" min ago":m<2880?Math.round(m/60)+" h ago":Math.round(m/1440)+" days ago"};
+const until=t=>{if(!t)return "";const m=Math.round((Date.parse(t)-Date.now())/6e4);return m<60?"in "+m+" min":m<2880?"in "+Math.round(m/60)+" h":"in "+Math.round(m/1440)+" days"};
+const tk=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?Math.round(n/1e3)+"k":String(n),hm=s=>s>=3600?Math.floor(s/3600)+" h "+Math.round(s%3600/60)+" min":Math.round(s/60)+" min";
+document.addEventListener("mouseover",ev=>{const b=ev.target.closest&&ev.target.closest(".cal-ev");if(!b){card.hidden=true;return}const box=document.getElementById("cal"),runs=JSON.parse(box.querySelector(".cal-data").textContent),meta=JSON.parse((box.querySelector(".cal-meta")||{}).textContent||"{}"),r=runs[+b.dataset.i];if(!r)return;const m=meta[r.n]||{},T=window.hushTime,p=T.parts(new Date(r.t));
+const row=(k,v)=>v?'<div><span>'+k+'</span><b>'+e(v)+'</b></div>':"";
+card.innerHTML='<div class="cc-h"><b>'+e(r.n)+'</b><span class="cc-s" data-s="'+r.s+'">'+S[r.s]+'</span></div><div class="cc-t">'+p.weekday+" "+p.day+"/"+p.month+" · "+p.hour+":"+p.minute+'</div>'+
+(r.tok||r.usd||r.secs?'<div class="cc-run">'+(r.tok?'<span><b>'+tk(r.tok)+'</b>tokens</span>':"")+(r.usd?'<span><b>$'+r.usd.toFixed(2)+'</b>cost</span>':"")+(r.secs?'<span><b>'+hm(r.secs)+'</b>time</span>':"")+'</div>':"")+
+'<div class="cc-kv">'+row(m.src==="GitHub Actions"?"Workflow":"Command",m.cmd?(m.src==="GitHub Actions"?m.cmd:"/"+m.cmd):"")+row("Model",m.model)+row("Last run",ago(m.last))+row("Next run",until(m.next))+row("On time",m.on==null?"":m.on+"% in 30 days")+row("Skills",m.skills?String(m.skills):"")+row("Cost, 30 days",m.usd30?"$"+m.usd30.toFixed(2):"")+'</div><div class="cc-f">Click for the routine</div>';
+card.hidden=false;const rc=b.getBoundingClientRect(),w=card.offsetWidth,h=card.offsetHeight;let x=rc.right+8,y=rc.top;if(x+w>innerWidth-8)x=rc.left-w-8;if(y+h>innerHeight-8)y=innerHeight-h-8;card.style.left=Math.max(8,x)+"px";card.style.top=Math.max(52,y)+"px"});
+addEventListener("scroll",()=>{card.hidden=true},{passive:true});
 draw();document.addEventListener("hush:swap",draw)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('id="cal"') ? CAL_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
@@ -2604,10 +2620,15 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       for (let i = -1; i < 8; i++) {
         const d = new Date(mon.getTime() + i * DAYMS).toISOString().slice(0, 10);
         const ran = (() => { const k = di(d); if (a2 && k >= 0) return a2.runs[k] > 0; if (h?.buckets?.length === WINDOW && k >= 0) return ["ok", "warn"].includes(h.buckets[k]?.s); return null; })();
-        for (const t of fires(x.r.cron, d)) calRuns.push({ n: x.r.name.replace(/^App: /, ""), t, s: ran ? "ok" : Date.parse(t) > Date.now() - 2 * 36e5 ? "next" : ran === null ? "unk" : "miss" });
+        const k = di(d), day = (f) => (a2 && k >= 0 ? a2[f]?.[k] || 0 : 0);
+        for (const t of fires(x.r.cron, d)) calRuns.push({ n: x.r.name.replace(/^App: /, ""), t, s: ran ? "ok" : Date.parse(t) > Date.now() - 2 * 36e5 ? "next" : ran === null ? "unk" : "miss", tok: day("tokens"), usd: day("usd"), secs: day("secs") });
       }
     }
-    weekGrid = `<h2>This week</h2><div class="group cal" id="cal"><script type="application/json" class="cal-data">${JSON.stringify(calRuns).replace(/</g, "\\u003c")}</script></div>
+    const calMeta = Object.fromEntries(rows.map((x) => {
+      const r = x.r, h = RH[r.name], b = h?.buckets || [], due = b.filter((y) => y.s);
+      return [r.name.replace(/^App: /, ""), { key: `routine:${encodeURIComponent(r.name)}`, cmd: r.source === "Claude Code" ? ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "" : r.prompt.replace(/^\.github\/workflows\//, ""), src: r.source, sched: when(r), model: r.model || "", last: r.last_seen, next: r.next_run, on: due.length ? Math.round((due.filter((y) => y.s !== "miss").length / due.length) * 100) : null, skills: h?.skills?.length || 0, usd30: h?.usd_30d || 0 }];
+    }));
+    weekGrid = `<div class="group cal" id="cal"><script type="application/json" class="cal-data">${JSON.stringify(calRuns).replace(/</g, "\\u003c")}</script><script type="application/json" class="cal-meta">${JSON.stringify(calMeta).replace(/</g, "\\u003c")}</script></div>
       <p class="sk-key"><span class="wk-k" data-s="ok"></span>ran <span class="wk-k" data-s="miss"></span>should have run, did not <span class="wk-k" data-s="next"></span>scheduled · times in ${tz ? esc(tz.replace(/_/g, " ")) : "your browser's time zone"} · <a href="/settings">change</a></p><div style="height:14px"></div>`;
   }
 
@@ -2693,8 +2714,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       ${view("status", statusView)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
         ${s.monitors.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
-      ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}${autoHead}${weekGrid}<h2>Last 30 days, per routine</h2>
-        ${s.routines.length ? `<div class="group grid3 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
+      ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}${weekGrid || `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "Minutes spent per day, every workflow over the last 30 days, and what goes to production.")}
         ${ciMinutes}
         ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}

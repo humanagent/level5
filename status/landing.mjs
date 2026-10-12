@@ -102,10 +102,8 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars =
   const dur = (s) => (s >= 60 ? Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s" : s + "s");
   const liveRows = LIVE.map(([n, w, step, d, k, s]) => `<li class="lj" data-st="run"><span class="lj-i">${SPIN}</span><span class="lj-n"><b>${n}</b><small>${w}</small></span><span class="lj-s">${step} <em>${d}/${k}</em></span><span class="lj-t">${dur(s)}</span><span class="lj-bar"><i style="width:${Math.round((d / k) * 100)}%"></i></span></li>`).join("");
 
-  const starLabel = stars == null ? "Star on GitHub" : `Star · ${stars >= 1000 ? (stars / 1000).toFixed(1).replace(/\.0$/, "") + "k" : stars}`;
-  const cta = (dark = true) => `<div class="lcta">
+  const cta = () => `<div class="lcta">
     ${viewer ? `<a class="lp pri" href="/">Open your repos →</a>` : `<a class="lp pri" href="${install}">${GITHUB}<span>Install on GitHub</span></a>`}
-    <a class="lp alt${dark ? "" : " on-paint"}" href="${REPO}" target="_blank" rel="noopener">${starLabel}</a>
   </div>`;
 
   // Line icons for the lhero cards and the feature heads, drawn in the accent.
@@ -165,8 +163,9 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 .lhero h1{max-width:680px;margin:0;font-size:64px;font-weight:500;letter-spacing:-3.7px;line-height:.98;text-wrap:balance}
 .lhero h1 em{font-style:normal;color:rgba(25,30,45,.42)}
 .lhero .lede{max-width:44ch;margin:22px 0 28px;color:var(--l-muted);font-size:17px;line-height:1.5;letter-spacing:-.3px;text-wrap:pretty}
-.announce{display:inline-flex;align-items:center;gap:12px;min-height:46px;margin-top:16px;padding:0 18px;border-radius:999px;font:500 14px/1 var(--f);letter-spacing:-.45px;text-decoration:none;background:color-mix(in srgb,var(--l-surface) 76%,transparent);box-shadow:inset 0 0 0 1px var(--l-line);backdrop-filter:blur(18px);transition:transform .3s var(--l-spring)}
-.announce:hover{transform:translateY(-1px)}.announce span{color:var(--l-muted)}
+.harness{display:flex;align-items:center;flex-wrap:wrap;gap:10px 18px;margin-top:26px;font-size:14px;color:var(--l-muted);letter-spacing:-.2px}
+.harness .hn{display:inline-flex;align-items:center;gap:8px;color:var(--l-ink);font-weight:500}.harness img{width:18px;height:18px;opacity:.75}
+.harness em{font-style:normal;margin-left:2px;padding:1px 7px;border-radius:999px;background:rgba(25,30,45,.07);color:var(--l-muted);font-size:11.5px;font-weight:500}
 .pillars{display:grid;gap:4px}
 .pillar{display:grid;grid-template-columns:64px minmax(0,1fr);gap:14px;align-items:center;min-height:0;padding:14px 18px 14px 12px;border-radius:16px;text-decoration:none;background:color-mix(in srgb,var(--l-surface) 50%,transparent);box-shadow:inset 0 0 0 1px rgba(31,38,65,.05);backdrop-filter:blur(9px) saturate(.9);transition:transform .42s var(--l-spring),background .18s ease-out}
 .pillar:hover{transform:translateX(-4px);background:rgba(255,255,255,.4)}
@@ -178,7 +177,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 .land svg .s{fill:none;stroke:var(--l-indigo);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.land svg .f{fill:var(--l-indigo)}
 .err{color:var(--bad)}
 @media (prefers-reduced-motion:no-preference){
-.lhero h1,.lhero .lede,.lhero .lcta,.announce{animation:lin .68s var(--l-ease) both}.lhero .lede{animation-delay:.12s}.lhero .lcta{animation-delay:.22s}.announce{animation-delay:.3s}
+.lhero h1,.lhero .lede,.lhero .lcta,.harness{animation:lin .68s var(--l-ease) both}.lhero .lede{animation-delay:.12s}.lhero .lcta{animation-delay:.22s}.harness{animation-delay:.3s}
 .pillar{animation:lpil .72s var(--l-ease) both;animation-delay:calc(.18s + var(--i) * 90ms)}}
 @keyframes lin{from{opacity:0;transform:translate3d(0,18px,0)}}@keyframes lpil{from{opacity:0;transform:translate3d(18px,0,0)}}
 
@@ -344,7 +343,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
       <h1>AI Native Observability <em>for Automated Developments</em></h1>
       <p class="lede">When agents ship more than you can read, Hush shows which routines ran, which went silent, and what each one cost.</p>
       ${cta()}
-      <a class="announce" href="${REPO}" target="_blank" rel="noopener">Open source, MIT <span>Read the code →</span></a>
+      <div class="harness"><span>For your harness</span><span class="hn"><img src="${SI("16.32.0", "claude")}" alt="">Claude Code</span><span class="hn"><img src="${SI("13.21.0", "openai")}" alt="">Codex<em>soon</em></span></div>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
     <div class="pillars">${PILLARS.map(([href, ic, t, p], i) => `<a class="pillar" href="${href}" style="--i:${i}">${ICONS[ic]}<span><h2>${t}<i>→</i></h2><p>${p}</p></span></a>`).join("")}</div>

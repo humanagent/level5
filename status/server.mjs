@@ -2341,14 +2341,14 @@ async function refreshStars() {
   } catch {}
 }
 
-function homePage(user, repos = [], msg = "", snaps = {}) {
+function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
   const app = appConfig();
   if (!app) {
     return page("hush", `<header class="top">${LOGO}</header>
       <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK, stars: STARS.n });
+  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK, stars: STARS.n, viewer: viewer?.login || null });
   // Every repo the person can see, grouped by account, with the numbers from its last snapshot.
   const usdF = (n) => (n == null ? "–" : "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2)));
   const STATE_LABEL = { ok: "Operational", degraded: "Degraded", down: "Needs attention" };
@@ -2616,7 +2616,7 @@ createServer(async (req, res) => {
 
     // the public landing, also for someone signed in who wants to see it
     if ((url.pathname === "/landing" || (url.pathname === "/" && !user)) && req.method === "GET") await refreshStars();
-    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null));
+    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null, [], "", {}, user));
     if (url.pathname === "/" && req.method === "GET") {
       if (!user) return send(res, 200, homePage(null));
       const repos = await userRepos(user).catch(() => null);

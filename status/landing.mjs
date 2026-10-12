@@ -33,7 +33,9 @@ const INTEGRATIONS = [
   ["vercel", "#000000", LOGO_VERCEL, "Vercel", "Daily spend per project, and heartbeats from your deploys and crons."],
 ];
 
-export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars = null }) {
+export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars = null, viewer = null }) {
+  // signed in (only reachable at /landing): every way in goes to the repos instead of to sign-in
+  const enter = viewer ? `<a class="signin enter" href="/">Enter →</a>` : `<a class="signin" href="/auth/login">Sign in</a>`;
   const starTag = stars == null ? "" : `<span class="stars" aria-label="${stars} stars">★ ${stars >= 1000 ? (stars / 1000).toFixed(1).replace(/\.0$/, "") + "k" : stars}</span>`;
   const bars = (s) => [...s].map((c) => `<i data-s="${{ o: "ok", d: "degraded", s: "skipped", ".": "" }[c]}"></i>`).join("");
   const rows = EXAMPLE.map(
@@ -49,8 +51,7 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars =
   const totals = COST_SRC.map(([n, c], i) => [n, c, COST_DAYS.reduce((a, d) => a + d[i], 0)]);
 
   const cta = () => `<div class="cta">
-    <a class="btn gh" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>
-    <a class="btn ghost" href="${REPO}" target="_blank" rel="noopener">View the code on GitHub →</a>
+    ${viewer ? `<a class="btn gh" href="/"><span>Open your repos →</span></a>` : `<a class="btn gh" href="${install}">${GITHUB}<span>Install Hush on your repos</span></a>`}
   </div>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -61,7 +62,7 @@ ${icon}${fonts}
 /* Landing: one white column. Headline, install button, an example status page, three steps, what it reads, the button again. */
 .land{max-width:1040px}
 .nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:80px}
-.nav a.signin{color:var(--muted);text-decoration:none;font-size:15px}.nav a.signin:hover{color:var(--ink)}
+.nav a.signin{color:var(--muted);text-decoration:none;font-size:15px}.nav a.signin:hover{color:var(--ink)}.nav a.enter{color:var(--bg);background:var(--ink);padding:6px 14px;border-radius:8px;font-weight:500}.nav a.enter:hover{color:var(--bg);opacity:.88}
 .h{max-width:760px;margin:0 auto;text-align:center}
 .h{max-width:900px}
 .h h1{font-size:clamp(34px,5.6vw,64px);line-height:1.05;letter-spacing:-.04em;font-weight:500;margin:0 0 28px}
@@ -114,7 +115,7 @@ ${icon}${fonts}
 @media(max-width:760px){.nav{margin-bottom:48px}.steps{grid-template-columns:minmax(0,1fr);gap:28px;margin-top:80px}.shot{padding:18px 14px 4px;margin-top:44px}.reads,.end{margin-top:80px}.reads .group .line{flex-direction:column;gap:2px}.reads .group .line .meta{text-align:left;max-width:none}}
 </style></head><body><div class="wrap land">
 
-<nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><span class="nav-r"><a class="signin gh-link" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>GitHub</span></a><a class="signin" href="/auth/login">Sign in</a></span></nav>
+<nav class="nav"><a class="logo" href="/">${mark()}<span>hush</span></a><span class="nav-r"><a class="signin gh-link" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>GitHub</span></a>${enter}</span></nav>
 
 <section class="h">
   <a class="oss" href="${REPO}" target="_blank" rel="noopener">${GITHUB}<span>Star on GitHub</span>${starTag}</a>
@@ -124,7 +125,6 @@ ${icon}${fonts}
   </h1>
   <p class="lede">Monitor your factory so software never sleeps.</p>
   ${cta()}
-  <p class="fine">Free and open source. Read-only on your repos. Use ours or <a href="${REPO}#run-and-deploy" target="_blank" rel="noopener">host your own</a>.</p>
   ${msg ? `<p class="err" style="text-align:center">${esc(msg)}</p>` : ""}
 </section>
 
@@ -185,7 +185,7 @@ ${icon}${fonts}
   ${cta()}
 </section>
 
-<footer><span>hush · open source, MIT · <a href="${REPO}" target="_blank" rel="noopener">github.com/humanagent/hush</a></span><span><a href="/auth/login">Sign in</a></span></footer>
+<footer><span>hush · open source, MIT · <a href="${REPO}" target="_blank" rel="noopener">github.com/humanagent/hush</a></span><span>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login">Sign in</a>`}</span></footer>
 </div>
 </body></html>`;
 }

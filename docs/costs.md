@@ -40,6 +40,7 @@ resend the last few days as late charges settle.
 .claude/hooks/hush.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"Bedrock":8,"S3":0.4}}'
 .claude/hooks/hush.sh cost vercel 4.20 '{"day":"2026-10-10"}'
 .claude/hooks/hush.sh cost neon 0.63  # a flat monthly plan, spread per day
+.claude/hooks/hush.sh cost openrouter 12.40 '{"day":"2026-10-10","breakdown":{"anthropic/claude-sonnet":9.1,"openai/gpt-5":3.3}}'  # agents on OpenRouter keys
 ```
 
 Or the raw call:
@@ -53,7 +54,7 @@ authorization: Bearer <ingest-key>
 
 | Field | What |
 | --- | --- |
-| `source` | Required. `aws`, `vercel`, `neon`, `anthropic`, `fly`, `cloudflare`... any lowercase slug. |
+| `source` | Required. `aws`, `vercel`, `neon`, `anthropic`, `openrouter`, `fly`, `cloudflare`... any lowercase slug. |
 | `usd` | Required for providers. The day's spend. |
 | `day` | `YYYY-MM-DD`, UTC. Defaults to today. |
 | `breakdown` | Optional object of service → USD. |

@@ -52,6 +52,8 @@ Run at the repo root, then commit `.claude/`. It writes, and changes nothing els
 | `.claude/hooks/hush.sh` | The client: `beat` and `session-end`. |
 | `.claude/settings.json` | Adds the `SessionEnd` hook. Existing content is kept; running twice adds it once. |
 | `.claude/skills/hush/SKILL.md` | Tells agents to end a routine skill with a heartbeat. |
+| `.claude/skills/hush-setup/SKILL.md` | [`/hush-setup`](setup.md): adds monitors, a report and a pulse in one PR. |
+| `.claude/hush/templates/` | The pieces `/hush-setup` can add. Reinstalling replaces only these. |
 | `.claude/factory.json` | A starter roster, only if the repo has none. |
 
 It needs `node` (to merge `settings.json`) and must run at the root of a git repo.

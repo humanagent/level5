@@ -2,11 +2,13 @@
 # Hush installer. Run at the root of your repo:
 #   curl -fsSL __ORIGIN__/install.sh | sh -s -- <ingest-key>
 #
-# Writes four things, all under .claude/, and changes nothing else:
+# Writes these, all under .claude/, and changes nothing else:
 #   .claude/hooks/hush.sh       the heartbeat: a SessionEnd hook plus `hush.sh beat` for skills
 #   .claude/hush.json           where to send heartbeats, and the key (it can only post heartbeats for this repo)
 #   .claude/settings.json       adds the SessionEnd hook, keeps everything already there
 #   .claude/skills/hush/SKILL.md  tells agents how to send a heartbeat with status and volume
+#   .claude/skills/hush-setup/    /hush-setup: builds the factory from the templates, in one PR
+#   .claude/hush/templates/       the monitors, report and pulse /hush-setup can add
 # and .claude/factory.json if the repo has none.
 set -eu
 
@@ -158,6 +160,9 @@ itself, so it can be read in Hush under Reports: add `"title"` and `"report"` (m
 60,000 characters) to the same JSON.
 SKILL
 
+# the kit: /hush-setup, and the templates it adds to the repo as new hush-* skills and workflows
+# __KIT__
+
 if [ ! -f .claude/factory.json ]; then
 cat > .claude/factory.json <<'EOF'
 {
@@ -172,5 +177,5 @@ EOF
 fi
 
 echo "hush: installed. Commit .claude/ and push."
-echo "hush: edit .claude/factory.json with your monitors and routines (cron in UTC)."
+echo "hush: then run /hush-setup in Claude Code to add monitors, a daily report and a pulse."
 echo "hush: test it: .claude/hooks/hush.sh beat install-test ok"

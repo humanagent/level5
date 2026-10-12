@@ -439,7 +439,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
       <h3 class="lfeat">${ICONS.sm("flow")} Integrations</h3>
       <p class="lfeat-p">The four platforms first. Anything else through one <code>curl</code>.</p>
       <div class="paint c pad"><div class="int-grid">${INTEGRATIONS.map(([k, bg, logo, name, what]) => `<div class="int"><span class="int-m" style="background:${bg}">${logo}</span><b>${name}</b><span class="int-t">${what}</span></div>`).join("")}</div></div>
-      <p class="int-more">Also: Claude Code routines, skills and tokens per session, Neon and the Anthropic API.</p>
+      <p class="int-more">Also: Claude Code routines, skills and tokens per session, OpenRouter for agents that run on its keys, Neon and the Anthropic API.</p>
     </div>
     <div>
       <h3 class="lfeat">${ICONS.sm("beat")} What it reads from each repo</h3>

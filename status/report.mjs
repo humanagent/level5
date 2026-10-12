@@ -70,7 +70,7 @@ export function dailyReport(s, { origin = "", day } = {}) {
   // costs
   const C = s.costs, cd = C?.per_day?.find((p) => p.d === day);
   const avg7 = C ? prev7.map((d) => C.per_day.find((p) => p.d === d)?.total || 0).reduce((a, b) => a + b, 0) / 7 : 0;
-  const srcName = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", fly: "Fly" }[k] || k);
+  const srcName = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", openrouter: "OpenRouter", fly: "Fly" }[k] || k);
 
   // code
   const M = s.metrics, pd = M?.prs?.per_day?.find((p) => p.d === day), size = M?.prs?.size || {};

@@ -48,6 +48,7 @@ zone), and **Repositories** (every repo you can see, by account, side by side).
 
 - [Heartbeats](docs/heartbeats.md): the API, the installer, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
+- [`/hush-setup`](docs/setup.md): building the factory in one PR, as new hush-* skills, workflows and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
 - [Daily factory report](docs/report.md): one email with everything that happened in the factory that day.

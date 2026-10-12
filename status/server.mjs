@@ -22,6 +22,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, r
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
+import { installer } from "./kit.mjs";
 import { dailyReport, reportData } from "./report.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -33,7 +34,7 @@ const DATA = process.env.DATA_DIR || "./data";
 const SECRET = process.env.SECRET || "dev-secret-change-me";
 const KEY = createHash("sha256").update(SECRET).digest();
 const WINDOW = 30;
-const INSTALL = readFileSync(new URL("./install.sh", import.meta.url), "utf8");
+const INSTALL = installer();
 mkdirSync(DATA, { recursive: true });
 
 // --- storage --------------------------------------------------------------
@@ -525,7 +526,7 @@ function sessionUsd(models, overrides) {
 // Service names the way Cost Explorer shows them: "Amazon Simple Storage Service" -> "S3"
 const SVC_SHORT = [[/simple storage service/i, "S3"], [/elastic container service/i, "Elastic Container Service"], [/relational database service/i, "RDS"], [/simple email service/i, "SES"], [/simple notification service/i, "SNS"], [/simple queue service/i, "SQS"], [/elastic compute cloud - compute/i, "EC2-Instances"], [/^ec2 - other$/i, "EC2-Other"], [/virtual private cloud/i, "VPC"], [/key management service/i, "Key Management Service"], [/^amazon ?cloudwatch$/i, "CloudWatch"], [/^aws ?cloudtrail$|^amazon ?cloudtrail$/i, "CloudTrail"], [/elastic container registry/i, "EC2 Container Registry (ECR)"], [/^aws cost explorer$/i, "Cost Explorer"]];
 const svcShort = (n) => (SVC_SHORT.find(([re]) => re.test(n)) || [null, String(n).replace(/^(Amazon|AWS) ?/, "")])[1];
-const srcLabel = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
+const srcLabel = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
 async function readCosts(repoId, prices) {
   const days = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
   const rows = (await db.all("SELECT source, key, day, usd, body, at FROM costs WHERE repo_id = $1 AND day >= $2 ORDER BY day", repoId, days[0])).map((r) => ({ ...r, ...JSON.parse(r.body) }));
@@ -1211,7 +1212,7 @@ function until(ts) {
   return `in ${Math.round(s / 86400)} days`;
 }
 
-const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">`;
+const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">`;
 const MARK = (color = "currentColor") => `<svg viewBox="0 0 40 40" width="22" height="22" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="${color}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const LOGO = `<a class="logo" href="/">${MARK()}<span>hush</span></a>`;
 
@@ -1311,7 +1312,7 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .line.pr .meta{display:flex;align-items:center;gap:8px}
 .agent-tag{font:500 11px var(--f);color:#fff;background:var(--ink);border-radius:6px;padding:1px 6px}
 @media(max-width:520px){.line.pr .meta code.branch{display:none}}
-.cx-mini .cx-chart{min-height:260px}.cx-mini .cx-loading{padding:110px 0}.cx-mini .cx-legend{margin-top:6px}.group a.line{text-decoration:none;color:inherit}.group a.line:hover{background:rgba(15,16,20,.03)}.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
+.cx.cx-mini{display:block;margin:0;background:none;border-radius:0;box-shadow:none}.cx-mini .cx-chart{min-height:260px}.cx-mini .cx-loading{padding:110px 0}.cx-mini .cx-legend{margin-top:6px}.group a.line{text-decoration:none;color:inherit}.group a.line:hover{background:rgba(15,16,20,.03)}.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
 .costs-fold{margin:-16px 0 32px}.cost-note{color:var(--faint);font-size:12px;margin-top:8px}.costs-fold .line .meta b{color:var(--ink);font-weight:600}
 .ci-live{margin-bottom:32px}
 :root{--sel:#f1f2f4}
@@ -1680,7 +1681,17 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .cc-kv div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}.cc-kv span{color:var(--muted)}.cc-kv b{font-weight:500;text-align:right}.cc-f{margin-top:8px;color:var(--faint);font-size:11px}.cal-ev{cursor:pointer}
 .a-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 10px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.a-stats span{display:flex;flex-direction:column;font-size:11.5px;color:var(--faint)}.a-stats b{font-size:16px;color:var(--ink);font-weight:600}
 .ar-list{border:1px solid var(--line);border-radius:10px;overflow:hidden}.ar{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);font-size:12.5px}.ar:first-child{border-top:0}.ar-st{width:8px;height:8px;border-radius:50%}.ar-st[data-s=ok]{background:var(--ok)}.ar-st[data-s=warn]{background:var(--warn)}.ar-st[data-s=bad]{background:var(--bad)}.ar-main{display:flex;flex-direction:column;min-width:0}.ar-main b{font-weight:500}.ar-main .sub{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ar-num{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
-@media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
+@media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}/* The landing's look, lightly: its faces (Geist), its ink and indigo, softer surfaces without
+   shadows, and pill-shaped controls in the top bar. */
+:root{--f:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+--ink:#191e2d;--ink2:#3a3f52;--muted:#636878;--faint:#9a9eae;--line:#e8e8f0;--line2:#f1f1f6;--link:#5b4dff;--canvas:#f7f7fb;--sel:rgba(91,77,255,.06)}
+::selection{background:#e7e8ff;color:var(--ink)}
+.side{background:#f7f7fb}
+.group,.card,.onboard,html[data-view] .group,html[data-view] .card,html[data-view] .onboard,.banner,.cx{border-radius:12px;box-shadow:none;border-color:var(--line)}
+.cx{box-shadow:0 0 0 1px var(--line)}.cx.cx-mini{box-shadow:none;border-radius:0}
+.main h1,.main .cx-head h2{letter-spacing:-.03em}
+.tb-ask,.tb-acts,.btn-quiet{border-radius:999px;padding-inline:12px}.btn{border-radius:999px}
+.snav a,.side-foot a{border-radius:8px}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ALERT = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M10 5.5v5.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#fff"/></svg>`;
@@ -1727,7 +1738,7 @@ setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
 const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "reports", "services", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
-const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
+const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:var(--sel);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--link)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
 addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
 const ASK_MODEL = process.env.HUSH_MODEL || "openai/gpt-6.1-sol";
@@ -1979,7 +1990,7 @@ addEventListener("hashchange", build); document.addEventListener("hush:swap", ()
 // state survives background refreshes and reloads (localStorage).
 const CX_JS = `<script>(()=>{const X=window.hushCx||(window.hushCx={data:null,at:0,st:null});
 const PAL=["#5e6ad2","#26b5ce","#4cb782","#f2c94c","#f2994a","#eb5757","#bb87fc","#4ea7fc","#d4669a"],OTHER="#c4c6cc";
-const NAMES={aws:"AWS",vercel:"Vercel",neon:"Neon",anthropic:"Anthropic API","claude-code":"Claude Code",openai:"OpenAI",fly:"Fly",cloudflare:"Cloudflare"};
+const NAMES={aws:"AWS",vercel:"Vercel",neon:"Neon",anthropic:"Anthropic API","claude-code":"Claude Code",openai:"OpenAI",openrouter:"OpenRouter",fly:"Fly",cloudflare:"Cloudflare"};
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money=v=>"$"+(Math.abs(v)>=1000?Math.round(v).toLocaleString("en-US"):v.toFixed(2));
 const D=d=>new Date(d+"T00:00:00Z"),iso=t=>new Date(t).toISOString().slice(0,10),add=(d,n)=>iso(D(d).getTime()+n*864e5);
@@ -2187,7 +2198,7 @@ function heartbeatSetup(origin, key, waiting, st = null) {
   -H "authorization: Bearer ${esc(key)}" \\
   -H "content-type: application/json" \\
   -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details>`)}
-    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.hush_sh && !st.cost_cmd ? " Your <code>hush.sh</code> predates this: run the installer again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
+    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.hush_sh && !st.cost_cmd ? " Your <code>hush.sh</code> predates this: run the installer again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
       <div class="cmd"><pre>.claude/hooks/hush.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"S3":0.4}}'</pre>${COPY}</div>
       <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Hush never asks for billing credentials.</span>`)}
     ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/hush.sh beat install-test ok</code></span></div></li>` : ""}
@@ -2275,7 +2286,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const C = s.costs;
   const SRC_COLOR = ["#14161c", "#5b6cff", "#2fb36b", "#f0a92c", "#e5484d", "#8250df", "#0ea5b7", "#9a9ea5"];
   const srcColor = (k) => (k === "claude-code" ? "#d97757" : SRC_COLOR[(C?.sources || []).filter((x) => x !== "claude-code").indexOf(k) % SRC_COLOR.length]);
-  const srcName = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
+  const srcName = (k) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", "claude-code": "Claude Code", openai: "OpenAI", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare", supabase: "Supabase" }[k] || k);
   const usd = (n) => (n == null ? "–" : n >= 1000 ? "$" + Math.round(n).toLocaleString("en-US") : "$" + n.toFixed(n < 10 ? 2 : 0));
   const tk = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n || 0));
   const maxCost = C ? Math.max(1e-9, ...C.per_day.map((p) => p.total)) : 1;

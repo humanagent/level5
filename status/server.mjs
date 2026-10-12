@@ -1601,7 +1601,7 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "security", "setup"];
+const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
@@ -1678,7 +1678,7 @@ window.hushOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href)
 const NOTIF_JS = `<script>(()=>{const N=window.hushNotif||(window.hushNotif={data:null});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
-const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"security"};
+const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"status"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
 function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"status")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
@@ -2358,7 +2358,6 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ["issues", "Issues", count(s.queue.issues.length)],
     ["costs", "Costs", C ? `<span class="nc">${usd(C.total_usd)}</span>` : ""],
     ["map", "Map", ""],
-    ["security", "Security", (() => { const f = s.security?.findings || []; const hi = f.filter((x) => SEV[x.sev] <= 1).length; return hi ? badge(hi, "bad") : f.length ? count(f.length) : ""; })()],
   ];
   const navLink = ([k, label, extra]) => `<a href="#${k}" data-nav="${k}">${ico(k)}<span>${label}</span>${extra}</a>`;
   const vh = (title, desc) => `<header class="vh"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</header>`;
@@ -2396,7 +2395,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ...failing.map((w) => alertLine("bad", "Failing", `CI: ${esc(w.name)}`, `${w.last.branch ? `${esc(w.last.branch)} · ` : ""}failed ${ago(w.last.at)}`, `data-open="workflow:${esc(encodeURIComponent(w.path))}"`)),
     ...late.map((r) => alertLine("bad", "Late", esc(r.name.replace(/^App: /, "")), `last seen ${r.last_seen ? ago(r.last_seen) : "never"} · expected every ${hrs(r.period_h)}`, `data-open="routine:${esc(encodeURIComponent(r.name))}"`)),
     ...fired.map((r) => alertLine("bad", "Price rule", esc(r.name), esc(r.summary), `data-open="rule:${r.id}"`)),
-    ...(secHi.length ? [alertLine("bad", "Security", `${plural(secHi.length, "critical or high finding")}`, esc(secHi.slice(0, 3).map((f) => f.title).join(" · ")), "#security")] : []),
+    ...(secHi.length ? [alertLine("bad", "Security", `${plural(secHi.length, "critical or high finding")}`, esc(secHi.slice(0, 3).map((f) => f.title).join(" · ")), "")] : []),
   ];
   const nAlerts = needs.length + others.length;
   const stOverall = needs.some((r) => ["dead", "degraded", "late"].includes(r.state)) || others.length ? "down" : needs.length ? "degraded" : "ok";
@@ -2550,7 +2549,6 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${incidents}`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
       ${view("map", `${vh("Map", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
-      ${view("security", `${vh("Security", "AWS IAM and the secrets in Infisical. Names and metadata only: Hush never receives a secret value.")}${secSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>

@@ -1452,6 +1452,13 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .sec-f .name{display:flex;gap:10px;align-items:flex-start}.sec-f .pill{flex:none;margin-top:1px}.sec-f b{font-weight:500}
 .sec-q{height:28px;border:1px solid var(--line);border-radius:6px;padding:0 9px;font:13px var(--f);width:220px}
 .notif[hidden],.win-dock[hidden],.win[hidden]{display:none!important}
+.tb-ask{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:500 12.5px var(--sans,inherit);cursor:pointer}.tb-ask svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}.tb-ask:hover{background:rgba(15,16,20,.04)}html[data-ask] .tb-ask{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.askp{display:none;position:fixed;top:44px;right:0;bottom:0;width:400px;z-index:7;flex-direction:column;gap:10px;padding:0 16px 14px;background:var(--bg);border-left:1px solid var(--line)}html[data-ask] .askp{display:flex}
+.askp-h{display:flex;align-items:center;gap:8px;height:48px;flex:none;border-bottom:1px solid var(--line);margin:0 -16px;padding:0 10px 0 16px;font-size:13px}.askp-h .faint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.askp-x{margin-left:auto;width:28px;height:28px;display:grid;place-items:center;border:0;border-radius:6px;background:none;color:var(--muted);cursor:pointer}.askp-x:hover{background:rgba(15,16,20,.06);color:var(--ink)}.askp-x svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+.askp .chat-log{flex:1;max-height:none;min-height:0}.askp .chips{display:flex;flex-direction:column;align-items:flex-start;gap:6px}.askp .ask textarea{min-height:56px}
+@media(min-width:1100px){html[data-ask] .app .main{width:auto;margin-right:400px}}
+@media(max-width:820px){.askp{width:auto;left:0}.tb-ask span{display:none}}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1496,7 +1503,7 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["status", "overview", "assistant", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "security", "setup"];
+const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "map", "security", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:rgba(15,16,20,.06);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--ink)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
@@ -1516,7 +1523,10 @@ if(!r.ok||!r.body){a.content=(await r.text())||"The assistant did not answer.";a
 document.addEventListener("submit",ev=>{if(ev.target.id!=="ask-form")return;ev.preventDefault();const i=document.getElementById("ask-input");const q=i.value;i.value="";ask(q)});
 document.addEventListener("keydown",ev=>{if(ev.target.id==="ask-input"&&ev.key==="Enter"&&!ev.shiftKey){ev.preventDefault();ev.target.form.requestSubmit()}});
 document.addEventListener("input",ev=>{if(ev.target.id==="ask-input")S.draft=ev.target.value});
-document.addEventListener("click",ev=>{const c=ev.target.closest&&ev.target.closest(".chip");if(c){location.hash="assistant";ask(c.dataset.q)}});
+const H=document.documentElement,K="hush-ask",open=o=>{if(o)H.dataset.ask="1";else delete H.dataset.ask;try{localStorage.setItem(K,o?"1":"")}catch(x){}if(o)setTimeout(()=>{const i=document.getElementById("ask-input");if(i)i.focus()},0)};
+try{if(localStorage.getItem(K))H.dataset.ask="1"}catch(x){}if(location.hash==="#assistant"){open(true);history.replaceState(null,"",location.pathname+location.search+"#status")}
+document.addEventListener("click",ev=>{const t=ev.target.closest&&ev.target.closest("[data-ask-toggle]");if(t){open(!H.dataset.ask);return}const c=ev.target.closest&&ev.target.closest(".chip");if(c){open(true);ask(c.dataset.q)}});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&H.dataset.ask&&ev.target.closest&&ev.target.closest("#chat"))open(false)});
 document.addEventListener("hush:swap",draw);draw()})()</script>`;
 // Floating windows, after the admin's PanelHost (docs/admin/crud-panel.md → Windows): one click on
 // an entity opens its own window; the same entity never opens twice (it comes to the front);
@@ -1572,7 +1582,7 @@ const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just 
 const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"security"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
-function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"overview")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
+function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"status")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
 async function load(){try{const r=await fetch("/api/notifications",{credentials:"same-origin"});if(r.ok){N.data=await r.json();badge();if(!panel().hidden)draw()}}catch(x){}}
 function toggle(show){const p=panel(),b=document.getElementById("tb-bell");if(show===undefined)show=p.hidden;p.hidden=!show;if(b)b.setAttribute("aria-expanded",show);if(show)draw()}
 function mark(ids){if(!N.data)return;const all=!ids;N.data.items.forEach(x=>{if(all||ids.includes(x.id))x.unread=false});N.data.unread=N.data.items.filter(x=>x.unread).length;badge();if(!panel().hidden)draw();
@@ -2196,8 +2206,6 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const needsN = ((s.status?.groups) || []).flatMap((g) => g.rows).filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state)).length;
   const NAV = [
     ["status", "Status", needsN ? badge(needsN, "bad") : ""],
-    ["overview", "Overview", ""],
-    ["assistant", "Assistant", ""],
     ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(s.monitors.length)],
     ["automations", "Automations", lateN ? badge(lateN, "bad") : count(s.routines.length)],
     ["ci", "CI", failingCi ? badge(failingCi, "bad") : count((s.ci || []).length)],
@@ -2212,23 +2220,11 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const view = (k, body) => `<section class="view" data-view="${k}">${body}</section>`;
   const liveBox = (compact) => `<div class="ci-live"${compact ? ' data-compact="1"' : ""} aria-live="polite"><div class="live-head"><h2>Actions</h2><span class="live-dot"></span><span class="live-meta">Checking…</span></div></div>`;
 
-  // overview cards
-  const probs = s.monitors.filter((m) => ["dead", "lying", "degraded", "warn"].includes(m.state));
-  const ops = s.monitors.filter((m) => m.state === "alive").length;
-  const nextRuns = s.routines.filter((r) => r.next_run).sort((a, b) => (a.next_run < b.next_run ? -1 : 1)).slice(0, 4);
-  const card = (k, title, body) => `<div class="card"><div class="card-h"><h3>${ico(k)}${title}</h3><a href="#${k}">View →</a></div>${body}</div>`;
-  const cards = `<div class="cards">
-    ${card("monitors", "Monitors", s.monitors.length ? `<div class="big">${ops}<i>/${s.monitors.length}</i></div><div class="cap">operational</div>${probs.length ? `<ul class="mini">${probs.slice(0, 4).map((m) => { const [ps, label] = STATE[m.state]; return `<li class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${label}</span></li>`; }).join("")}</ul>` : `<div class="cap ok">Nothing needs attention.</div>`}` : `<div class="cap">No heartbeat yet. <a href="#setup">Set it up</a>.</div>`)}
-    ${card("automations", "Next runs", nextRuns.length ? `<ul class="mini">${nextRuns.map((r) => `<li class="openable" data-open="routine:${esc(encodeURIComponent(r.name))}" role="button" tabindex="0"><span>${esc(r.name.replace(/^App: /, ""))}</span><span class="faint">${until(r.next_run)}</span></li>`).join("")}</ul>${lateN ? `<div class="cap bad">${plural(lateN, "routine")} late</div>` : ""}` : `<div class="cap">No routines found.</div>`)}
-    ${card("costs", "Costs", C ? `<div class="big">${usd(C.total_usd)}</div><div class="cap">in ${WINDOW} days · ${usd(C.yesterday)} yesterday</div><div class="cap">${tk(C.tokens_30d)} Claude Code tokens, ${C.sessions_30d} session${C.sessions_30d === 1 ? "" : "s"}</div>` : `<div class="cap">No cost data yet. <a href="#costs">How to connect</a>.</div>`)}
-  </div>`;
-
   // --- the status chart: skills grouped by the routine that runs them ----------------------
   const ST = s.status || { groups: [], usd_30d: 0 };
   const SK = { alive: ["ok", "Running"], warn: ["warn", "Degraded"], degraded: ["bad", "Often degraded"], lying: ["warn", "Read nothing"], late: ["bad", "Missed the last run"], dead: ["bad", "Stopped"], silent: ["none", "No heartbeat yet"] };
   const allRows = ST.groups.flatMap((g) => g.rows);
   const needs = allRows.filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state));
-  const skOverall = needs.some((r) => ["dead", "degraded", "late"].includes(r.state)) ? "down" : needs.length ? "degraded" : "ok";
   const sched = (cron) => { if (!cron) return ""; const f = cron.split(/\s+/); const t = `${f[1].padStart(2, "0")}:${f[0].padStart(2, "0")} UTC`; return f[4] !== "*" && /^\d$/.test(f[4]) ? `${DOW[Number(f[4])]} ${t}` : f[2] === "*" && f[4] === "*" && /^\d+$/.test(f[1]) ? `daily ${t}` : cron; };
   const barTip = (r, b) => {
     if (!b.label) return "";
@@ -2246,18 +2242,40 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="axis"><span>${r.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${r.on_time == null ? "–" : `${r.on_time}% ok`}</span><span class="rule"></span><span>${r.weekly ? "this week" : "today"}</span></div>
     </div>`;
   };
-  const skGroups = ST.groups.map((g) => `<section class="sk-g">
-      <header class="sk-gh"><h2>${esc(g.name)}</h2><span>${[g.cmd ? `<code>/${esc(g.cmd)}</code>` : "", sched(g.cron), g.next_run ? `next ${until(g.next_run)}` : "", g.usd_30d ? `<b>${usd(g.usd_30d)}</b> in ${WINDOW} d` : ""].filter(Boolean).join(" · ")}</span></header>
-      <div class="group${g.rows.length > 1 ? " grid2" : ""}">${g.rows.map(skRow).join("")}</div>
-    </section>`).join("");
-  const skBanner = skOverall === "ok" ? `All ${plural(allRows.length, "skill")} ran as expected` : `${plural(needs.length, "skill")} need${needs.length === 1 ? "s" : ""} a look`;
-  const skSub = [needs.length ? needs.map((r) => `${esc(r.id)} (${(SK[r.state] || ["", r.state])[1].toLowerCase()})`).join(", ") + "." : "", `${plural(allRows.length, "skill")} in ${plural(ST.groups.filter((g) => g.cmd).length, "routine")}.`, ST.usd_30d ? `${usd(ST.usd_30d)} in Claude Code tokens in ${WINDOW} days.` : ""].filter(Boolean).join(" ");
+  // --- Status: the one page. Only what is wrong, then what it costs, then the numbers ----------
+  const late = s.routines.filter(isLate).filter((r) => !ST.groups.some((g) => g.name === r.name.replace(/^App: /, "") && g.rows.some((x) => x.state === "late")));
+  const failing = (s.ci || []).filter((w) => w.last?.status === "completed" && w.last.conclusion === "failure");
+  const secHi = (s.security?.findings || []).filter((f) => SEV[f.sev] <= 1);
+  const fired = (s.rules || []).filter((r) => r.firing && r.enabled);
+  const alertLine = (tone, label, title, sub, open) => open.startsWith("#") ? `<a class="line" href="${open}"><span class="name"><span><b>${title}</b>${sub ? `<span class="sub">${sub}</span>` : ""}</span></span><span class="meta"><span class="state" data-s="${tone}">${label}</span></span></a>` : `<div class="line${open ? ` openable" ${open} role="button" tabindex="0` : ""}"><span class="name"><span><b>${title}</b>${sub ? `<span class="sub">${sub}</span>` : ""}</span></span><span class="meta"><span class="state" data-s="${tone}">${label}</span></span></div>`;
+  const others = [
+    ...failing.map((w) => alertLine("bad", "Failing", `CI: ${esc(w.name)}`, `${w.last.branch ? `${esc(w.last.branch)} · ` : ""}failed ${ago(w.last.at)}`, `data-open="workflow:${esc(encodeURIComponent(w.path))}"`)),
+    ...late.map((r) => alertLine("bad", "Late", esc(r.name.replace(/^App: /, "")), `last seen ${r.last_seen ? ago(r.last_seen) : "never"} · expected every ${hrs(r.period_h)}`, `data-open="routine:${esc(encodeURIComponent(r.name))}"`)),
+    ...fired.map((r) => alertLine("bad", "Price rule", esc(r.name), esc(r.summary), `data-open="rule:${r.id}"`)),
+    ...(secHi.length ? [alertLine("bad", "Security", `${plural(secHi.length, "critical or high finding")}`, esc(secHi.slice(0, 3).map((f) => f.title).join(" · ")), "#security")] : []),
+  ];
+  const nAlerts = needs.length + others.length;
+  const stOverall = needs.some((r) => ["dead", "degraded", "late"].includes(r.state)) || others.length ? "down" : needs.length ? "degraded" : "ok";
+  const healthy = allRows.length - needs.length;
+  const topRoutines = ST.groups.filter((g) => g.usd_30d).sort((a, b) => b.usd_30d - a.usd_30d).slice(0, 4);
+  const costBlock = !C ? `<div class="group"><div class="line"><span class="hint">No cost data yet. <a href="#costs">How to connect</a>.</span></div></div>` : `
+    <div class="group stats">
+      <div class="stat"><b>${usd(C.total_usd)}</b><span>Spent in ${WINDOW} days</span><small>${C.sources.map((k) => `${srcName(k)} ${usd(C.total[k])}`).join(" · ")}</small></div>
+      <div class="stat"><b>${usd(C.yesterday)}</b><span>Yesterday</span><small>${usd(C.avg7)} a day over the last 7</small></div>
+      <div class="stat"><b>${tk(C.tokens_30d)}</b><span>Claude Code tokens</span><small>${C.sessions_30d} cloud session${C.sessions_30d === 1 ? "" : "s"}</small></div>
+      <div class="stat"><b>${topRoutines.length ? usd(topRoutines[0].usd_30d) : "–"}</b><span>${topRoutines.length ? `Top routine: ${esc(topRoutines[0].name)}` : "Per routine"}</span><small>${topRoutines.slice(1).map((g) => `${esc(g.name)} ${usd(g.usd_30d)}`).join(" · ") || (topRoutines.length ? "" : "no session costs yet")}</small></div>
+    </div>`;
   const statusView = `
-        <div class="banner" data-s="${skOverall}">${skOverall === "ok" ? CHECK : ALERT}<span>${skBanner}</span></div>
-        <p class="banner-sub">${skSub}</p>
+        <div class="banner" data-s="${stOverall}">${stOverall === "ok" ? CHECK : ALERT}<span>${nAlerts ? `${plural(nAlerts, "thing")} need${nAlerts === 1 ? "s" : ""} a look` : "Nothing needs attention"}</span></div>
+        <p class="banner-sub">${allRows.length ? `${healthy} of ${plural(allRows.length, "skill")} ran as expected. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
         ${onboarding ? `<section id="onboard" class="onboard"><h2>Finish setting up ${esc(s.repo)}</h2>${heartbeatSetup(origin, repoRow.ingest_key, true, setupState)}</section>` : ""}
-        ${skGroups || `<div class="group"><div class="line"><span class="hint">No skills reporting yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}
-        <p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>degraded or read nothing <i data-s="miss"></i>should have run, did not <i></i>nothing expected</p>`;
+        ${nAlerts ? `<h2>Needs a look</h2>
+        ${needs.length ? `<div class="group${needs.length > 1 ? " grid2" : ""}">${needs.map(skRow).join("")}</div>` : ""}
+        ${others.length ? `<div class="group">${others.join("")}</div>` : ""}
+        ${needs.length ? `<p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>degraded or read nothing <i data-s="miss"></i>should have run, did not <i></i>nothing expected</p>` : ""}` : ""}
+        <div class="rules-h"><h2>Costs</h2><a class="more" href="#costs">All costs →</a></div>
+        ${costBlock}
+        ${metrics}`;
 
   const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
@@ -2265,7 +2283,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <header class="topbar">
       <a class="logo" href="/">${MARK()}<span>hush</span></a>
       <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
-      <span class="tb-right">${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><span class="tb-user">${esc(user.login)}</span>` : ""}</span>
+      <span class="tb-right"><button type="button" class="tb-ask" data-ask-toggle aria-controls="chat" title="Ask about this repo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg><span>Ask</span></button>${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><span class="tb-user">${esc(user.login)}</span>` : ""}</span>
     </header>
     <aside class="side">
       <div class="repo-box">
@@ -2282,12 +2300,6 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     <main class="main">
       ${winTemplates}
       ${view("status", statusView)}
-      ${view("overview", `
-        <div class="banner" data-s="${s.overall}">${s.overall === "ok" ? CHECK : ALERT}<span>${banner}</span></div>
-        <p class="banner-sub">${s.affected.length ? `Affected: ${esc(s.affected.join(", "))}. ` : ""}${plural(s.counts.merged_24h, "PR")} merged in 24 h, ${s.counts.agent_merged_24h} by agents. ${s.queue.prs.length ? `${plural(s.queue.prs.length, "PR")} open.` : "No open PRs."}</p>
-        ${cards}
-        ${liveBox(true)}
-        ${metrics}`)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}
         ${s.monitors.length ? `<div class="group grid2">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "Claude Code routines and scheduled GitHub Actions, with their next run and proof that the last one happened.")}
@@ -2299,18 +2311,18 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("prs", `${vh("Pull requests", "Open with their CI, plus the latest merged and closed.")}${prSection}`)}
       ${view("issues", `${vh("Issues", `${plural(s.queue.issues.length, "open issue")}.`)}<div class="incidents">${incidents}</div>`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
-      ${view("assistant", `${vh("Assistant", "Ask anything about this repo. It reads everything Hush has: monitors and their heartbeats, routines, CI, pull requests, issues and costs.")}
-        <div class="chat" id="chat" data-repo="${esc(s.repo)}">
-          <div class="chat-log" id="chat-log"></div>
-          <div class="chips">${["What needs my attention?", "Which routines are late, and why?", "Why did spend change this week?", "Summarize the last 7 days"].map((q) => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
-          <form class="ask" id="ask-form"><textarea id="ask-input" rows="2" placeholder="Ask about ${esc(s.repo)}…"></textarea><button type="submit">Ask</button></form>
-          <div class="chat-note">Answers come from ${esc(ASK_MODEL)} on OpenRouter, from this page's data. They can be wrong; check the source.</div>
-        </div>`)}
       ${view("map", `${vh("Map", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("security", `${vh("Security", "AWS IAM and the secrets in Infisical. Names and metadata only: Hush never receives a secret value.")}${secSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
+    <aside class="askp" id="chat" data-repo="${esc(s.repo)}" aria-label="Assistant">
+      <header class="askp-h"><b>Assistant</b><span class="faint">${esc(s.repo)}</span><button type="button" class="askp-x" data-ask-toggle aria-label="Close the assistant"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></header>
+      <div class="chat-log" id="chat-log"></div>
+      <div class="chips">${["What needs my attention?", "Which routines are late, and why?", "Why did spend change this week?", "Summarize the last 7 days"].map((q) => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+      <form class="ask" id="ask-form"><textarea id="ask-input" rows="2" placeholder="Ask about ${esc(s.repo)}…"></textarea><button type="submit">Ask</button></form>
+      <div class="chat-note">Answers come from ${esc(ASK_MODEL)} on OpenRouter, from this page's data. They can be wrong; check the source.</div>
+    </aside>
   </div>`, { live: true, stale, app: true });
 }
 

@@ -1492,6 +1492,12 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .rt .rt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rt .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rt .name b{font-size:14.5px;font-weight:600}.rt .name small{color:var(--muted);font-size:12.5px}.rt .name small a{color:var(--muted);text-decoration:none}.rt .name small a:hover{color:var(--ink)}.rt .name code{font-size:12px}
 .rt-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 10px}.rt-stats span{display:flex;flex-direction:column;font-size:11.5px;color:var(--faint)}.rt-stats b{font-size:14px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .rt-hint{margin:8px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rt-hint code{font-size:11.5px}
+.win-chat{flex:none;display:flex;flex-direction:column;gap:8px;max-height:52%;border-top:1px solid var(--line);padding:10px 14px 12px;background:#fbfbfc}
+.win.adhoc .win-body{display:none}.win.adhoc .win-chat{flex:1;max-height:none;border-top:0;background:var(--bg)}
+.wc-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5}
+.wc-m{padding:8px 11px;border-radius:10px;max-width:92%}.wc-m.assistant{align-self:flex-start;background:var(--bg);border:1px solid var(--line)}.wc-m.user{align-self:flex-end;background:var(--ink);color:var(--bg)}.wc-m.err{color:var(--bad)}.wc-m ul{margin:4px 0;padding-left:18px}
+.wc-ask{display:flex;gap:8px;align-items:flex-end}.wc-ask textarea{flex:1;resize:none;min-height:36px;max-height:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:var(--bg)}.wc-ask button{height:36px;padding:0 14px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font:500 13px inherit;cursor:pointer}.wc-ask button:disabled{opacity:.5}
+.main :is(.banner,.banner-sub,.stat,.chart,.row,.line,.incident,.tbl tbody tr,.cx-main,.card,.rt-stats){cursor:pointer}.main :is(.stat,.chart,.line,.incident,.tbl tbody tr,.card):hover{background:rgba(15,16,20,.025)}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1575,20 +1581,20 @@ const tpl=k=>[...document.querySelectorAll("#win-tpl template")].find(t=>t.datas
 const phone=()=>matchMedia("(max-width:820px)").matches;
 const ICON={min:'<svg viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg>',close:'<svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',gh:'<svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L7.5 8.5M11.5 9.5v4h-9v-9h4"/></svg>'};
 function dockEl(){let d=document.getElementById("win-dock");if(!d){d=document.createElement("div");d.id="win-dock";d.className="win-dock";document.body.appendChild(d)}return d}
-function syncUrl(){const u=new URL(location.href);const ks=W.list.map(w=>w.key);ks.length?u.searchParams.set("w",ks.join(",")):u.searchParams.delete("w");if(u.href!==location.href)history.replaceState(history.state,"",u)}
+function syncUrl(){const u=new URL(location.href);const ks=W.list.filter(w=>!w.ad).map(w=>w.key);ks.length?u.searchParams.set("w",ks.join(",")):u.searchParams.delete("w");if(u.href!==location.href)history.replaceState(history.state,"",u)}
 function order(){const vis=W.list.filter(w=>!w.min);vis.forEach((w,i)=>{w.el.style.zIndex=50+Math.min(i,140);w.el.classList.toggle("active",i===vis.length-1)})}
 function renderDock(){const d=dockEl();const mins=W.list.filter(w=>w.min);d.innerHTML=mins.map(w=>'<button type="button" class="win-chip" data-key="'+esc(w.key)+'"><span>'+esc(w.kind)+'</span> '+esc(w.title)+"</button>").join("");d.hidden=!mins.length}
 function clamp(f){const vw=innerWidth,vh=innerHeight;f.w=Math.max(MINW,Math.min(f.w,vw-16));f.h=Math.max(MINH,Math.min(f.h,vh-TOP-8));f.x=Math.max(8-f.w+120,Math.min(f.x,vw-120));f.y=Math.max(TOP-6,Math.min(f.y,vh-40));return f}
 function place(w){if(phone()){w.el.removeAttribute("style");order();return}const f=clamp(W.frames[w.key]);Object.assign(w.el.style,{left:f.x+"px",top:f.y+"px",width:f.w+"px",height:f.h+"px"});order()}
-function fill(w){const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
+function fill(w){if(w.ad)return;const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
 function focus(w){W.list.splice(W.list.indexOf(w),1);W.list.push(w);if(w.min){w.min=false;w.el.hidden=false;renderDock()}order()}
 function close(w){w.el.remove();W.list.splice(W.list.indexOf(w),1);order();renderDock();syncUrl()}
-function open(key,quiet){const had=W.list.find(w=>w.key===key);if(had){focus(had);return true}const t=tpl(key);if(!t)return false;
+function open(key,quiet){const had=W.list.find(w=>w.key===key);if(had){focus(had);return true}const ad=W.adhoc&&W.adhoc[key];const t=ad?{dataset:{kind:ad.kind,title:ad.title,href:""}}:tpl(key);if(!t)return false;
 const n=W.list.filter(w=>!w.min).length,vw=innerWidth,vh=innerHeight,ww=Math.min(620,Math.max(MINW,vw*.42));
 W.frames[key]=W.frames[key]||{w:ww,h:vh-TOP-24-n*STEP,x:vw-ww-20-n*STEP,y:TOP+8+n*STEP};
 const el=document.createElement("section");el.className="win";el.setAttribute("role","dialog");el.setAttribute("aria-label",t.dataset.kind+" "+t.dataset.title);
-el.innerHTML='<header class="win-bar"><span class="win-kind">'+esc(t.dataset.kind)+'</span><b class="win-title"></b><span class="win-acts">'+(t.dataset.href?'<a class="win-btn" data-no-drag href="'+esc(t.dataset.href)+'" target="_blank" rel="noopener" title="Open on GitHub">'+ICON.gh+"</a>":"")+'<button type="button" class="win-btn" data-act="min" title="Minimize">'+ICON.min+'</button><button type="button" class="win-btn" data-act="close" title="Close">'+ICON.close+'</button></span></header><div class="win-body"></div><div class="win-gone">No longer in this page\\'s data.</div>'+["n","s","e","w","ne","nw","se","sw"].map(d=>'<i class="win-rz" data-dir="'+d+'"></i>').join("");
-document.body.appendChild(el);const w={key,el,kind:t.dataset.kind,title:t.dataset.title,min:false};W.list.push(w);fill(w);place(w);if(!quiet)syncUrl();
+el.innerHTML='<header class="win-bar"><span class="win-kind">'+esc(t.dataset.kind)+'</span><b class="win-title"></b><span class="win-acts">'+(t.dataset.href?'<a class="win-btn" data-no-drag href="'+esc(t.dataset.href)+'" target="_blank" rel="noopener" title="Open on GitHub">'+ICON.gh+"</a>":"")+'<button type="button" class="win-btn" data-act="min" title="Minimize">'+ICON.min+'</button><button type="button" class="win-btn" data-act="close" title="Close">'+ICON.close+'</button></span></header><div class="win-body"></div><div class="win-chat"><div class="wc-log"></div><form class="wc-ask"><textarea rows="1" placeholder="Ask about this…"></textarea><button type="submit">Ask</button></form></div><div class="win-gone">No longer in this page\\'s data.</div>'+["n","s","e","w","ne","nw","se","sw"].map(d=>'<i class="win-rz" data-dir="'+d+'"></i>').join("");
+document.body.appendChild(el);const w={key,el,kind:t.dataset.kind,title:t.dataset.title,min:false,msgs:[],ad};if(ad)el.classList.add("adhoc");W.list.push(w);fill(w);place(w);if(!quiet)syncUrl();chat(w);
 el.addEventListener("pointerdown",()=>focus(w),true);
 el.querySelector('[data-act="close"]').onclick=()=>close(w);
 el.querySelector('[data-act="min"]').onclick=()=>{w.min=true;el.hidden=true;order();renderDock()};
@@ -1599,8 +1605,26 @@ el.querySelectorAll(".win-rz").forEach(h=>h.addEventListener("pointerdown",ev=>{
 const mv=e=>{const dx=e.clientX-o.cx,dy=e.clientY-o.cy;if(d.includes("e"))f.w=Math.max(MINW,o.w+dx);if(d.includes("s"))f.h=Math.max(MINH,o.h+dy);if(d.includes("w")){const nw=Math.max(MINW,o.w-dx);f.x=o.x+(o.w-nw);f.w=nw}if(d.includes("n")){const nh=Math.max(MINH,o.h-dy);f.y=o.y+(o.h-nh);f.h=nh}place(w)};
 const up=()=>{h.removeEventListener("pointermove",mv);h.removeEventListener("pointerup",up);el.classList.remove("moving")};h.addEventListener("pointermove",mv);h.addEventListener("pointerup",up)}));
 return true}
+
+const md=t=>esc(t).replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/\\x60([^\\x60\\n]+)\\x60/g,"<code>$1</code>").replace(/^[-*] (.+)$/gm,"<li>$1</li>").replace(/(<li>.*<\\/li>\\n?)+/g,m=>"<ul>"+m.replace(/\\n/g,"")+"</ul>").replace(/\\n{2,}/g,"<br><br>").replace(/\\n/g,"<br>");
+const SUMMARY="Give me a concise, simple summary of what I'm looking at.";
+function ctxOf(w){const b=w.el.querySelector(".win-body");return ((w.ad?w.ad.text:b?b.innerText:"")||"").replace(/\\n{3,}/g,"\\n\\n").slice(0,6000)}
+function drawChat(w){const log=w.el.querySelector(".wc-log");log.innerHTML=w.msgs.filter(m=>!m.hidden).map(m=>'<div class="wc-m '+m.role+(m.err?" err":"")+'">'+(m.role==="user"?esc(m.content):md(m.content)||'<span class="typing"><i></i><i></i><i></i></span>')+"</div>").join("");log.scrollTop=log.scrollHeight;w.el.querySelector(".wc-ask button").disabled=!!w.busy}
+async function talk(w,q,hidden){if(w.busy||!q.trim())return;w.busy=true;w.msgs.push({role:"user",content:q.trim(),hidden});const a={role:"assistant",content:""};w.msgs.push(a);drawChat(w);
+try{const r=await fetch(location.pathname.replace(/[/]$/,"")+"/ask",{method:"POST",headers:{"content-type":"application/json"},credentials:"same-origin",body:JSON.stringify({focus:{title:w.kind+": "+w.title,text:ctxOf(w)},messages:w.msgs.filter(m=>m!==a&&!m.err).map(({role,content})=>({role,content}))})});
+if(!r.ok||!r.body){a.content=(await r.text())||"The assistant did not answer.";a.err=true}else{const rd=r.body.getReader(),dec=new TextDecoder();for(;;){const {done,value}=await rd.read();if(done)break;a.content+=dec.decode(value,{stream:true});drawChat(w)}}}catch(x){a.content="Could not reach the assistant.";a.err=true}w.busy=false;drawChat(w)}
+function chat(w){const f=w.el.querySelector(".wc-ask"),i=f.querySelector("textarea");f.addEventListener("submit",ev=>{ev.preventDefault();const q=i.value;i.value="";talk(w,q)});
+i.addEventListener("keydown",ev=>{if(ev.key==="Enter"&&!ev.shiftKey){ev.preventDefault();f.requestSubmit()}});talk(w,SUMMARY,true)}
+// what on the page can be explained, and how it is named in the window's title bar
+const EXPLAIN=".banner,.banner-sub,.stat,.chart,.row,.line,.incident,.tbl tbody tr,.cx-main,.svc-map,.card,.rt-stats,.sec-f .line";
+function explain(ev){if(ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;if(String(getSelection())) return;
+const el=ev.target.closest(EXPLAIN);if(!el||!el.closest(".main")||ev.target.closest("a,button,input,textarea,select,label,summary,.cx-bar,.ms"))return;
+const view=el.closest(".view"),sec=view&&view.querySelector(".vh h1"),h2=(()=>{let n=el.closest(".group,.cx,.incidents")||el;while(n&&n.previousElementSibling){n=n.previousElementSibling;if(/^H[12]$/.test(n.tagName)||n.classList.contains("rules-h"))return n.innerText.replace(/\\s*All costs.*$/,"").trim()}return ""})();
+const first=(el.querySelector("b,.mon-id,h3,.name")||el).innerText.split("\\n")[0].trim().slice(0,70);
+const kind=h2||(sec?sec.innerText:"")||"Status",title=first||kind,key="ask:"+kind+":"+title;
+W.adhoc=W.adhoc||{};W.adhoc[key]={kind,title,text:(kind+"\\n"+el.innerText).slice(0,6000)};open(key)}
 document.addEventListener("click",ev=>{const chip=ev.target.closest(".win-chip");if(chip){const w=W.list.find(x=>x.key===chip.dataset.key);if(w)focus(w);return}
-const o=ev.target.closest("[data-open]");if(!o||ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;
+const o=ev.target.closest("[data-open]");if(!o){explain(ev);return}if(ev.defaultPrevented||ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;
 const inner=ev.target.closest("a,button");if(inner&&inner!==o&&!inner.hasAttribute("data-open"))return;if(open(o.dataset.open))ev.preventDefault()});
 document.addEventListener("keydown",ev=>{if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches&&ev.target.matches("[data-open][tabindex]")){ev.preventDefault();open(ev.target.dataset.open)}
 if(ev.key==="Escape"&&!ev.target.closest("input,textarea")){const top=W.list.filter(w=>!w.min).at(-1);if(top)close(top)}});
@@ -2813,13 +2837,16 @@ createServer(async (req, res) => {
       if (m[2] === "/ask") {
         if (req.method !== "POST") return send(res, 405, "POST only");
         if (!askAllowed(user.login)) return send(res, 429, "That's 40 questions in the last hour. Try again later.", { "content-type": "text/plain; charset=utf-8" });
-        const { messages = [] } = JSON.parse((await readBody(req, 2e5)) || "{}");
+        const { messages = [], focus } = JSON.parse((await readBody(req, 2e5)) || "{}");
         const clean = messages.filter((x) => ["user", "assistant"].includes(x?.role) && typeof x.content === "string").slice(-20).map((x) => ({ role: x.role, content: x.content.slice(0, 8000) }));
         if (!clean.length || clean.at(-1).role !== "user") return send(res, 400, "Ask a question.");
         const saved = await db.one("SELECT body FROM snapshots WHERE repo_id = $1", row.id);
         let snap = saved && JSON.parse(saved.body);
         if (!snap || snap.v !== SNAP_V) snap = await refresh(row);
-        return askStream(res, await askContext(row, snap, user, repos), clean, origin);
+        let system = await askContext(row, snap, user, repos);
+        // a chat window opened from something on the page: what that thing shows, as the person sees it
+        if (focus && typeof focus.text === "string") system += `\n\n## What ${user.login} is looking at right now\n${String(focus.title || "").slice(0, 200)}\n${focus.text.slice(0, 6000)}\n\nThey opened this from the page. When they ask for a summary: three or four short sentences in plain words, no headings, no list. Say what it is, whether it is fine or not and why, and the one thing to do if anything. Then answer follow-ups about it, still briefly.`;
+        return askStream(res, system, clean, origin);
       }
       let saved = await db.one("SELECT at, body FROM snapshots WHERE repo_id = $1", row.id);
       if (saved && JSON.parse(saved.body).v !== SNAP_V) saved = null;

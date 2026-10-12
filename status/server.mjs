@@ -593,7 +593,7 @@ async function insertCost(repoId, c) {
   const models = {};
   for (const [m, t] of Object.entries(c.models || {})) models[String(m).slice(0, 60)] = Object.fromEntries(["input", "output", "cache_write_5m", "cache_write_1h", "cache_read"].map((k) => [k, Math.max(0, Number(t?.[k]) || 0)]));
   const breakdown = c.breakdown && typeof c.breakdown === "object" ? Object.fromEntries(Object.entries(c.breakdown).slice(0, 40).map(([k, v]) => [String(k).slice(0, 60), Math.round(Number(v) * 100) / 100])) : null;
-  const body = JSON.stringify({ name: String(c.name || "").slice(0, 80), models, breakdown, turns: Number(c.turns) || null, note: String(c.note || "").slice(0, 300) });
+  const body = JSON.stringify({ name: String(c.name || "").slice(0, 80), models, breakdown, turns: Number(c.turns) || null, secs: Math.max(0, Math.min(86400, Number(c.secs) || 0)) || null, note: String(c.note || "").slice(0, 300) });
   await db.run("INSERT INTO costs (repo_id, source, key, day, usd, body, at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT(repo_id, source, key) DO UPDATE SET day = excluded.day, usd = excluded.usd, body = excluded.body, at = excluded.at", repoId, source, key, day, usd, body, new Date().toISOString());
 }
 
@@ -701,7 +701,7 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
   const beats = (await db.all("SELECT monitor, ts, status, body FROM heartbeats WHERE repo_id = $1 AND ts >= $2", repoId, since)).map((b) => ({ ...JSON.parse(b.body), monitor: b.monitor, ts: b.ts, status: b.status }));
   const firstRows = await db.all("SELECT monitor, MIN(ts) AS t FROM heartbeats WHERE repo_id = $1 GROUP BY monitor", repoId);
   const first = Object.fromEntries(firstRows.map((r) => [r.monitor, Date.parse(r.t)]));
-  const sess = (await db.all("SELECT day, usd, body FROM costs WHERE repo_id = $1 AND source = 'claude-code' AND day >= $2", repoId, since.slice(0, 10))).map((r) => { const b = JSON.parse(r.body); return { name: b.name || "session", day: r.day, usd: r.usd ?? sessionUsd(b.models, prices), tok: Object.values(b.models || {}).reduce((a, t) => a + (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0), 0) }; });
+  const sess = (await db.all("SELECT day, usd, body FROM costs WHERE repo_id = $1 AND source = 'claude-code' AND day >= $2", repoId, since.slice(0, 10))).map((r) => { const b = JSON.parse(r.body); return { name: b.name || "session", day: r.day, usd: r.usd ?? sessionUsd(b.models, prices), tok: Object.values(b.models || {}).reduce((a, t) => a + (t.input || 0) + (t.output || 0) + (t.cache_write_5m || 0) + (t.cache_write_1h || 0) + (t.cache_read || 0), 0), secs: Number(b.secs) || 0 }; });
   const cfg = Object.fromEntries((factory.monitors || []).map((m) => [m.id, m]));
   const cc = routines.filter((r) => r.source === "Claude Code");
   const cmdOf = (r) => ((r.prompt || "").match(/\/([a-z][a-z0-9:_-]*)/) || [])[1] || "";
@@ -793,7 +793,8 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
   const daily = { dates, routines: cc.map((r) => {
     const cmd = cmdOf(r), match = routineMatch(r), skillIds = hist[r.name]?.skills || [];
     const mine = beats.filter((b) => skillIds.includes(b.monitor) || match(b.monitor));
-    return { name: r.name.replace(/^App: /, ""), tokens: dates.map((d) => sess.filter((x) => x.name === cmd && x.day === d).reduce((a, x) => a + x.tok, 0)), runs: dates.map((d) => { const today = mine.filter((b) => b.ts.slice(0, 10) === d); return Math.max(today.filter((b) => b.source === "session").length, today.length ? 1 : 0); }) };
+    const on = (d) => sess.filter((x) => x.name === cmd && x.day === d);
+    return { name: r.name.replace(/^App: /, ""), cron: r.cron, tokens: dates.map((d) => on(d).reduce((a, x) => a + x.tok, 0)), usd: dates.map((d) => on(d).reduce((a, x) => a + (x.usd || 0), 0)), secs: dates.map((d) => on(d).reduce((a, x) => a + x.secs, 0)), runs: dates.map((d) => { const today = mine.filter((b) => b.ts.slice(0, 10) === d); return Math.max(today.filter((b) => b.source === "session").length, today.length ? 1 : 0); }) };
   }) };
   // Reports: every weekly skill (and anything that sent a report), its runs newest first
   const reportIds = [...new Set([...rows.filter((x) => x.weekly).map((x) => x.id), ...beats.filter((b) => b.report).map((b) => b.monitor)])];
@@ -1129,7 +1130,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 16;
+const SNAP_V = 17;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1601,6 +1602,10 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .rp-past{margin:12px 0 0;box-shadow:none;border:1px solid var(--line)}.rp-past .line{padding:8px 12px}
 .keybox{margin-top:28px}.keybox p{font-size:13.5px;color:var(--muted);max-width:720px;line-height:1.5}.keybox form{margin-top:10px}.btn-quiet{height:32px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px inherit;cursor:pointer}.btn-quiet:hover{background:rgba(15,16,20,.04)}
 .rule-nl{display:flex;gap:8px;margin:0 0 6px}.rule-nl input{flex:1;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:14px;background:var(--bg)}.rule-nl button{height:40px;padding:0 16px;border:0;border-radius:10px;background:var(--ink);color:var(--bg);font:500 13.5px inherit;cursor:pointer}.rule-nl button:disabled{opacity:.5}.rule-msg{min-height:18px;margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+.wk-wrap{overflow-x:auto}.wk{width:100%;border-collapse:collapse;font-size:13px}.wk th,.wk td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}.wk thead th{font-weight:500;color:var(--muted);font-size:12px}.wk thead th small,.wk tbody th small{display:block;font-weight:400;color:var(--faint);font-size:11px}
+.wk tbody th{text-align:left;font-weight:600;min-width:170px}.wk tbody tr:last-child td,.wk tbody tr:last-child th{border-bottom:1px solid var(--line)}.wk tfoot th{text-align:left;color:var(--muted);font-weight:500}.wk tfoot td{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}.wk tfoot td,.wk tfoot th{border-bottom:0}
+.wk .today{background:rgba(94,106,210,.06)}.wk-c span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-size:12px;font-weight:700}.wk-c small{display:block;margin-top:2px;color:var(--faint);font-size:10.5px}
+.wk-c[data-s=ok] span,.wk-k[data-s=ok]{background:rgba(47,179,107,.14);color:var(--ok)}.wk-c[data-s=miss] span,.wk-k[data-s=miss]{background:rgba(229,72,77,.14);color:var(--bad)}.wk-c[data-s=next] span,.wk-k[data-s=next]{border:1.5px dashed #c4c6cc;color:var(--faint)}.wk-c[data-s=unk] span{color:var(--faint)}.wk-k{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -2523,22 +2528,48 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
     ], dayChart(mDates, [{ name: "Ran", color: "#4cb782", v: ok }, { name: "Degraded or read nothing", color: "#f2994a", v: bad }, { name: "Missed", color: "#eb5757", v: miss }], (n) => plural(n, "skill")));
   }
 
-  // Automations: Claude Code tokens per day by routine (runs per day until sessions report tokens)
+  // Automations: the week. What is scheduled, what ran, and what it took (tokens, time, money).
   const AD = s.status?.daily;
-  let autoHead = "";
-  if (AD?.routines?.length) {
-    const tokSeries = topN(AD.routines.map((r) => ({ name: r.name, v: r.tokens })));
-    const runSeries = topN(AD.routines.map((r) => ({ name: r.name, v: r.runs })));
-    const toks = tokSeries.reduce((a, x) => a + x.v.reduce((p, q) => p + q, 0), 0), runs = runSeries.reduce((a, x) => a + x.v.reduce((p, q) => p + q, 0), 0);
-    const missed = Object.values(s.status.routines || {}).reduce((a, h) => a + h.buckets.filter((b) => b.s === "miss").length, 0);
+  let autoHead = "", weekGrid = "";
+  if (AD?.routines?.length || s.routines.length) {
+    const DAYMS = 864e5, today = new Date().toISOString().slice(0, 10);
+    const mon = new Date(Date.parse(today + "T00:00:00Z") - ((new Date(today + "T00:00:00Z").getUTCDay() + 6) % 7) * DAYMS);
+    const week = [...Array(7)].map((_, i) => new Date(mon.getTime() + i * DAYMS).toISOString().slice(0, 10));
+    const di = (d) => (AD?.dates || []).indexOf(d);
+    const fires = (cron, d) => { const out = [], end = Date.parse(d + "T00:00:00Z") + DAYMS; let t = nextRun(cron, new Date(Date.parse(d + "T00:00:00Z") - 6e4)); while (t && Date.parse(t) < end && out.length < 48) { out.push(t); t = nextRun(cron, new Date(t)); } return out; };
+    const rows = s.routines.map((r) => {
+      const a = (AD?.routines || []).find((x) => x.name === r.name.replace(/^App: /, "")), h = RH[r.name];
+      const ranOn = (d) => { const i = di(d); if (a && i >= 0) return a.runs[i] > 0; if (h?.buckets?.length === WINDOW && i >= 0) return ["ok", "warn"].includes(h.buckets[i]?.s); return null; };
+      const cells = week.map((d) => {
+        const f = fires(r.cron, d);
+        if (!f.length) return { s: "" };
+        const ran = ranOn(d), past = d < today || (d === today && Date.parse(f[0]) < Date.now() - 2 * 36e5);
+        return { s: ran ? "ok" : d > today || (d === today && !past) ? "next" : ran === null ? "unk" : "miss", n: f.length, t: f[0].slice(11, 16) };
+      });
+      return { r, cells, a };
+    });
+    const sumW = (k) => (AD?.routines || []).reduce((acc, x) => acc + week.reduce((p, d) => p + (di(d) >= 0 ? x[k]?.[di(d)] || 0 : 0), 0), 0);
+    const sched = rows.reduce((a, x) => a + x.cells.reduce((p, c) => p + (c.s ? c.n || 1 : 0), 0), 0);
+    const done = rows.reduce((a, x) => a + x.cells.filter((c) => c.s === "ok").length, 0), missed = rows.reduce((a, x) => a + x.cells.filter((c) => c.s === "miss").length, 0);
+    const wTok = sumW("tokens"), wUsd = sumW("usd"), wSec = sumW("secs");
+    const hm = (sec) => (sec >= 3600 ? `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min` : `${Math.round(sec / 60)} min`);
     autoHead = head([
-      tile(toks ? tk(toks) : "–", `Claude Code tokens in ${WINDOW} days`, toks ? `${tk(toks / WINDOW)} a day` : "no session has reported tokens yet"),
-      tile(ST.usd_30d ? usd(ST.usd_30d) : "–", "Token cost", "at API list prices"),
-      tile(num(runs), `Routine runs in ${WINDOW} days`, `${AD.routines.length} routines`),
-      tile(num(missed), "Missed runs", "should have run, did not"),
-    ], toks ? dayChart(AD.dates, tokSeries, (n) => tk(n) + " tokens") : dayChart(AD.dates, runSeries, (n) => plural(n, "run")));
+      tile(`${num(done)}<i>/${num(sched)}</i>`, "Runs this week", `${missed ? `${missed} missed · ` : ""}${(sched / 7).toFixed(1)} scheduled a day`),
+      tile(wTok ? tk(wTok) : "–", "Tokens this week", wTok ? `${tk(wTok / Math.max(1, done))} a run` : "routines have not reported tokens yet"),
+      tile(wSec ? hm(wSec) : "–", "Time this week", wSec ? `${hm(wSec / Math.max(1, done))} a run` : "routines have not reported duration yet"),
+      tile(wUsd ? usd(wUsd) : "–", "Cost this week", "Claude Code, at API list prices"),
+    ], (() => {
+      const tokSeries = topN((AD?.routines || []).map((r) => ({ name: r.name, v: r.tokens })));
+      const runSeries = topN((AD?.routines || []).map((r) => ({ name: r.name, v: r.runs })));
+      return tokSeries.length ? dayChart(AD.dates, tokSeries, (n) => tk(n) + " tokens") : dayChart(AD?.dates || [], runSeries, (n) => plural(n, "run"));
+    })());
+    const cell = (c, d) => !c.s ? `<td></td>` : `<td class="wk-c" data-s="${c.s}" title="${esc([d, c.n > 1 ? `${c.n} runs from ${c.t}` : c.t + " UTC", { ok: "ran", miss: "should have run, did not", next: "scheduled", unk: "no record either way" }[c.s]].join(" · "))}"><span>${{ ok: "✓", miss: "✕", next: "○", unk: "·" }[c.s]}</span>${c.n > 1 ? `<small>×${c.n}</small>` : `<small>${c.t}</small>`}</td>`;
+    const perDay = week.map((_, i) => rows.reduce((a, x) => a + (x.cells[i].s ? x.cells[i].n || 1 : 0), 0));
+    weekGrid = `<h2>This week</h2><div class="group wk-wrap"><table class="wk"><thead><tr><th></th>${week.map((d) => `<th class="${d === today ? "today" : ""}">${new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })}<small>${new Date(d + "T12:00:00Z").getUTCDate()}</small></th>`).join("")}</tr></thead>
+      <tbody>${rows.map((x) => `<tr><th class="openable" data-open="routine:${esc(encodeURIComponent(x.r.name))}" role="button" tabindex="0">${esc(x.r.name.replace(/^App: /, ""))}<small>${esc(when(x.r).replace(" UTC", ""))}</small></th>${x.cells.map((c, i) => cell(c, week[i])).join("")}</tr>`).join("")}</tbody>
+      <tfoot><tr><th>Runs</th>${perDay.map((n, i) => `<td class="${week[i] === today ? "today" : ""}">${n || ""}</td>`).join("")}</tr></tfoot></table></div>
+      <p class="sk-key"><span class="wk-k" data-s="ok">✓</span> ran <span class="wk-k" data-s="miss">✕</span> should have run, did not <span class="wk-k" data-s="next">○</span> scheduled · times in UTC</p>`;
   }
-
 
   // Reports: the weekly ones. Unit: reports per week, delivered or missed.
   const mdHtml = (t) => esc(t).replace(/^### (.+)$/gm, "<h5>$1</h5>").replace(/^## (.+)$/gm, "<h4>$1</h4>").replace(/^# (.+)$/gm, "<h3>$1</h3>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/^[-*] (.+)$/gm, "<li>$1</li>").replace(/(<li>.*<\/li>\n?)+/g, (m) => "<ul>" + m.replace(/\n/g, "") + "</ul>").replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>");
@@ -2621,7 +2652,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       ${view("status", statusView)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
         ${s.monitors.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
-      ${view("automations", `${vh("Automations", "Every scheduled job: whether it ran when it should have, and what it cost. Whether each run was any good is in Monitors.")}${autoHead}
+      ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}${autoHead}${weekGrid}<h2>Last 30 days, per routine</h2>
         ${s.routines.length ? `<div class="group grid3 rts">${routineRows}</div><p class="sk-key"><i data-s="ok"></i>ran <i data-s="warn"></i>ran, failed <i data-s="miss"></i>should have run, did not <i></i>nothing scheduled</p>` : `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "Minutes spent per day, every workflow over the last 30 days, and what goes to production.")}
         ${ciMinutes}

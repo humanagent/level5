@@ -88,9 +88,10 @@ case "${1:-}" in
     if command -v node >/dev/null 2>&1; then
       usage="$(node -e '
         const fs = require("fs"), [file, sid, name] = process.argv.slice(1), seen = new Map();
-        let turns = 0;
+        let turns = 0, t0 = Infinity, t1 = 0;
         for (const l of fs.readFileSync(file, "utf8").split("\n")) {
           let d; try { d = JSON.parse(l); } catch { continue; }
+          const t = Date.parse(d.timestamp || ""); if (t) { t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
           if (d.type === "user" && !d.isSidechain && typeof d.message?.content === "string") turns++;
           const m = d.message;
           if (d.type === "assistant" && m?.usage && m.model && m.model !== "<synthetic>") seen.set(m.id || d.uuid, m);
@@ -102,7 +103,7 @@ case "${1:-}" in
           if (u.cache_creation) { t.cache_write_5m += u.cache_creation.ephemeral_5m_input_tokens || 0; t.cache_write_1h += u.cache_creation.ephemeral_1h_input_tokens || 0; }
           else t.cache_write_5m += u.cache_creation_input_tokens || 0;
         }
-        if (Object.keys(models).length) process.stdout.write(JSON.stringify({ source: "claude-code", key: sid || undefined, name: name || "session", models, turns }));
+        if (Object.keys(models).length) process.stdout.write(JSON.stringify({ source: "claude-code", key: sid || undefined, name: name || "session", models, turns, secs: t1 > t0 ? Math.round((t1 - t0) / 1000) : undefined }));
       ' "$transcript" "$sid" "$cmd" 2>/dev/null)"
       [ -n "$usage" ] && post "$usage" /api/cost
     fi

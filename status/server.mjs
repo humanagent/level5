@@ -945,15 +945,37 @@ function ruleConfig(raw) {
 }
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function ruleSummary(c) {
-  const what = { usd: "spend", tokens: "Claude Code tokens", session_tokens: "tokens in one session" }[c.measure];
-  const per = { day: "a day", week: "over 7 days", month: "this month", forecast: "forecast for the month", session: "" }[c.period];
-  const src = c.source === "any" ? "All providers" : c.source === "claude-code" ? "Claude Code" : c.source.toUpperCase().length <= 4 ? c.source.toUpperCase() : c.source;
-  const lim = c.cond === "spike" ? `${c.pct}% above the ${c.days}-day average` : c.measure === "usd" ? `$${c.amount}` : `${Number(c.amount).toLocaleString("en-US")} tokens`;
-  const days = c.dow.length && c.dow.length < 7 ? ` · ${c.dow.map((d) => DOW[d]).join(", ")}` : "";
-  const dates = c.from || c.to ? ` · ${c.from || "…"} to ${c.to || "…"}` : "";
-  const src2 = c.measure === "usd" ? src : "Claude Code";
-  return `${src2}${c.service && c.measure === "usd" ? ` (${c.service})` : ""} · ${[what, per].filter(Boolean).join(" ")} over ${lim}${days}${dates}`;
+  const who = c.measure !== "usd" ? "Claude Code" : c.source === "any" ? "total" : c.source === "claude-code" ? "Claude Code" : c.source.length <= 4 ? c.source.toUpperCase() : c.source;
+  const svc = c.service && c.measure === "usd" ? ` ${c.service}` : "";
+  const lim = c.cond === "spike" ? `${c.pct}% above ${c.measure === "usd" ? "its" : "their"} ${c.days}-day average` : c.measure === "usd" ? `$${Number(c.amount).toLocaleString("en-US")}` : `${Number(c.amount).toLocaleString("en-US")} tokens`;
+  const dk = [...c.dow].sort().join("");
+  const days = !c.dow.length || c.dow.length === 7 ? "" : dk === "12345" ? ", on weekdays" : dk === "06" ? ", on weekends" : `, on ${c.dow.map((d) => DOW[d]).join(", ")}`;
+  const verb = c.measure === "usd" ? "goes" : "go";
+  const dates = c.from || c.to ? `, ${c.from ? `from ${c.from}` : ""}${c.from && c.to ? " " : ""}${c.to ? `until ${c.to}` : ""}` : "";
+  const what = c.measure === "session_tokens" ? `a single Claude Code session uses more than ${lim}`
+    : c.period === "forecast" ? `the month-end forecast for ${who}${svc} spend goes over ${lim}`
+    : `${who}${svc} ${c.measure === "usd" ? "spend" : "tokens"} ${verb} ${c.cond === "spike" ? lim : `over ${lim}`} ${c.cond === "spike" ? "" : { day: "in a day", week: "over 7 days", month: "this month" }[c.period] || ""}`.trim();
+  return `When ${what}${days}${dates}${c.severity === "bad" ? " (critical)" : ""}`;
 }
+// A sentence ("tell me if AWS goes over $50 a day on weekdays") becomes a rule. The model only fills
+// the config above; ruleConfig() still validates every field, so it cannot write anything else.
+async function ruleFromText(text, { sources = [], services = [] } = {}) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error("rules from a sentence need OPENROUTER_API_KEY");
+  const system = `Turn a request for a cost alarm into JSON: {"name": short title, "config": {...}}. Config fields:
+source: "any" or one of ${JSON.stringify(sources)}; measure: "usd" | "tokens" (Claude Code tokens) | "session_tokens" (one session's tokens);
+period: "day" | "week" (rolling 7 days) | "month" (month to date) | "forecast" (month-end projection); cond: "above" (over amount) | "spike" (pct% over the average of the previous days);
+amount: number (dollars, or tokens); pct: number; days: number; service: substring of a service name or "" (known: ${JSON.stringify(services.slice(0, 40))});
+dow: array of weekday numbers it applies to, Sunday=0, [] = every day; from/to: "YYYY-MM-DD" or ""; severity: "warn" | "bad" (urgent, critical).
+Weekdays = [1,2,3,4,5]. Today is ${new Date().toISOString().slice(0, 10)}. Answer with the JSON object only.`;
+  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "x-title": "Hush" }, body: JSON.stringify({ model: ASK_MODEL, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: String(text).slice(0, 500) }] }), signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error(`the model did not answer (${r.status})`);
+  const out = (await r.json()).choices?.[0]?.message?.content || "";
+  const j = JSON.parse((out.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+  const config = ruleConfig(j.config || j);
+  return { name: String(j.name || ruleSummary(config)).trim().slice(0, 80), config };
+}
+
 // value of a cost row for this rule: dollars (optionally one service) or tokens
 function rowValue(r, c) {
   if (c.measure === "usd") {
@@ -1568,6 +1590,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .rp-body{margin-top:10px}.rp-body summary{cursor:pointer;font-weight:600;font-size:13px}.rp-body .md{margin-top:6px;font-size:13px;line-height:1.55;color:var(--ink2);max-height:420px;overflow:auto}.rp-body .md h3,.rp-body .md h4,.rp-body .md h5{margin:10px 0 4px;font-size:13.5px}.rp-body .md ul{padding-left:18px;margin:4px 0}
 .rp-past{margin:12px 0 0;box-shadow:none;border:1px solid var(--line)}.rp-past .line{padding:8px 12px}
 .keybox{margin-top:28px}.keybox p{font-size:13.5px;color:var(--muted);max-width:720px;line-height:1.5}.keybox form{margin-top:10px}.btn-quiet{height:32px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px inherit;cursor:pointer}.btn-quiet:hover{background:rgba(15,16,20,.04)}
+.rule-nl{display:flex;gap:8px;margin:0 0 6px}.rule-nl input{flex:1;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:14px;background:var(--bg)}.rule-nl button{height:40px;padding:0 16px;border:0;border-radius:10px;background:var(--ink);color:var(--bg);font:500 13.5px inherit;cursor:pointer}.rule-nl button:disabled{opacity:.5}.rule-msg{min-height:18px;margin:0 0 10px;font-size:12.5px;color:var(--muted)}
 @media(max-width:820px){.side{top:44px;height:auto;flex-direction:row;padding:8px 10px}.main{padding:20px 16px 64px}.win{inset:44px 0 0 0!important}}
 `;
 const CHECK = `<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff" fill-opacity=".25"/><path d="M6 10.2l2.7 2.6L14 7.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -1712,6 +1735,8 @@ const sync=()=>document.querySelectorAll(".rule-form").forEach(deps);
 document.addEventListener("change",ev=>{const f=ev.target.closest&&ev.target.closest(".rule-form");if(f)deps(f)});
 const obs=new MutationObserver(sync);obs.observe(document.body,{childList:true,subtree:true});sync();
 async function post(url,body){const r=await fetch(url,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:body?JSON.stringify(body):"{}"});if(!r.ok)throw new Error(await r.text());if(window.hushPull)await window.hushPull()}
+document.addEventListener("submit",async ev=>{const n=ev.target.closest(".rule-nl");if(!n)return;ev.preventDefault();const i=n.elements.text,btn=n.querySelector("button"),msg=document.querySelector(".rule-msg");if(!i.value.trim())return;btn.disabled=true;msg.textContent="Reading it…";
+try{const r=await fetch(base(),{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({text:i.value})});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);i.value="";msg.textContent="Added.";if(window.hushPull)await window.hushPull()}catch(x){msg.textContent="Could not make a rule from that: "+x.message}btn.disabled=false});
 document.addEventListener("submit",async ev=>{const f=ev.target.closest(".rule-form");if(!f)return;ev.preventDefault();const fd=new FormData(f),b={};for(const [k,v] of fd)if(k!=="dow")b[k]=v;b.dow=fd.getAll("dow").map(Number);
 const msg=f.querySelector(".f-msg"),btn=f.querySelector("[type=submit]");btn.disabled=true;msg.textContent="Saving…";
 try{await post(base()+(f.dataset.ruleId?"/"+f.dataset.ruleId:""),b);msg.textContent="Saved.";if(!f.dataset.ruleId){const w=f.closest(".win");w&&w.querySelector('[data-act="close"]').click()}}catch(x){msg.textContent="Could not save: "+x.message}btn.disabled=false});
@@ -1960,7 +1985,7 @@ document.addEventListener("mousemove",ev=>{if(t.hidden)return;const w=t.offsetWi
 document.addEventListener("mouseout",ev=>{if(cur&&!cur.contains(ev.relatedTarget)){t.hidden=true;cur=null}});addEventListener("scroll",()=>{t.hidden=true},{passive:true});
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-more]");if(!b)return;const g=b.parentElement,all=g.classList.toggle("all");b.textContent=all?"Show less":"Show all "+b.dataset.more})})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
 // What the repo page looks like while its first snapshot is being read from GitHub.
 function skeletonPage(repo) {
@@ -2227,18 +2252,18 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
       <div class="f-wide f-actions">${r ? `<button type="button" class="btn-plain danger" data-rule-act="delete" data-id="${r.id}">Delete</button>` : ""}<span class="f-msg" role="status"></span><button type="submit">${r ? "Save rule" : "Create rule"}</button></div>
     </form>`;
   };
-  wins.push({ key: "rule:new", kind: "Price rule", title: "New price rule", body: `<p class="faint" style="margin-top:0">A notification when spend or tokens cross a limit. It fires at most once per period.</p>${ruleForm(null)}` });
   for (const r of RULES) wins.push({ key: `rule:${r.id}`, kind: "Price rule", title: r.name, body: `<p class="faint" style="margin-top:0">${esc(r.summary)}</p>${ruleForm(r)}` });
   const fmtRule = (r, v) => (v == null ? "–" : r.config.measure === "usd" ? usd(v) : tk(v));
-  const rulesSection = `<div class="rules-h"><h2>Price rules</h2><button type="button" class="btn-sm" data-open="rule:new">New rule</button></div>
-    <p class="hint" style="margin:-4px 0 12px">Alarms on spend and tokens. Crossing a limit sends a notification, once per period.</p>
+  const rulesSection = `<h2>Price rules</h2>
+    <form class="rule-nl"><input name="text" maxlength="500" autocomplete="off" placeholder="Tell me when AWS goes over $50 a day on weekdays" aria-label="Describe a price rule"><button type="submit">Add rule</button></form>
+    <p class="rule-msg" role="status"></p>
     <div class="group">${RULES.length ? RULES.map((r) => {
       const pct = r.limit ? Math.min(100, (r.value / r.limit) * 100) : 0;
       const st = !r.enabled ? ["none", "Paused"] : !r.active ? ["none", "Not active now"] : r.over ? [r.config.severity === "bad" ? "bad" : "warn", "Over the limit"] : ["ok", "Within the limit"];
-      return `<div class="line rule openable" data-open="rule:${r.id}" role="button" tabindex="0"><span class="name">${esc(r.name)}<span class="sub">${esc(r.summary)}${r.last_fired_at ? ` · last fired ${ago(r.last_fired_at)}` : ""}</span>
+      return `<div class="line rule openable" data-open="rule:${r.id}" role="button" tabindex="0"><span class="name">${esc(r.summary)}<span class="sub">${esc(r.name)}${r.last_fired_at ? ` · last fired ${ago(r.last_fired_at)}` : ""}</span>
         <span class="meter" data-s="${st[0]}"><i style="width:${pct.toFixed(1)}%"></i></span></span>
         <span class="meta"><span class="state" data-s="${st[0]}">${st[1]}</span><span class="sub">${fmtRule(r, r.value)} of ${r.limit == null ? "no baseline yet" : fmtRule(r, r.limit)}</span><button type="button" class="btn-plain" data-rule-act="toggle" data-id="${r.id}">${r.enabled ? "Pause" : "Resume"}</button></span></div>`;
-    }).join("") : `<div class="line"><span class="hint">No price rules yet. For example: AWS above $50 a day, Claude Code tokens 50% above the 7-day average, or a month-end forecast above $1,500.</span></div>`}</div>`;
+    }).join("") : `<div class="line"><span class="hint">No price rules yet. Write one above, the way you would say it: "AWS over $50 a day", "Claude Code tokens 50% above the weekly average", "warn me if the month-end forecast passes $1,500".</span></div>`}</div>`;
   const SVCS = C?.services || [];
   const firingRules = RULES.filter((r) => r.firing && r.enabled);
   const alarmOn = (x) => firingRules.filter((r) => (r.config.source === "any" || r.config.source === x.provider) && r.config.service && x.name.toLowerCase().includes(r.config.service.toLowerCase()));
@@ -2594,7 +2619,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
         ${promoSection}`)}
       ${view("prs", `${vh("Pull requests", "Code merged per day, open PRs with their CI, and the latest merged and closed.")}${prHead}${prSection}`)}
       ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${incidents}`)}
-      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}${rulesSection}`)}
+      ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${rulesSection}${costs || costsEmpty}`)}
       ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
       ${view("services", `${vh("Services", "The factory as a city: every service it pays for is a building, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>
@@ -3030,8 +3055,13 @@ createServer(async (req, res) => {
         else if (act === "toggle") await db.run("UPDATE price_rules SET enabled = 1 - enabled WHERE id = $1 AND repo_id = $2", Number(id), row.id);
         else {
           const b = JSON.parse((await readBody(req, 2e4)) || "{}");
-          const name = String(b.name || "").trim().slice(0, 80) || "Price rule";
-          const cfg = JSON.stringify(ruleConfig(b));
+          let name = String(b.name || "").trim().slice(0, 80) || "Price rule", cfg = JSON.stringify(ruleConfig(b));
+          if (typeof b.text === "string" && b.text.trim()) {
+            const saved = await db.one("SELECT body FROM snapshots WHERE repo_id = $1", row.id), snap = saved && JSON.parse(saved.body);
+            const made = await ruleFromText(b.text, { sources: snap?.costs?.sources || [], services: (snap?.costs?.services || []).map((x) => x.name) }).catch((e) => ({ error: e.message }));
+            if (made.error) return json(res, 422, { error: made.error });
+            [name, cfg] = [made.name, JSON.stringify(made.config)];
+          }
           if (id) await db.run("UPDATE price_rules SET name = $1, config = $2 WHERE id = $3 AND repo_id = $4", name, cfg, Number(id), row.id);
           else await db.run("INSERT INTO price_rules (repo_id, name, config, enabled, created_by, created_at) VALUES ($1, $2, $3, 1, $4, $5)", row.id, name, cfg, user.login, new Date().toISOString());
         }

@@ -203,6 +203,14 @@ function nextRun(cron, from = new Date()) {
   return null;
 }
 // how often a cron fires, in hours (good enough to judge "late")
+// The longest wait between two runs over the next two weeks: a weekdays-only cron waits 72 h
+// from Friday to Monday even though it runs "daily". Silence is judged against this.
+function cronMaxGapHours(cron) {
+  let t = nextRun(cron), gap = 0, n = 0;
+  const end = Date.now() + 15 * 864e5;
+  while (t && Date.parse(t) < end && n++ < 400) { const u = nextRun(cron, new Date(t)); if (!u) break; gap = Math.max(gap, (Date.parse(u) - Date.parse(t)) / 36e5); t = u; }
+  return gap || cronPeriodHours(cron);
+}
 function cronPeriodHours(cron) {
   const a = nextRun(cron);
   const b = a && nextRun(cron, new Date(a));
@@ -613,7 +621,9 @@ async function judge(factory, repoId) {
     const all = beats.filter((b) => b.monitor === m.id);
     const mine = all.some((b) => b.source !== "session") ? all.filter((b) => b.source !== "session") : all;
     const last = mine[0];
-    const silence = m.max_silence_hours || (m.cadence === "weekly" ? 200 : 50);
+    // tolerance: what factory.json declares, else what the routine's own schedule implies
+    const rt = factory.routines.find((r) => (m.routine && r.name === m.routine) || routineMatch(r)(m.id));
+    const silence = m.max_silence_hours || (rt?.cron ? cronMaxGapHours(rt.cron) * 1.25 + 6 : m.cadence === "weekly" ? 200 : 50);
     const vol = (b) => (b?.swept && m.volume_key && m.volume_key in b.swept ? Number(b.swept[m.volume_key]) : null);
     const recent = mine.filter((b) => b.ts >= new Date(Date.now() - 14 * 864e5).toISOString());
     const badShare = recent.length ? recent.filter((b) => b.status !== "ok").length / recent.length : 0;
@@ -676,7 +686,7 @@ function routineState(r, monitors, merged, sessions = {}) {
     const p = merged.find((x) => /audit/.test(x.branch));
     if (p) [last, evidence] = [p.merged_at, "merged PR"];
   }
-  return { ...r, last_seen: last, evidence: evidence || "none", next_run: nextRun(r.cron), period_h: cronPeriodHours(r.cron) };
+  return { ...r, last_seen: last, evidence: evidence || "none", next_run: nextRun(r.cron), period_h: cronPeriodHours(r.cron), gap_h: cronMaxGapHours(r.cron) };
 }
 
 // The status chart: every skill that runs on a routine, one row each, 30 daily bars (12 weekly
@@ -817,7 +827,7 @@ async function snapshot(repoRow) {
   }
   const bad = monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state));
   const warn = monitors.filter((m) => m.state === "warn");
-  const lateRoutines = routines.filter((r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2);
+  const lateRoutines = routines.filter((r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > (r.gap_h || r.period_h) * 1.25 + 2);
   const redCi = queue.runs.filter((r) => r.conclusion === "failure");
   const overall = bad.length ? "down" : warn.length || lateRoutines.length || redCi.length ? "degraded" : "ok";
   const day = new Date(Date.now() - 864e5).toISOString();
@@ -2190,7 +2200,7 @@ function statusPage(s, user, origin, repoRow, { stale = false } = {}) {
   const kv = (rows) => `<dl class="kv">${rows.filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
   const when2 = (ts) => (ts ? `${ago(ts)} <span class="faint">${new Date(ts).toISOString().slice(0, 16).replace("T", " ")} UTC</span>` : "never");
   const statePill = (st, label) => `<span class="pill" data-s="${st}">${label}</span>`;
-  const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > r.period_h * 1.25 + 2;
+  const isLate = (r) => r.last_seen && (Date.now() - new Date(r.last_seen)) / 36e5 > (r.gap_h || r.period_h) * 1.25 + 2;
   const wins = [];
   for (const m of s.monitors) {
     const [ps, label] = STATE[m.state] || ["none", m.state];

@@ -44,27 +44,31 @@ const LIVE_NEXT = [
   ["ci.yml", "PR #4134", "Install", 0, 5],
 ];
 
-// The 3D factory: one building per automation, sized by how much it runs. The degraded monitor glows.
-const FACTORY = [
-  ["/fix-issues", "routines", 1, "31 runs · 212M tokens"],
-  ["/monitor", "routines", 0.7, "30 runs · 96M tokens"],
-  ["/pr-review", "routines", 0.66, "30 runs · 71M tokens"],
-  ["/triage", "routines", 0.45, "60 runs · 22M tokens"],
-  ["/growth-report", "routines", 0.3, "4 runs · 9M tokens"],
-  ["errors", "monitors", 0.5, "daily · 100% ok"],
-  ["logs", "monitors", 0.46, "daily · 100% ok"],
-  ["cost", "monitors", 0.4, "daily · 100% ok"],
-  ["llm-traces", "monitors", 0.5, "daily · 96.7% ok"],
-  ["speed", "monitors", 0.55, "daily · 36.7% ok, degraded", 1],
-  ["ci.yml", "ci", 0.8, "4,812 runs"],
-  ["e2e.yml", "ci", 0.6, "1,904 runs"],
-  ["deploy.yml", "ci", 0.5, "612 runs"],
-  ["nightly.yml", "ci", 0.3, "30 runs"],
-];
+// The 3D plant: the product's components are the halls, routines the robot arms, CI the gates,
+// monitors the light towers. Sizes follow how much each one ships or runs.
+const FACTORY = {
+  components: [["Web app", 1, "#5b4dff", "1,204 PRs in 30 days"], ["Mobile app", 0.8, "#f2702c", "742 PRs in 30 days"], ["API", 0.9, "#1f9fb0", "861 PRs in 30 days"], ["Admin", 0.6, "#3f9f6a", "301 PRs in 30 days"], ["Landing", 0.35, "#a873f0", "110 PRs in 30 days"]],
+  routines: [["/fix-issues", "31 runs · 212M tokens"], ["/pr-review", "30 runs · 71M tokens"], ["/triage", "60 runs · 22M tokens"], ["/monitor", "30 runs · 96M tokens"], ["/growth-report", "4 runs · 9M tokens"]],
+  gates: [["ci.yml", "4,812 runs"], ["e2e.yml", "1,904 runs"]],
+  monitors: [["errors", "ok", "daily · 100% ok"], ["logs", "ok", "daily · 100% ok"], ["cost", "ok", "daily · 100% ok"], ["llm-traces", "ok", "daily · 96.7% ok"], ["speed", "bad", "daily · 36.7% ok, degraded"]],
+  deploy: ["deploy.yml", "612 promotions"],
+};
+
 
 // What Hush connects to today: the four platforms first, the rest in one line under them.
 const LOGO_GH = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="#fff" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
 const LOGO_VERCEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3l10 17.5H2z"/></svg>`;
+// The tools a factory's monitors read and Hush keeps track of, as a row of grey logos under the hero.
+// Logos from simple-icons at the version that has each one; the two it lacks show their initial.
+const SI = (v, slug) => `https://cdn.jsdelivr.net/npm/simple-icons@${v}/icons/${slug}.svg`;
+const TOOLS = [
+  ["GitHub", SI("16.32.0", "github")], ["GitHub Actions", SI("16.32.0", "githubactions")], ["Claude Code", SI("16.32.0", "claude")],
+  ["Anthropic", SI("16.32.0", "anthropic")], ["OpenRouter", SI("16.32.0", "openrouter")], ["AWS", SI("13.21.0", "amazonwebservices")],
+  ["CloudWatch", SI("13.21.0", "amazoncloudwatch")], ["Sentry", SI("16.32.0", "sentry")], ["Langfuse", null], ["Mixpanel", SI("16.32.0", "mixpanel")],
+  ["Neon", SI("16.32.0", "neon")], ["Vercel", SI("16.32.0", "vercel")], ["Fly.io", SI("16.32.0", "flydotio")], ["Expo", SI("16.32.0", "expo")],
+  ["Twilio", SI("13.21.0", "twilio")], ["Infisical", null], ["OpenTelemetry", SI("16.32.0", "opentelemetry")],
+];
+
 const INTEGRATIONS = [
   ["github", "#24292f", LOGO_GH, "GitHub", "Repos, pull requests, issues, checks and every Actions workflow, live, through a read-only GitHub App."],
   ["aws", "#232f3e", `<span class="wm">aws</span>`, "AWS", "Daily spend by service from Cost Explorer, the cost explorer and the city map. Sent by your own cost job."],
@@ -230,16 +234,40 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 .sheet .line{padding:13px 20px}.sheet .line .meta{white-space:normal;text-align:right;max-width:58%}.sheet .line code{font:12.5px var(--mono)}
 .int-more{margin:20px 0 0;color:var(--l-muted);font-size:14px}
 
-/* end */
-.lend{margin:120px 24px 0;max-width:1100px;box-sizing:border-box;padding:96px 32px;text-align:center}
-.paint.lend{background:linear-gradient(160deg,#e98a6b 0,#9b6fd6 48%,#4f4fd8 100%)}
-@media(min-width:1148px){.lend{margin-inline:auto}}
-.lend h2{margin:0 auto 12px;max-width:20ch;color:#fff;font-size:clamp(34px,5vw,56px);font-weight:500;letter-spacing:-.06em;line-height:1;text-wrap:balance}
-.lend p{margin:0 0 28px;color:rgba(255,255,255,.86);font-size:17px}.lend .lcta{justify-content:center}
-.land .lend .lp.pri{background:#fff;color:var(--l-ink)}.land .lp.alt.on-paint{background:rgba(255,255,255,.18);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+/* install: the title on the left, three steps as an accordion on the right, like a CLI's docs */
+.inst{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,640px);gap:56px;align-items:start}
+.inst-l h2{margin:0 0 14px;font-size:40px;font-weight:500;letter-spacing:-1.8px;line-height:1.05;color:var(--l-ink)}.inst-l p{margin:0;color:var(--l-muted);font-size:15.5px;line-height:1.6;max-width:34ch}
+.inst-steps details{border-bottom:1px solid var(--line)}.inst-steps details:first-child{border-top:1px solid var(--line)}
+.inst-steps summary{display:flex;align-items:center;gap:14px;padding:18px 2px;cursor:pointer;list-style:none;font-size:18px;font-weight:500;letter-spacing:-.4px;color:var(--l-muted)}
+.inst-steps summary::-webkit-details-marker{display:none}.inst-steps details[open] summary{color:var(--l-ink)}
+.inst-steps summary .n{display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 1.5px #c9ccd8;font:500 13px var(--f);color:var(--l-muted)}
+.inst-steps details[open] summary .n{background:var(--l-ink);color:#fff;box-shadow:none}
+.inst-steps summary::after{content:"";margin-left:auto;width:8px;height:8px;border-right:1.5px solid #9aa0b8;border-bottom:1.5px solid #9aa0b8;transform:rotate(-45deg);transition:transform .2s}.inst-steps details[open] summary::after{transform:rotate(45deg)}
+.inst-b{padding:0 2px 22px 40px;color:var(--l-muted);font-size:14.5px;line-height:1.55}.inst-b p{margin:0 0 12px}.inst-b code{font:12.5px var(--mono);color:var(--l-ink);background:#f2f3f7;border-radius:4px;padding:1px 5px}
+.inst-tabs{display:flex;align-items:center;gap:4px;margin:0 0 10px;font-size:13px}.inst-tabs span{color:#9aa0b8;margin-right:6px}
+.inst-tabs button{padding:5px 10px;border:0;border-radius:7px;background:none;color:var(--l-muted);font:500 13px var(--f);cursor:pointer}.inst-tabs button[aria-selected=true]{background:#eceef5;color:var(--l-ink)}
+.cmdb{position:relative;display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:14px 48px 14px 16px;border-radius:10px;background:#14161f;color:#e9eaf0;font:13px/1.5 var(--mono);overflow-x:auto;white-space:nowrap}
+.cmdb .p{color:#7c8098}.cmdb .h{color:#f0a35e}.cmdb .k{color:#9aa0b8}
+.cmdb .cp{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:rgba(255,255,255,.06);color:#c4c7d4;cursor:pointer}.cmdb .cp:hover{background:rgba(255,255,255,.12)}.cmdb .cp svg{width:14px;height:14px}
+.cmdb .cp[data-done]{color:#7ee0a1}
+.term{margin:4px 0 0;border-radius:10px;background:#14161f;color:#d6d8e2;font:12.5px/1.7 var(--mono);overflow:hidden}
+.term-h{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.07);color:#7c8098;font-size:11.5px}.term-h i{width:9px;height:9px;border-radius:50%;background:#3a3d4c}.term-h b{margin-left:8px;font-weight:400}
+.term pre{margin:0;padding:12px 16px 14px;font:inherit;color:inherit;background:none;border:0;border-radius:0;white-space:pre;overflow-x:auto}.cmdb[hidden]{display:none}
+.term .g{color:#7ee0a1}.term .o{color:#f0a35e}.term .m{color:#7c8098}.term .w{color:#fff}
+.inst-next{display:inline-flex;align-items:center;gap:6px;font-weight:500;color:var(--l-ink);text-decoration:none}
+@media(max-width:980px){.inst{grid-template-columns:minmax(0,1fr);gap:28px}.inst-l h2{font-size:32px}.inst-b{padding-left:2px}}
+
 .lfoot{max-width:1100px;margin:64px auto 0;padding:20px 24px 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:#9aa0b8;font-size:13px;border-top:1px solid #eef0f5}
 .lfoot a{color:var(--l-muted)}
 
+/* tools: one quiet row of logos */
+.tools{max-width:1100px;margin:0 auto;padding:64px 24px 0;text-align:center}
+.tools p{margin:0 0 26px;color:var(--l-muted);font-size:14.5px;letter-spacing:-.2px}
+.tools ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:18px 34px}
+.tools li{display:inline-flex;align-items:center;gap:9px;color:#6b6f80;font-size:15px;font-weight:500;letter-spacing:-.3px}
+.tools li img{width:20px;height:20px;opacity:.55}
+.tools li i{display:grid;place-items:center;width:20px;height:20px;border-radius:5px;background:#6b6f80;color:#fff;font:700 11px/1 var(--f);font-style:normal;opacity:.75}
+@media(max-width:760px){.tools{padding:48px 16px 0}.tools ul{gap:14px 22px}.tools li{font-size:14px}}
 @media(max-width:980px){.lhero-in{grid-template-columns:minmax(0,1fr);gap:40px;padding:112px 16px 160px}.lhero h1{font-size:48px;letter-spacing:-2.4px}
 .lsec-head{grid-template-columns:minmax(0,1fr);gap:24px;margin-bottom:48px}.lsec-head .r{text-align:left}.lsec-head .lcta{justify-content:flex-start}
 .duo,.trio{grid-template-columns:minmax(0,1fr)}.trio{gap:24px}.paint{padding:32px 20px 0}.frame{border-inline:0;border-radius:20px 20px 0 0}}
@@ -247,7 +275,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 .lhero h1{font-size:42px;letter-spacing:-2px}.pillar{grid-template-columns:48px minmax(0,1fr);padding:12px 14px 12px 8px}.pillar svg{width:40px;height:40px}
 .lsec{padding:80px 16px 0}.cost-shot{grid-template-columns:minmax(0,1fr)}.cost-chart,.cost-runs{padding:18px 16px}.cost-cols{height:110px;gap:2px}
 .sheet{padding:16px 14px 4px}.sheet .line{flex-direction:column;gap:2px}.sheet .line .meta{text-align:left;max-width:none}.int-grid{grid-template-columns:minmax(0,1fr)}
-.lend{margin:80px 16px 0;padding:64px 20px}.lcta .lp{flex:1 1 auto}}
+.lcta .lp{flex:1 1 auto}}
 
 /* bento: the status page big, and around it what's running, the monitors, the code merged and the report */
 .bento{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
@@ -293,19 +321,19 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 .rep-l{list-style:none;margin:8px 0 0;padding:0}.rep-l li{display:flex;align-items:baseline;gap:8px;padding:3px 0;font-size:12.5px;color:#111113}.rep-l li::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#0f7a45;transform:translateY(-1px)}.rep-l li[data-t=alert]::before{background:#c0271d}.rep-l li[data-t=warn]::before{background:#b45309}
 .rep-l li span{flex:1;min-width:0}.rep-l em{font-style:normal;color:#8a8a92;font-size:11.5px;white-space:nowrap}
 /* the factory in 3D */
-.f3{position:relative;height:min(640px,72vh);border-radius:16px;overflow:hidden;background:radial-gradient(80% 70% at 50% 40%,#fbfaff 0,#ecebfa 70%,#e3e0f7 100%);box-shadow:inset 0 0 0 1px rgba(31,38,65,.06)}
+.f3{position:relative;height:min(700px,78vh);border-radius:16px;overflow:hidden;background:radial-gradient(80% 70% at 50% 40%,#fbfaff 0,#ecebfa 70%,#e3e0f7 100%);box-shadow:inset 0 0 0 1px rgba(31,38,65,.06)}
 .f3 canvas{display:block;width:100%!important;height:100%!important;cursor:grab}.f3 canvas:active{cursor:grabbing}
 .f3-stat{position:absolute;left:20px;top:18px;z-index:2;display:flex;flex-direction:column;padding:12px 16px;border-radius:12px;background:rgba(255,255,255,.7);backdrop-filter:blur(12px);box-shadow:inset 0 0 0 1px var(--l-line);pointer-events:none}
 .f3-stat b{font-size:30px;font-weight:600;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums}.f3-stat span{color:var(--l-muted);font-size:12.5px;margin-top:4px}
 .f3-leg{position:absolute;right:16px;top:18px;z-index:2;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;pointer-events:none}.f3-leg span{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.7);backdrop-filter:blur(12px);font-size:12px;color:var(--l-ink);box-shadow:inset 0 0 0 1px var(--l-line)}.f3-leg i{width:9px;height:9px;border-radius:3px}
-.f3 .map-tip[hidden]{display:none}.f3-hint{position:absolute;left:20px;bottom:16px;z-index:2;font-size:12px;color:#8a8fa8;pointer-events:none}
+.f3 .map-tip[hidden]{display:none}.f3-tag{position:absolute;left:0;top:0;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.88);box-shadow:0 2px 10px rgba(25,30,45,.16);font:500 11.5px var(--mono);color:#191e2d;white-space:nowrap;pointer-events:none}.f3-tag.bad{background:#e5484d;color:#fff}.f3-hint{position:absolute;left:20px;bottom:16px;z-index:2;font-size:12px;color:rgba(255,255,255,.9);text-shadow:0 1px 3px rgba(0,0,0,.45);pointer-events:none}
 @media(max-width:980px){.bento{grid-template-columns:minmax(0,1fr)}.bento>.tile{grid-column:auto;grid-row:auto}.b-status .sheet{margin:auto 12px 0}.code-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.code-big>b{font-size:44px}.f3{height:460px}.f3-leg{display:none}}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@700&display=swap">
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script></head><body class="land">
 
 <nav class="lnav" id="lnav"><a class="logo" href="/">${mark()}<span>hush</span></a>
-  <span class="lnav-r"><a class="t" href="#status">Status</a><a class="t" href="#costs">Costs</a><a class="t" href="#factory">Factory</a><a class="t" href="#sources">Sources</a><a class="t" href="${REPO}" target="_blank" rel="noopener">GitHub</a>
+  <span class="lnav-r"><a class="t" href="#status">Status</a><a class="t" href="#costs">Costs</a><a class="t" href="#factory">Factory</a><a class="t" href="#sources">Sources</a><a class="t" href="#install">Install</a><a class="t" href="${REPO}" target="_blank" rel="noopener">GitHub</a>
   ${viewer ? `<a class="lp alt" href="/landing">${esc(viewer)}</a><a class="lp pri" href="/">Enter →</a>` : `<a class="lp alt" href="/auth/login">Sign in</a><a class="lp pri" href="${install}">${GITHUB}<span>Install</span></a>`}</span>
 </nav>
 
@@ -325,9 +353,14 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 
 <main class="frame">
 
+<section class="tools" aria-label="Works with">
+  <p>Works with all the tools you use</p>
+  <ul>${TOOLS.map(([name, logo]) => `<li>${logo ? `<img src="${logo}" alt="" loading="lazy">` : `<i aria-hidden="true">${name[0]}</i>`}${name}</li>`).join("")}</ul>
+</section>
+
 <section class="lsec" id="status">
   <div class="lsec-head">
-    <div><span class="ltag">${ICONS.sm("beat")} monitors</span><p class="lword">status</p></div>
+    <div><span class="ltag">${ICONS.sm("beat")} Monitors</span><p class="lword">Status</p></div>
     <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Hush checks them against your roster.</p>${cta()}</div>
   </div>
   <div class="bento">
@@ -394,7 +427,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 
 <section class="lsec" id="costs">
   <div class="lsec-head">
-    <div><span class="ltag">${ICONS.sm("tok")} tokens and costs</span><p class="lword">costs</p></div>
+    <div><span class="ltag">${ICONS.sm("tok")} Tokens and costs</span><p class="lword">Costs</p></div>
     <div class="r"><h3>What the factory burns</h3><p>Tokens for every routine run, next to what your cloud bills each day. A routine that burns 4× its usual tokens shows up the same day, not on the invoice.</p></div>
   </div>
   <div class="paint b">
@@ -416,13 +449,13 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 
 <section class="lsec" id="factory">
   <div class="lsec-head">
-    <div><span class="ltag">${ICONS.sm("auto")} in 3D</span><p class="lword">factory</p></div>
-    <div class="r"><h3>Your software factory, in 3D</h3><p>Every routine, monitor and workflow is a building, as tall as it runs. Pull requests drive down the road to main. The one that is failing glows red.</p></div>
+    <div><span class="ltag">${ICONS.sm("auto")} In 3D</span><p class="lword">Factory</p></div>
+    <div class="r"><h3>Your software factory, in 3D</h3><p>Every component is a hall. Routines are the robot arms, agents are the workers, and every PR is a crate that rides the belt through the CI gates into main. Monitors are the light towers: the failing one flashes red.</p></div>
   </div>
   <div class="f3" id="f3">
     <div class="map-layer"></div><div class="map-tip" hidden></div>
     <div class="f3-stat"><b id="f3-n">112</b><span>PRs merged today</span></div>
-    <div class="f3-leg"><span><i style="background:#f0a35e"></i>Routines</span><span><i style="background:#8b84f0"></i>Monitors</span><span><i style="background:#5fc3c9"></i>CI</span><span><i style="background:#262a3b"></i>main</span></div>
+    <div class="f3-leg"><span><i style="background:#5b4dff"></i>Components</span><span><i style="background:#f28c28"></i>Routines</span><span><i style="background:#262a35"></i>CI gates</span><span><i style="background:#3ccf78"></i>Monitors</span><span><i style="background:#f7f7f5;box-shadow:0 0 0 1px #c9ccd8"></i>Agents</span></div>
     <span class="f3-hint">Drag to turn it</span>
   </div>
   <span class="lex">Example with invented data.</span>
@@ -431,7 +464,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 
 <section class="lsec" id="sources">
   <div class="lsec-head">
-    <div><span class="ltag">${ICONS.sm("flow")} read-only</span><p class="lword">sources</p></div>
+    <div><span class="ltag">${ICONS.sm("flow")} Read-only</span><p class="lword">Sources</p></div>
     <div class="r"><h3>Where it reads from</h3><p>Read-only on your code. No cloud or billing credentials: your jobs send what they already know.</p></div>
   </div>
   <div class="duo">
@@ -454,17 +487,65 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
   </div>
 </section>
 
-<section class="lend paint b">
-  <h2>A dead monitor and a healthy system look the same.</h2>
-  <p>Both are silent. Hush tells you which one you have.</p>
-  ${cta(false)}
+<section class="lsec" id="install">
+  <div class="inst">
+    <div class="inst-l"><h2>Install Hush</h2><p>Connect GitHub, add Hush to the repo from Claude Code, and let it build the factory it will watch. Free and open source.</p></div>
+    <div class="inst-steps">
+      <details name="inst" open>
+        <summary><span class="n">1</span>Connect GitHub</summary>
+        <div class="inst-b">
+          <p>Install the GitHub App on your account or organization, and pick one repo, a few or all of them. It only reads.</p>
+          ${viewer ? `<a class="lp pri" href="/">Open your repos →</a>` : `<a class="lp pri" href="${install}">${GITHUB}<span>Install on GitHub</span></a>`}
+        </div>
+      </details>
+      <details name="inst">
+        <summary><span class="n">2</span>Add Hush to the repo</summary>
+        <div class="inst-b">
+          <div class="inst-tabs" role="tablist"><span>Run in</span><button type="button" role="tab" aria-selected="true" data-tab="cc">Claude Code</button><button type="button" role="tab" aria-selected="false" data-tab="sh">Terminal</button></div>
+          <div class="cmdb" data-pane="cc"><span class="h">!</span><span data-cmd>curl -fsSL <span data-origin></span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span><button class="cp" type="button" aria-label="Copy" data-copy><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></div>
+          <div class="cmdb" data-pane="sh" hidden><span class="p">$</span><span data-cmd>curl -fsSL <span data-origin></span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span><button class="cp" type="button" aria-label="Copy" data-copy><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></div>
+          <p>At the root of the repo. Your ingest key is on the repo's Setup page in Hush, right after step 1. It adds a heartbeat hook, the <code>/hush-setup</code> skill and its templates under <code>.claude/</code>, and changes nothing else.</p>
+        </div>
+      </details>
+      <details name="inst">
+        <summary><span class="n">3</span>Build your factory</summary>
+        <div class="inst-b">
+          <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/hush-setup</span><button class="cp" type="button" aria-label="Copy" data-copy><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></div>
+          <p>It reads the repo, proposes monitors, a daily report and a pulse, and opens one PR with new <code>hush-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
+          <div class="term" aria-label="Example run of /hush-setup"><div class="term-h"><i></i><i></i><i></i><b>claude · acme/api</b></div><pre><span class="w">&gt; /hush-setup</span>
+<span class="g">●</span> Read the repo: Sentry in 2 apps, 12 skills, 6 workflows, no monitors
+<span class="g">●</span> Proposal
+  <span class="w">hush-monitor-errors</span>  routine   0 13 * * *  sonnet  <span class="m">SENTRY_AUTH_TOKEN</span>
+  <span class="w">hush-report</span>          routine   0 14 * * *  haiku
+  <span class="w">hush-pulse</span>           workflow  0 19 * * *  none    <span class="m">HUSH_KEY secret</span>
+  <span class="m">Not covered yet: logs, costs, LLM traces.</span>
+<span class="o">?</span> Add these? <span class="w">yes</span>
+<span class="g">●</span> Opened PR #1 "Hush: set up the factory": 6 new files, 0 changed</pre></div>
+        </div>
+      </details>
+    </div>
+  </div>
 </section>
+
 
 <footer class="lfoot"><span>hush · open source, MIT · <a href="${REPO}" target="_blank" rel="noopener">github.com/humanagent/hush</a></span><span>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login">Sign in</a>`}</span></footer>
 </main>
 
 <script>
-// Nav turns into a dark lp once the lhero has scrolled a little.
+// Install: the commands carry this Hush's own address, the tabs switch the shell, copy copies.
+(() => {
+  document.querySelectorAll("[data-origin]").forEach((e) => (e.textContent = location.origin));
+  document.querySelectorAll(".inst-tabs button").forEach((b) => b.addEventListener("click", () => {
+    const box = b.closest(".inst-b");
+    box.querySelectorAll(".inst-tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    box.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
+  }));
+  document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+    const box = b.closest(".cmdb"), pre = box.dataset.pane === "cc" ? "! " : "";
+    try { await navigator.clipboard.writeText(pre + box.querySelector("[data-cmd]").textContent); b.dataset.done = ""; setTimeout(() => delete b.dataset.done, 1400); } catch {}
+  }));
+})();
+// Nav turns into a dark pill once the hero has scrolled a little.
 (() => { const n = document.getElementById("lnav"); const f = () => n.dataset.s = scrollY > 40 ? "1" : "0"; addEventListener("scroll", f, { passive: true }); f(); })();
 // The lhero backdrop: an ordered-dither stipple of a ridge shaped like the hush mark (flat, a spike, a dip, flat),
 // with a plume of light rising from the spike. Drawn once per size, no animation.
@@ -534,122 +615,386 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 })();
 </script>
 <script type="module">
-// The factory in 3D, drawn like the services map: a tiled board, one building per automation (as
-// tall as it runs), a district each for routines, monitors and CI, and a road down the middle where
-// pull requests drive to main. The degraded monitor glows red. Built once it scrolls into view.
+// The factory in 3D, as a real plant in an industrial park. Every component of the product is a
+// hall (the app, the API, the admin...). Routines are the robot arms on the belt, agents are the
+// workers walking the floor, and every pull request is a crate: out of its hall, down the belt,
+// through the CI gates and into the main warehouse, where a truck takes promotions out. Monitors
+// are the light towers along the front, the failing one flashes red, and Pulse is the control
+// tower in the corner. Physical materials, procedural concrete and corrugated steel, soft shadows,
+// ambient occlusion and a little bloom on the lamps. Built once it scrolls into view, paused while
+// it is out of it; without post-processing it still renders, only flatter.
 const host = document.getElementById("f3");
 if (host) {
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const go = async () => {
-    let THREE, OrbitControls;
-    try { THREE = await import("three"); ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js")); }
-    catch { host.querySelector(".f3-hint").textContent = "The 3D view could not load."; return; }
-    const items = JSON.parse(document.getElementById("f3-data").textContent);
-    const COLOR = { routines: 0xf0a35e, monitors: 0x8b84f0, ci: 0x5fc3c9 }, ROOF = { routines: 0xd9702c, monitors: 0x5b4dff, ci: 0x1f8f99 };
+    let THREE, OrbitControls, RoomEnvironment, RoundedBoxGeometry, PP = null;
+    try {
+      THREE = await import("three");
+      ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js"));
+      ({ RoomEnvironment } = await import("three/addons/environments/RoomEnvironment.js"));
+      ({ RoundedBoxGeometry } = await import("three/addons/geometries/RoundedBoxGeometry.js"));
+    } catch { host.querySelector(".f3-hint").textContent = "The 3D view could not load."; return; }
+    try {
+      const [a, b, c, d, e] = await Promise.all(["EffectComposer", "RenderPass", "GTAOPass", "UnrealBloomPass", "OutputPass"].map((n) => import("three/addons/postprocessing/" + n + ".js")));
+      PP = { EffectComposer: a.EffectComposer, RenderPass: b.RenderPass, GTAOPass: c.GTAOPass, UnrealBloomPass: d.UnrealBloomPass, OutputPass: e.OutputPass };
+    } catch {}
+    const D = JSON.parse(document.getElementById("f3-data").textContent);
     const W = () => host.clientWidth, H = () => host.clientHeight;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(W(), H());
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    const DPR = Math.min(devicePixelRatio, 1.75);
+    renderer.setPixelRatio(DPR); renderer.setSize(W(), H());
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.prepend(renderer.domElement);
     const scene = new THREE.Scene();
-    scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(-8, 20, 14); scene.add(sun);
-    const INK = 0x2a2a3a;
-    const outlined = (geo, color, pos) => {
-      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
-      m.position.copy(pos);
-      m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: INK })));
-      scene.add(m); return m;
-    };
-    // lots in rows of six, the middle column left for the road; main sits at the end of the road
-    const COLS = 7, ROAD = 3, CELL = 2.4, n = items.length;
-    const lots = []; for (let c = 0; lots.length < n; c++) if (c % COLS !== ROAD) lots.push([c % COLS, Math.floor(c / COLS)]);
-    const rows = lots.at(-1)[1] + 2, BW = COLS * CELL + 1.6, BD = rows * CELL + 1.6;
-    const ox = -BW / 2 + 0.8 + CELL / 2, oz = -BD / 2 + 0.8 + CELL / 2, rx = ox + ROAD * CELL;
-    outlined(new THREE.BoxGeometry(BW + 0.6, 0.5, BD + 0.6), 0xc9c5e6, new THREE.Vector3(0, -0.45, 0));
-    outlined(new THREE.BoxGeometry(BW, 0.2, BD), 0xf3f1fb, new THREE.Vector3(0, -0.1, 0));
-    const tiles = new THREE.GridHelper(Math.max(BW, BD), Math.round(Math.max(BW, BD) / (CELL / 2)), 0xdcd8f0, 0xdcd8f0); tiles.position.y = 0.005;
-    tiles.scale.set(BW / Math.max(BW, BD), 1, BD / Math.max(BW, BD)); scene.add(tiles);
-    outlined(new THREE.BoxGeometry(CELL * 0.7, 0.04, BD - 0.4), 0xdedaf0, new THREE.Vector3(rx, 0.02, 0));
-    for (let z = -BD / 2 + 0.8; z < BD / 2 - 0.6; z += 0.9) { const d = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.36), new THREE.MeshBasicMaterial({ color: 0xffffff })); d.position.set(rx, 0.06, z); scene.add(d); }
-    const roofTex = (txt, color) => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
-      g.fillStyle = "#" + color.toString(16).padStart(6, "0"); g.beginPath(); g.roundRect(14, 14, 100, 100, 18); g.fill();
-      g.fillStyle = "#fff"; g.font = "700 " + (txt.length > 2 ? 34 : 46) + "px Kalam, system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 64, 68);
-      const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; };
-    const roof = (txt, color, size, x, top, z) => { const r = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: roofTex(txt, color), transparent: true }));
-      r.rotation.x = -Math.PI / 2; r.position.set(x, top + 0.012, z); scene.add(r); };
-    const blocks = [], labels = [];
-    items.forEach(([name, kind, k, what, alarm], i) => {
-      const [c, r] = lots[i], x = ox + c * CELL, z = oz + r * CELL, foot = 0.9 + 1.0 * k, h = 0.5 + 4.6 * k;
-      const body = outlined(new THREE.BoxGeometry(foot, h, foot), alarm ? 0xe5484d : COLOR[kind], new THREE.Vector3(x, h / 2, z));
-      roof(name.replace(/^\\//, "").replace(/\\.yml$/, "").slice(0, 3), alarm ? 0xb4232a : ROOF[kind], Math.min(0.95, foot * 0.6), x, h, z);
-      body.userData = { name, kind, what, alarm }; blocks.push(body);
-      labels.push({ text: name, pos: new THREE.Vector3(x, h + 0.25, z), alarm, rank: k });
+
+    // ---- textures, all procedural: a canvas each, tiled
+    const cv = (w, h, paint) => { const c = document.createElement("canvas"); c.width = w; c.height = h; paint(c.getContext("2d"), w, h); return c; };
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const tex = (c, rx, ry, color = true) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; if (color) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const noise = (g, w, h, base, spread, n = 9000, size = 2) => { g.fillStyle = base; g.fillRect(0, 0, w, h); for (let i = 0; i < n; i++) { const v = Math.round((rnd() - 0.5) * spread); g.fillStyle = "rgba(" + (v > 0 ? "255,255,255," : "0,0,0,") + Math.abs(v) / 255 + ")"; g.fillRect(rnd() * w, rnd() * h, size * rnd() + 0.5, size * rnd() + 0.5); } };
+    const concreteC = cv(512, 512, (g, w, h) => {
+      noise(g, w, h, "#aaa59c", 40, 26000, 2);
+      for (let i = 0; i < 14; i++) { const x = rnd() * w, y = rnd() * h, r = 20 + rnd() * 70; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, "rgba(90,80,70,.10)"); gr.addColorStop(1, "rgba(90,80,70,0)"); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+      g.strokeStyle = "rgba(60,55,50,.35)"; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2);
     });
-    // main: a tower on a podium where the road ends
-    const mz = oz + (rows - 1) * CELL;
-    outlined(new THREE.BoxGeometry(CELL * 2.2, 0.9, CELL * 0.9), 0x3a3f55, new THREE.Vector3(rx, 0.45, mz));
-    const main = outlined(new THREE.BoxGeometry(1.5, 5.4, 1.2), 0x262a3b, new THREE.Vector3(rx, 0.9 + 2.7, mz));
-    roof("main", 0xf2702c, 1.0, rx, 6.3, mz);
-    main.userData = { name: "main", kind: "branch", what: "where every PR lands" }; blocks.push(main);
-    labels.push({ text: "main", pos: new THREE.Vector3(rx, 6.6, mz), alarm: 0, rank: 9 });
-    // traffic: PRs leave a building, drive down the road and land on main; others idle around their lot
-    const cars = [], idle = [], counter = document.getElementById("f3-n");
-    let merged = Number(counter?.textContent || 0);
-    const spawn = (m) => { const lot = lots[Math.floor(Math.random() * n)]; m.userData = { t: 0, x0: ox + lot[0] * CELL, z0: oz + lot[1] * CELL, lane: Math.random() < 0.5 ? -0.28 : 0.28, v: 0.0016 + Math.random() * 0.0018 }; };
-    if (!still) {
-      for (let i = 0; i < 10; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0xf2702c })); spawn(m); m.userData.t = Math.random(); scene.add(m); cars.push(m); }
-      for (let i = 0; i < 18; i++) { const lot = lots[i % n], m = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.13), new THREE.MeshBasicMaterial({ color: 0x5b4dff })); m.userData = { cx: ox + lot[0] * CELL, cz: oz + lot[1] * CELL, a: Math.random() * 6.28, r: 0.95 + Math.random() * 0.25, v: 0.006 + Math.random() * 0.01 }; scene.add(m); idle.push(m); }
+    const concrete = tex(concreteC, 6, 4), concreteR = tex(concreteC, 6, 4, false);
+    const asphalt = tex(cv(256, 256, (g, w, h) => noise(g, w, h, "#55575c", 50, 12000, 1.6)), 30, 30);
+    const grass = tex(cv(256, 256, (g, w, h) => { noise(g, w, h, "#7f9a5e", 60, 16000, 2); }), 40, 40);
+    const corr = (n) => cv(256, 64, (g, w, h) => { for (let x = 0; x < w; x++) { const v = 128 + 110 * Math.sin((x / w) * Math.PI * 2 * n); g.fillStyle = "rgb(" + v + "," + v + "," + v + ")"; g.fillRect(x, 0, 1, h); } });
+    const corrV = tex(corr(16), 3, 1, false);
+    const sky = tex(cv(16, 512, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#9fb8d6"); gr.addColorStop(0.55, "#d8e1ea"); gr.addColorStop(1, "#ece8e2"); g.fillStyle = gr; g.fillRect(0, 0, w, h); }), 1, 1);
+    sky.wrapS = sky.wrapT = THREE.ClampToEdgeWrapping; sky.repeat.set(1, 1);
+    scene.background = sky;
+    scene.fog = new THREE.Fog(0xe2e4e6, 70, 170);
+
+    // ---- light: a warm low sun, a sky/grass bounce, studio reflections for the metal
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.55;
+    scene.add(new THREE.HemisphereLight(0xcfe0f5, 0x6f7a55, 0.75));
+    const sun = new THREE.DirectionalLight(0xffeedb, 2.5);
+    sun.position.set(-26, 34, 20); sun.castShadow = true;
+    sun.shadow.mapSize.set(4096, 4096);
+    Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 26, bottom: -26, near: 1, far: 110 });
+    sun.shadow.bias = -0.00025; sun.shadow.normalBias = 0.025; sun.shadow.radius = 3;
+    scene.add(sun);
+
+    const M = (color, rough = 0.7, metal = 0, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, ...extra });
+    const mat = {
+      concrete: M(0xffffff, 0.92, 0, { map: concrete, roughnessMap: concreteR }), slab: M(0xa9a397, 0.95),
+      asphalt: M(0xffffff, 0.95, 0, { map: asphalt }), grass: M(0xffffff, 1, 0, { map: grass }), curb: M(0xbdb8ae, 0.9),
+      wall: M(0xeceae5, 0.55, 0.35, { bumpMap: corrV, bumpScale: 1.2 }), plinth: M(0x9c978d, 0.9),
+      steel: M(0xa3a8b1, 0.3, 0.9), dark: M(0x2a2e38, 0.45, 0.3), roof: M(0xb9bdc4, 0.42, 0.75, { bumpMap: corrV, bumpScale: 0.8 }),
+      glass: M(0x6f8fb3, 0.04, 0.95), belt: M(0x232528, 0.9), roller: M(0x8d929a, 0.35, 0.9), paint: M(0xe8b83c, 0.6),
+      white: M(0xf4f4f2, 0.42), robot: M(0xf0821e, 0.32, 0.25), crate: M(0xc29660, 0.88), pallet: M(0x9d7a4f, 0.92),
+      tire: M(0x18191c, 0.92), visor: M(0x111318, 0.08, 0.7), trunk: M(0x6b5640, 0.95), leaf: M(0x4f7a3f, 0.9), leaf2: M(0x5f8a46, 0.9),
+      hvac: M(0xc8cbd0, 0.5, 0.6), whdark: M(0x2c313d, 0.5, 0.4, { bumpMap: corrV, bumpScale: 1.0 }),
+    };
+    const add = (geo, m, x, y, z, parent = scene, cast = true) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = cast; o.receiveShadow = true; parent.add(o); return o; };
+    const rbox = (w, h, d, r = 0.08) => new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2, h / 2, d / 2));
+    const group = (x, y, z, parent = scene) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+    const sign = (txt, w, h, bg, fg = "#ffffff") => {
+      const c = cv(1024, Math.round(1024 * h / w), (g, cw, ch) => { g.fillStyle = bg; g.beginPath(); g.roundRect(0, 0, cw, ch, ch * 0.16); g.fill(); g.fillStyle = fg; g.font = "600 " + Math.round(ch * 0.5) + "px Geist, Inter, system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, cw / 2, ch * 0.54); });
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      return new THREE.Mesh(new THREE.PlaneGeometry(w, h), M(0xffffff, 0.5, 0, { map: t }));
+    };
+    const picks = [], tags = [];
+    const pickable = (obj, info) => obj.traverse((o) => { if (o.isMesh) { o.userData.info = info; picks.push(o); } });
+    const tag = (text, pos, bad = false) => tags.push({ text, pos, bad });
+
+    // ---- the park: grass to the fog, an asphalt yard, the plant's concrete slab on a plinth
+    add(new THREE.PlaneGeometry(500, 500), mat.grass, 0, -0.02, 0, scene, false).rotation.x = -Math.PI / 2;
+    add(new THREE.BoxGeometry(84, 0.1, 56), mat.asphalt, 6, 0, 4, scene, false);
+    add(new THREE.BoxGeometry(84.4, 0.14, 0.3), mat.curb, 6, 0.02, 32.1, scene, false);
+    add(new THREE.BoxGeometry(48, 0.5, 32), mat.plinth, 0, 0.2, 0, scene, false);
+    add(new THREE.BoxGeometry(47.6, 0.06, 31.6), mat.concrete, 0, 0.47, 0, scene, false);
+    const Y0 = 0.5;
+    const stripe = (x, z, w, d, m = mat.paint) => add(new THREE.BoxGeometry(w, 0.01, d), m, x, Y0 + 0.006, z, scene, false);
+    stripe(-2.5, 0.9, 37, 0.09); stripe(-2.5, 6.2, 37, 0.09); stripe(-2.5, 8.6, 37, 0.09);
+    for (let x = -20; x < 15; x += 1.4) stripe(x, 7.4, 0.7, 1.4, mat.white);
+    for (let i = 0; i < 9; i++) add(new THREE.BoxGeometry(0.1, 0.01, 4.6), mat.white, 28 + i * 2.6, 0.06, 18, scene, false); // parking bays
+
+    // ---- the halls: one per component, corrugated walls, a window band, sawtooth roofs with north lights
+    const halls = [];
+    let hx = -21;
+    for (const [name, k, color, what] of D.components) {
+      const w = 4.4 + 2.2 * k, d = 7, h = 3.1 + 0.9 * k, cx = hx + w / 2, cz = -8.5;
+      const g = group(cx, Y0, cz);
+      add(new THREE.BoxGeometry(w + 0.1, 0.35, d + 0.1), mat.plinth, 0, 0.175, 0, g);
+      add(rbox(w, h, d, 0.05), mat.wall, 0, h / 2 + 0.2, 0, g);
+      add(new THREE.BoxGeometry(w + 0.03, 0.4, d + 0.03), M(new THREE.Color(color).getHex(), 0.45, 0.2), 0, h - 0.1, 0, g);
+      for (const side of [-1, 1]) add(new THREE.BoxGeometry(0.02, 0.55, d - 1.2), mat.glass, side * (w / 2 + 0.01), h - 0.85, 0, g, false);
+      for (let i = 0; i < Math.round(w / 1.6); i++) add(new THREE.BoxGeometry(1.0, 0.55, 0.02), mat.glass, -w / 2 + 0.9 + i * 1.6, h - 0.85, -d / 2 - 0.01, g, false);
+      const teeth = 3, td = d / teeth, rise = 1.15, slope = Math.hypot(td, rise), ang = Math.atan2(rise, td);
+      for (let i = 0; i < teeth; i++) {
+        const z0 = -d / 2 + i * td;
+        const p = add(new THREE.BoxGeometry(w + 0.1, 0.08, slope), mat.roof, 0, h + 0.2 + rise / 2, z0 + td / 2, g); p.rotation.x = ang;
+        add(new THREE.BoxGeometry(w - 0.1, rise, 0.05), mat.glass, 0, h + 0.2 + rise / 2, z0 + 0.03, g);
+        for (const side of [-1, 1]) { const tri = new THREE.Shape(); tri.moveTo(0, 0); tri.lineTo(td, 0); tri.lineTo(0, rise); const e = add(new THREE.ExtrudeGeometry(tri, { depth: 0.06, bevelEnabled: false }), mat.wall, side * (w / 2) - (side > 0 ? 0.06 : 0), h + 0.2, z0, g); e.rotation.y = -Math.PI / 2; e.position.x = side * (w / 2) + (side > 0 ? 0 : 0.06); }
+      }
+      const door = add(new THREE.BoxGeometry(2.2, 2.3, 0.08), mat.steel, 0, 1.35, d / 2 + 0.04, g);
+      for (let i = 1; i < 10; i++) add(new THREE.BoxGeometry(2.2, 0.02, 0.02), mat.dark, 0, 0.2 + i * 0.23, d / 2 + 0.09, g, false);
+      add(new THREE.BoxGeometry(2.6, 0.12, 0.7), mat.dark, 0, 2.6, d / 2 + 0.35, g); // canopy
+      const s = sign(name, Math.min(w - 1, 4.2), 0.72, color); s.position.set(0, h - 0.1, d / 2 + 0.03); g.add(s);
+      for (let i = 0; i < 2; i++) { const u = group(-w / 4 + i * (w / 2), h + 0.2 + rise + 0.05, -d / 2 + 1.4, g); add(rbox(1.1, 0.55, 0.9, 0.06), mat.hvac, 0, 0.27, 0, u); add(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 24), mat.dark, 0, 0.56, 0, u); }
+      add(new THREE.CylinderGeometry(0.18, 0.18, h + 2.4, 16), mat.steel, w / 2 - 0.5, (h + 2.4) / 2, -d / 2 + 0.6, g); // flue
+      // pallets by the door
+      const pl = group(w / 2 - 0.9, 0.35, d / 2 + 1.0, g);
+      add(new THREE.BoxGeometry(1.1, 0.14, 1.1), mat.pallet, 0, 0.07, 0, pl);
+      for (let j = 0; j < 3; j++) add(rbox(0.5, 0.4, 0.5, 0.03), mat.crate, (j % 2) * 0.5 - 0.25, 0.34 + Math.floor(j / 2) * 0.4, j < 2 ? -0.25 : 0.2, pl);
+      pickable(g, { name, kind: "component", what });
+      halls.push({ x: cx, doorZ: cz + d / 2 + 0.6, color });
+      hx += w + 1.3;
     }
-    const sphere = new THREE.Box3().setFromObject(scene).getBoundingSphere(new THREE.Sphere());
-    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -300, 500);
-    const fit = () => { const a = W() / H(), v = sphere.radius * (a >= 1 ? 0.6 : 0.66 / a); cam.left = -v * a; cam.right = v * a; cam.top = v; cam.bottom = -v; cam.updateProjectionMatrix(); renderer.setSize(W(), H()); };
-    cam.position.set(sphere.center.x + 26, 30, sphere.center.z + 34); cam.lookAt(sphere.center); fit();
+    // pipes running along the back of the halls
+    add(new THREE.CylinderGeometry(0.16, 0.16, 36, 16), mat.steel, -3, Y0 + 3.6, -12.4, scene).rotation.z = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.11, 0.11, 36, 16), M(0x3f7fa8, 0.35, 0.6), -3, Y0 + 3.2, -12.5, scene).rotation.z = Math.PI / 2;
+
+    // ---- the belts, with rollers and legs
+    const BELT_Y = Y0 + 0.62, BZ = 3.4, BX0 = -21, BX1 = 15;
+    const conveyor = (x0, z0, x1, z1) => {
+      const len = Math.hypot(x1 - x0, z1 - z0), along = x1 !== x0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      add(new THREE.BoxGeometry(along ? len : 1.1, 0.1, along ? 1.1 : len), mat.belt, cx, BELT_Y, cz);
+      for (const s of [-0.6, 0.6]) add(new THREE.BoxGeometry(along ? len : 0.06, 0.22, along ? 0.06 : len), mat.steel, cx + (along ? 0 : s), BELT_Y + 0.03, cz + (along ? s : 0));
+      for (let t = 0; t <= len; t += 1.8) { const lx = along ? x0 + Math.sign(x1 - x0) * t : x0, lz = along ? z0 : z0 + Math.sign(z1 - z0) * t;
+        for (const s of [-0.48, 0.48]) add(new THREE.BoxGeometry(0.08, BELT_Y - Y0, 0.08), mat.steel, lx + (along ? 0 : s), Y0 + (BELT_Y - Y0) / 2, lz + (along ? s : 0));
+        add(new THREE.BoxGeometry(along ? 0.06 : 1.0, 0.06, along ? 1.0 : 0.06), mat.steel, lx, Y0 + 0.18, lz); }
+    };
+    for (const h of halls) conveyor(h.x, h.doorZ - 0.2, h.x, BZ - 0.6);
+    conveyor(BX0, BZ, BX1, BZ);
+
+    // ---- the robot arms: one per routine, on a plinth in front of the belt
+    const arms = [];
+    D.routines.forEach(([name, what], i) => {
+      const x = BX0 + 3 + i * ((BX1 - BX0 - 12) / Math.max(1, D.routines.length - 1)), z = BZ + 1.7;
+      const g = group(x, Y0, z);
+      add(new THREE.BoxGeometry(1.4, 0.18, 1.4), mat.dark, 0, 0.09, 0, g);
+      for (const [sx, sz] of [[-0.62, -0.62], [0.62, -0.62], [-0.62, 0.62], [0.62, 0.62]]) add(new THREE.BoxGeometry(0.14, 0.03, 0.14), mat.paint, sx, 0.19, sz, g, false);
+      add(new THREE.CylinderGeometry(0.5, 0.6, 0.3, 32), mat.robot, 0, 0.33, 0, g);
+      const yaw = group(0, 0.48, 0, g);
+      add(new THREE.CylinderGeometry(0.42, 0.46, 0.48, 32), mat.robot, 0, 0.24, 0, yaw);
+      add(new THREE.CylinderGeometry(0.2, 0.2, 0.8, 24), mat.dark, 0, 0.55, 0, yaw).rotation.z = Math.PI / 2;
+      const sh = group(0, 0.55, 0, yaw);
+      add(rbox(0.38, 1.7, 0.42, 0.14), mat.robot, 0, 0.85, 0, sh);
+      const el = group(0, 1.7, 0, sh);
+      add(new THREE.CylinderGeometry(0.22, 0.22, 0.6, 24), mat.dark, 0, 0, 0, el).rotation.z = Math.PI / 2;
+      add(rbox(0.3, 1.35, 0.32, 0.12), mat.robot, 0, 0.68, 0, el);
+      const wr = group(0, 1.35, 0, el);
+      add(new THREE.CylinderGeometry(0.15, 0.15, 0.24, 20), mat.steel, 0, 0.12, 0, wr);
+      for (const s of [-0.09, 0.09]) add(new THREE.BoxGeometry(0.05, 0.3, 0.14), mat.steel, s, 0.36, 0, wr);
+      add(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 8), mat.dark, 0.25, 0.85, 0.2, sh, false); // cable
+      arms.push({ x, yaw, sh, el, wr, ph: i * 1.7 });
+      pickable(g, { name, kind: "routine", what });
+      tag(name, new THREE.Vector3(x, Y0 + 4, z));
+    });
+
+    // ---- the CI gates: arches over the belt, a scanning bar that lights when a crate passes
+    const gates = D.gates.map(([name, what], i) => {
+      const x = BX1 - 7 + i * 3.4, g = group(x, Y0, BZ);
+      for (const s of [-1, 1]) add(rbox(0.32, 2.7, 0.32, 0.05), mat.dark, 0, 1.35, s * 0.95, g);
+      add(rbox(0.5, 0.42, 2.4, 0.08), mat.dark, 0, 2.7, 0, g);
+      const bar = add(new THREE.BoxGeometry(0.08, 0.05, 1.9), M(0x3ccf78, 0.4, 0, { emissive: 0x3ccf78, emissiveIntensity: 0.4 }), 0, 2.46, 0, g, false);
+      const ss = sign(name, 1.6, 0.34, "#191e2d"); ss.position.set(0.26, 2.7, 0); ss.rotation.y = Math.PI / 2; g.add(ss);
+      pickable(g, { name, kind: "CI gate", what });
+      return { x, bar, t: 0 };
+    });
+
+    // ---- main: the warehouse at the end of the belt, its dock, and the truck that ships promotions
+    const WX = BX1 + 4.6, WZ = BZ - 1.5;
+    const wh = group(WX, Y0, WZ);
+    add(rbox(8, 5.6, 9, 0.08), mat.whdark, 0, 2.8, 0, wh);
+    add(new THREE.BoxGeometry(8.2, 0.3, 9.2), mat.roof, 0, 5.7, 0, wh);
+    for (let i = 0; i < 3; i++) add(rbox(1.4, 0.6, 1.2, 0.06), mat.hvac, -2.5 + i * 2.5, 6.15, -2, wh);
+    const mainSign = sign("main", 3.2, 0.95, "#f2702c"); mainSign.position.set(0, 4.5, 4.52); wh.add(mainSign);
+    for (const dx of [-1.8, 1.8]) { add(new THREE.BoxGeometry(2.6, 2.6, 0.08), mat.steel, dx, 1.3 + 0.9, 4.54, wh); for (let i = 1; i < 11; i++) add(new THREE.BoxGeometry(2.6, 0.02, 0.02), mat.dark, dx, 0.9 + i * 0.24, 4.6, wh, false); }
+    add(new THREE.BoxGeometry(8, 0.9, 2.2), mat.concrete, 0, 0.45, 5.6, wh);
+    for (const dx of [-3, 0, 3]) add(new THREE.BoxGeometry(0.4, 0.5, 0.2), mat.tire, dx, 0.7, 6.72, wh);
+    add(new THREE.BoxGeometry(0.06, 1.3, 1.3), mat.dark, -4.03, BELT_Y - Y0 + 0.5, BZ - WZ, wh);
+    pickable(wh, { name: "main", kind: "branch", what: "where every PR lands" });
+    const truck = group(WX + 1.8, Y0, WZ + 9.4);
+    add(rbox(2.3, 2.5, 6, 0.08), mat.white, 0, 1.75, 0, truck);
+    add(new THREE.BoxGeometry(2.34, 0.28, 6.04), M(0xf2702c, 0.45), 0, 1.25, 0, truck);
+    add(new THREE.BoxGeometry(2.2, 0.35, 6), mat.dark, 0, 0.55, 0, truck);
+    const cab = group(0, 0, 3.9, truck);
+    add(rbox(2.2, 2.0, 1.9, 0.22), mat.white, 0, 1.5, 0, cab);
+    add(new THREE.BoxGeometry(2.0, 0.85, 0.04), mat.visor, 0, 1.85, 0.96, cab);
+    for (const [wx, wz] of [[-1.05, -2], [1.05, -2], [-1.05, -0.8], [1.05, -0.8], [-1.05, 3.9], [1.05, 3.9]]) { const t = add(new THREE.CylinderGeometry(0.48, 0.48, 0.38, 28), mat.tire, wx, 0.48, wz, truck); t.rotation.z = Math.PI / 2; add(new THREE.CylinderGeometry(0.24, 0.24, 0.4, 20), mat.steel, wx, 0.48, wz, truck).rotation.z = Math.PI / 2; }
+    pickable(truck, { name: D.deploy[0], kind: "promotion", what: D.deploy[1] });
+    tag(D.deploy[0], new THREE.Vector3(WX + 1.8, Y0 + 3.6, WZ + 9));
+    tag("main", new THREE.Vector3(WX, Y0 + 7, WZ));
+    // a forklift shuttling pallets in front of the dock
+    const fork = group(WX - 2, Y0, WZ + 7.4);
+    add(rbox(1.0, 0.8, 1.5, 0.12), M(0xf2c14e, 0.45, 0.1), 0, 0.6, 0, fork);
+    add(new THREE.BoxGeometry(0.06, 1.8, 0.06), mat.dark, -0.42, 1.1, 0.78, fork); add(new THREE.BoxGeometry(0.06, 1.8, 0.06), mat.dark, 0.42, 1.1, 0.78, fork);
+    add(new THREE.BoxGeometry(0.9, 0.06, 0.06), mat.dark, 0, 2.0, -0.4, fork);
+    for (const s of [-0.25, 0.25]) add(new THREE.BoxGeometry(0.1, 0.05, 0.9), mat.steel, s, 0.12, 1.2, fork);
+    add(new THREE.BoxGeometry(0.9, 0.14, 0.9), mat.pallet, 0, 0.22, 1.2, fork); add(rbox(0.7, 0.55, 0.7, 0.03), mat.crate, 0, 0.56, 1.2, fork);
+    for (const [wx, wz] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) add(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 18), mat.tire, wx, 0.22, wz, fork).rotation.z = Math.PI / 2;
+
+    // ---- the monitors: light towers along the front, a lamp in the colour of their state
+    const LAMP = { ok: 0x3ccf78, warn: 0xf0a33a, bad: 0xff3b3b };
+    const lamps = D.monitors.map(([name, st, what], i) => {
+      const x = -17 + i * 6.2, z = 11.6, g = group(x, Y0, z);
+      add(new THREE.CylinderGeometry(0.42, 0.5, 0.25, 24), mat.dark, 0, 0.12, 0, g);
+      add(new THREE.CylinderGeometry(0.07, 0.09, 3.6, 12), mat.steel, 0, 2.0, 0, g);
+      add(rbox(0.62, 0.5, 0.5, 0.08), mat.white, 0, 3.85, 0, g);
+      const lm = M(LAMP[st], 0.25, 0, { emissive: LAMP[st], emissiveIntensity: 2.2 });
+      add(new THREE.SphereGeometry(0.24, 24, 16), lm, 0, 4.32, 0, g, false);
+      add(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 24), mat.dark, 0, 4.58, 0, g);
+      const light = new THREE.PointLight(LAMP[st], st === "bad" ? 9 : 3, 7, 2); light.position.set(0, 4.32, 0); g.add(light);
+      pickable(g, { name, kind: "monitor", what });
+      tag(name, new THREE.Vector3(x, Y0 + 5.2, z), st === "bad");
+      return { lm, light, bad: st === "bad" };
+    });
+
+    // ---- Pulse: the control tower in the corner, glass cab, its radar turning
+    const pt = group(-21.5, Y0, 11);
+    add(rbox(2.2, 6.2, 2.2, 0.06), M(0xe2ded6, 0.85, 0, { map: concrete }), 0, 3.1, 0, pt);
+    add(rbox(3.3, 1.4, 3.3, 0.1), mat.glass, 0, 6.9, 0, pt);
+    for (const [sx, sz] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]]) add(new THREE.BoxGeometry(0.1, 1.4, 0.1), mat.dark, sx, 6.9, sz, pt);
+    add(rbox(3.6, 0.28, 3.6, 0.06), mat.dark, 0, 7.75, 0, pt);
+    add(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 10), mat.steel, 0, 8.4, 0, pt);
+    const radar = group(0, 8.95, 0, pt);
+    add(new THREE.CylinderGeometry(0.85, 0.7, 0.1, 32), mat.white, 0, 0, 0.12, radar).rotation.x = Math.PI / 2.6;
+    pickable(pt, { name: "Pulse", kind: "monitor of the monitors", what: "checks every monitor against the roster" });
+    tag("Pulse", new THREE.Vector3(-21.5, Y0 + 10, 11));
+
+    // ---- the park around it: trees, cars in the bays, light poles on the yard
+    const trees = [];
+    for (let i = 0; i < 46; i++) {
+      const side = i % 4, t = rnd();
+      const x = side < 2 ? -40 + t * 96 : side === 2 ? -40 - rnd() * 8 : 51 + rnd() * 8;
+      const z = side === 0 ? -26 - rnd() * 8 : side === 1 ? 35 + rnd() * 6 : -24 + t * 56;
+      const s = 0.8 + rnd() * 0.7, g = group(x, 0, z);
+      add(new THREE.CylinderGeometry(0.18 * s, 0.24 * s, 1.6 * s, 8), mat.trunk, 0, 0.8 * s, 0, g);
+      add(new THREE.IcosahedronGeometry(1.4 * s, 1), rnd() < 0.5 ? mat.leaf : mat.leaf2, 0, 2.4 * s, 0, g).scale.set(1, 1.15, 1);
+      add(new THREE.IcosahedronGeometry(1.0 * s, 1), mat.leaf2, 0.5 * s, 3.2 * s, 0.3 * s, g);
+      trees.push(g);
+    }
+    const CARS = [0x2f3a4c, 0xb8bcc4, 0x7a1f24, 0xf4f4f2, 0x1d2027, 0x3f5f80];
+    for (let i = 0; i < 6; i++) {
+      const g = group(29.3 + i * 2.6 + (i > 2 ? 2.6 : 0), 0, 18 + (i % 2 ? 0.4 : -0.3));
+      const body = M(CARS[i], 0.28, 0.6);
+      add(rbox(1.8, 0.7, 4.2, 0.28), body, 0, 0.6, 0, g);
+      add(rbox(1.6, 0.6, 2.2, 0.25), body, 0, 1.15, -0.2, g);
+      add(rbox(1.62, 0.42, 2.0, 0.18), mat.visor, 0, 1.2, -0.2, g);
+      for (const [wx, wz] of [[-0.85, -1.3], [0.85, -1.3], [-0.85, 1.3], [0.85, 1.3]]) add(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 20), mat.tire, wx, 0.34, wz, g).rotation.z = Math.PI / 2;
+    }
+
+    // ---- the workers: agents walking between the hall doors, the arms and the towers
+    const stops = [...halls.map((h) => new THREE.Vector3(h.x + 1.7, Y0, h.doorZ + 0.8)), ...arms.map((a) => new THREE.Vector3(a.x + 1.5, Y0, BZ + 3.8)), ...lamps.map((l, i) => new THREE.Vector3(-17 + i * 6.2 + 1, Y0, 10))];
+    const workers = [];
+    for (let i = 0; i < 10; i++) {
+      const g = group(0, Y0, 0);
+      const legs = [-0.1, 0.1].map((s) => { const p = group(s, 0.44, 0, g); add(rbox(0.12, 0.44, 0.14, 0.05), mat.dark, 0, -0.22, 0, p); return p; });
+      add(new THREE.CapsuleGeometry(0.21, 0.38, 6, 18), mat.white, 0, 0.8, 0, g);
+      add(new THREE.BoxGeometry(0.42, 0.06, 0.3), M(0xf2c14e, 0.5), 0, 0.92, 0, g);
+      add(new THREE.SphereGeometry(0.18, 22, 16), mat.white, 0, 1.3, 0, g);
+      add(new THREE.SphereGeometry(0.2, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), M(0xf2c14e, 0.4), 0, 1.36, 0, g); // hard hat
+      add(rbox(0.28, 0.1, 0.06, 0.03), mat.visor, 0, 1.3, 0.16, g);
+      const a = stops[i % stops.length].clone(), b = stops[(i * 5 + 3) % stops.length].clone();
+      g.position.copy(a);
+      workers.push({ g, legs, a, b, t: rnd(), ph: rnd() * 6 });
+      pickable(g, { name: "Agent", kind: "worker", what: "a coding agent between jobs" });
+    }
+
+    // ---- the crates: pull requests, out of a hall, along the belt, through the gates, into main
+    const counter = document.getElementById("f3-n"); let merged = Number(counter?.textContent || 0);
+    const tapes = halls.map((h) => M(new THREE.Color(h.color).getHex(), 0.5));
+    const crates = [];
+    const spawn = (c) => { const i = Math.floor(rnd() * halls.length), h = halls[i]; c.path = [new THREE.Vector3(h.x, 0, h.doorZ), new THREE.Vector3(h.x, 0, BZ), new THREE.Vector3(BX1 + 0.4, 0, BZ)]; c.seg = 0; c.u = 0; c.tape.material = tapes[i]; };
+    for (let i = 0; i < (still ? 0 : 18); i++) {
+      const g = group(0, BELT_Y + 0.05, 0);
+      add(rbox(0.6, 0.46, 0.6, 0.04), mat.crate, 0, 0.23, 0, g);
+      const tape = add(new THREE.BoxGeometry(0.62, 0.47, 0.12), tapes[0], 0, 0.23, 0, g, false);
+      const c = { g, tape }; spawn(c); c.seg = rnd() < 0.5 ? 0 : 1; c.u = rnd(); crates.push(c);
+    }
+
+    // ---- camera, post, controls, labels, hover
+    const cam = new THREE.PerspectiveCamera(26, W() / H(), 0.5, 600);
+    const center = new THREE.Vector3(0, 1.8, 1.5);
+    let composer = null, ao = null, bloom = null;
+    if (PP) {
+      try {
+        const rt = new THREE.WebGLRenderTarget(W() * DPR, H() * DPR, { type: THREE.HalfFloatType, samples: 4 });
+        composer = new PP.EffectComposer(renderer, rt);
+        composer.addPass(new PP.RenderPass(scene, cam));
+        ao = new PP.GTAOPass(scene, cam, W(), H());
+        ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.1, samples: 12 });
+        ao.blendIntensity = 0.85;
+        composer.addPass(ao);
+        bloom = new PP.UnrealBloomPass(new THREE.Vector2(W(), H()), 0.22, 0.4, 1.0);
+        composer.addPass(bloom);
+        composer.addPass(new PP.OutputPass());
+      } catch { composer = null; }
+    }
+    const fit = () => { const a = W() / H(); cam.aspect = a; const dist = 64 / Math.min(1, a / 1.7); cam.position.copy(center).add(new THREE.Vector3(0.55, 0.6, 0.86).normalize().multiplyScalar(dist)); cam.updateProjectionMatrix(); renderer.setSize(W(), H()); if (composer) { composer.setPixelRatio(DPR); composer.setSize(W(), H()); } };
+    fit(); cam.lookAt(center);
     const controls = new OrbitControls(cam, renderer.domElement);
-    Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, autoRotate: !still, autoRotateSpeed: 0.5, enableZoom: false, enablePan: false, minPolarAngle: Math.PI * 0.2, maxPolarAngle: Math.PI * 0.34 });
-    controls.target.copy(sphere.center);
+    Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, autoRotate: !still, autoRotateSpeed: 0.3, enableZoom: false, enablePan: false, minPolarAngle: Math.PI * 0.22, maxPolarAngle: Math.PI * 0.38 });
+    controls.target.copy(center);
     renderer.domElement.addEventListener("pointerdown", () => (controls.autoRotate = false), { once: true });
     const layer = host.querySelector(".map-layer");
-    labels.sort((a, b) => (b.alarm || 0) - (a.alarm || 0) || b.rank - a.rank);
-    const tags = labels.map((l) => { const e = document.createElement("span"); e.className = "city-label" + (l.alarm ? " alarm" : ""); e.textContent = l.text; layer.appendChild(e); return { ...l, e }; });
+    const els = tags.map((t) => { const e = document.createElement("span"); e.className = "f3-tag" + (t.bad ? " bad" : ""); e.textContent = t.text; layer.appendChild(e); return { ...t, e }; });
     const tip = host.querySelector(".map-tip");
-    const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let hover = null;
+    const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
     renderer.domElement.addEventListener("pointermove", (ev) => {
       const r = renderer.domElement.getBoundingClientRect(); ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, cam);
-      const o = ray.intersectObjects(blocks, false)[0]?.object || null;
-      if (hover && hover !== o) hover.material.emissive.setHex(0);
-      hover = o; renderer.domElement.style.cursor = o ? "pointer" : "grab";
+      const o = ray.intersectObjects(picks, false)[0]?.object;
+      renderer.domElement.style.cursor = o ? "pointer" : "grab";
       if (!o) { tip.hidden = true; return; }
-      o.material.emissive.setHex(0x2a2a2a);
-      const u = o.userData; tip.innerHTML = "<b></b><span></span>"; tip.children[0].textContent = u.name; tip.children[1].textContent = u.kind + " · " + u.what;
+      const u = o.userData.info; tip.innerHTML = "<b></b><span></span>"; tip.children[0].textContent = u.name; tip.children[1].textContent = u.kind + " · " + u.what;
       tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 240) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px"; tip.hidden = false;
     });
-    renderer.domElement.addEventListener("pointerleave", () => { tip.hidden = true; if (hover) hover.material.emissive.setHex(0); hover = null; });
+    renderer.domElement.addEventListener("pointerleave", () => (tip.hidden = true));
     new ResizeObserver(fit).observe(host);
     let seen = true; new IntersectionObserver((es) => (seen = es[0].isIntersecting)).observe(host);
-    const v3 = new THREE.Vector3(); let flash = 0;
-    const frame = (t) => {
+
+    const v3 = new THREE.Vector3(), clock = new THREE.Clock(); let flash = 0, truckT = 0, forkT = 0, el = 0;
+    const frame = () => {
+      const dt = Math.min(0.05, clock.getDelta()); el += dt;
       controls.update();
-      for (const m of cars) { const u = m.userData; u.t += u.v;
-        // first a short hop from the lot to the road, then down the road to main
-        if (u.t < 0.2) { const k = u.t / 0.2; m.position.set(u.x0 + (rx + u.lane - u.x0) * k, 0.12, u.z0); }
-        else { const k = (u.t - 0.2) / 0.8; m.position.set(rx + u.lane, 0.12, u.z0 + (mz - 0.9 - u.z0) * k); }
-        if (u.t >= 1) { spawn(m); flash = 12; if (counter) counter.textContent = String(++merged); } }
-      for (const m of idle) { const u = m.userData; u.a += u.v; m.position.set(u.cx + Math.cos(u.a) * u.r, 0.1, u.cz + Math.sin(u.a) * u.r); }
-      main.material.emissive.setHex(flash > 0 ? 0x5a2a10 : 0); if (flash > 0) flash--;
-      if (!still) for (const b of blocks) if (b.userData.alarm) b.material.emissive.setHex(Math.sin(t / 220) > 0 ? 0x551100 : 0);
-      renderer.render(scene, cam);
+      if (!still) {
+        arms.forEach((a) => { const t = el * 0.8 + a.ph; a.yaw.rotation.y = Math.sin(t) * 0.9; a.sh.rotation.z = -0.35 + Math.sin(t * 1.3) * 0.25; a.el.rotation.z = 1.15 + Math.sin(t * 1.3 + 1) * 0.35; a.wr.rotation.y = t * 2; });
+        for (const c of crates) {
+          c.u += dt * 1.6 / Math.max(0.5, c.path[c.seg].distanceTo(c.path[c.seg + 1]));
+          if (c.u >= 1) { c.u = 0; c.seg++; }
+          if (c.seg >= 2) { spawn(c); merged++; flash = 0.4; if (counter) counter.textContent = String(merged); }
+          const a = c.path[c.seg], b = c.path[c.seg + 1];
+          c.g.position.set(a.x + (b.x - a.x) * c.u, BELT_Y + 0.05, a.z + (b.z - a.z) * c.u);
+          for (const gt of gates) if (c.seg === 1 && Math.abs(c.g.position.x - gt.x) < 0.35) gt.t = 0.5;
+        }
+        for (const gt of gates) { gt.t = Math.max(0, gt.t - dt); gt.bar.material.emissiveIntensity = 0.4 + gt.t * 6; }
+        for (const w of workers) {
+          w.t += dt * 0.55 / Math.max(1, w.a.distanceTo(w.b));
+          if (w.t >= 1) { w.t = 0; w.a.copy(w.b); w.b.copy(stops[Math.floor(rnd() * stops.length)]); }
+          w.g.position.lerpVectors(w.a, w.b, w.t); w.g.position.y = Y0 + Math.abs(Math.sin(el * 8 + w.ph)) * 0.035;
+          w.g.rotation.y = Math.atan2(w.b.x - w.a.x, w.b.z - w.a.z);
+          w.legs[0].rotation.x = Math.sin(el * 8 + w.ph) * 0.45; w.legs[1].rotation.x = -w.legs[0].rotation.x;
+        }
+        radar.rotation.y = el * 1.4;
+        for (const l of lamps) if (l.bad) { const on = Math.sin(el * 6) > 0; l.lm.emissiveIntensity = on ? 3.2 : 0.1; l.light.intensity = on ? 10 : 0; }
+        truckT = (truckT + dt / 16) % 1;
+        const tz = truckT < 0.35 ? 0 : truckT < 0.6 ? (truckT - 0.35) / 0.25 : truckT < 0.75 ? 1 : 1 - (truckT - 0.75) / 0.25;
+        truck.position.z = WZ + 9.4 + tz * 3.6;
+        forkT += dt / 7; const fx = Math.sin(forkT * Math.PI * 2);
+        fork.position.x = WX - 2 + fx * 2.6; fork.rotation.y = Math.cos(forkT * Math.PI * 2) > 0 ? Math.PI / 2 : -Math.PI / 2;
+        flash = Math.max(0, flash - dt); mainSign.material.emissive.setHex(flash > 0 ? 0x5a2a10 : 0);
+      }
+      if (composer) composer.render(); else renderer.render(scene, cam);
       const r = host.getBoundingClientRect(), placed = [];
-      for (const g of tags) {
+      for (const g of els) {
         v3.copy(g.pos).project(cam);
         const x = (v3.x + 1) / 2 * r.width, y = (1 - v3.y) / 2 * r.height, w = g.w ??= g.e.offsetWidth, box = [x - w / 2, y - 22, x + w / 2, y];
-        const clash = placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
+        const clash = v3.z > 1 || placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]);
         g.e.style.visibility = clash ? "hidden" : "visible"; if (!clash) placed.push(box);
         g.e.style.transform = "translate(" + x + "px," + y + "px) translate(-50%,-100%)";
       }
     };
-    // the first frame is drawn right away, so the board shows even before the browser starts animating
-    const loop = (t) => { requestAnimationFrame(loop); if (seen && !document.hidden) frame(t); };
-    frame(0); requestAnimationFrame(loop);
+    const loop = () => { requestAnimationFrame(loop); if (seen && !document.hidden) frame(); };
+    frame(); requestAnimationFrame(loop);
   };
   const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: "300px" });
   io.observe(host);

@@ -619,7 +619,7 @@ async function judge(factory, repoId) {
     const badShare = recent.length ? recent.filter((b) => b.status !== "ok").length / recent.length : 0;
     const h = last ? (Date.now() - new Date(last.ts)) / 36e5 : null;
     let state = "alive", why = "";
-    if (!last) [state, why] = ["dead", `no heartbeat in ${WINDOW} days`];
+    if (!last) [state, why] = ["silent", "no heartbeat yet: Hush has never heard from it"];
     else if (h > silence) [state, why] = ["dead", `last heartbeat ${Math.round(h)} h ago, tolerates ${silence} h`];
     else if (last.status === "ok" && vol(last) === 0 && !m.zero_ok) [state, why] = ["lying", `reported ok with ${m.volume_key} = 0`];
     else if (recent.length >= 4 && badShare > 0.3) [state, why] = ["degraded", `${Math.round(badShare * 100)}% of runs in 14 days were not ok`];
@@ -2018,7 +2018,7 @@ function skeletonPage(repo) {
   `, { live: true, stale: true, app: true });
 }
 
-const STATE = { alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degraded: ["bad", "Chronically degraded"], lying: ["bad", "Said ok, read nothing"], dead: ["bad", "Down"], retired: ["none", "Retired"] };
+const STATE = { silent: ["none", "No heartbeat yet"], alive: ["ok", "Operational"], warn: ["warn", "Degraded"], degraded: ["bad", "Chronically degraded"], lying: ["bad", "Said ok, read nothing"], dead: ["bad", "Down"], retired: ["none", "Retired"] };
 
 // Onboarding for a repo: the app is installed (or the user could not see this page), so what is
 // left is the heartbeat. Shown at the top of the repo page until the first heartbeat arrives,

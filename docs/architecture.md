@@ -45,6 +45,8 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | `automations` | One row per scheduled job: state, schedule, command, skills, 30-day runs, misses, tokens, cost, time. Unique on `(repo_id, key)`. |
 | `automation_runs` | Each run of an automation: when, status, origin, tokens, cost, duration, note, link. Unique on `(automation_id, dedupe)`. |
 | `events` | Notifications: one row per change (monitor state, late routine, CI broken or fixed, PR opened or merged, issue opened, spend jump). Unique on `(repo_id, dedupe)`. |
+| `waitlist` | Landing waitlist: email (unique on `lower(email)`), when, which form, referrer, utm, user agent. Not tenant data. |
+| `landing_events` | The landing's own analytics: view, click, scroll and waitlist beacons with an anonymous id, label, href, section, path, referrer, utm, viewport width, user agent, country (only behind a geo header). Not tenant data. |
 | `settings` | The GitHub App's credentials (id, slug, private key, OAuth secret), sealed; each person's time zone (`tz:<login>`); replaced ingest keys during their 24 h grace (`prevkey:<sha256>`). |
 
 ## Loading a repo page
@@ -81,7 +83,10 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `POST /r/<owner>/<repo>/rules` | Create, edit, pause or delete a price rule; `{text}` makes one from a sentence. |
 | `GET /settings`, `POST` | The signed-in person's settings: their time zone. |
 | `GET /r/<owner>/<repo>/report?day=YYYY-MM-DD` | The daily factory report for one UTC day (default yesterday), as the email renders it. |
-| `GET /landing` | The landing, also when signed in (it then says Enter instead of Sign in). |
+| `GET /landing` | The landing, also when signed in (it then says Enter instead of Sign in). In dev, `?out=1` shows it signed out. |
+| `POST /api/waitlist` | Join the waitlist: JSON `{email, source}` answers JSON; a plain form post redirects back with `?joined=1` (or `already`, `invalid`, `busy`). Same-site, 10 per IP per hour, a honeypot field. |
+| `POST /api/track` | The landing's beacons (4 KB, bots dropped, 600 per IP per hour). Always 204. |
+| `GET /admin/landing`, `/admin/landing/waitlist.csv` | Views, visitors, funnel, clicks, referrers, campaigns, scroll depth and the waitlist, for `ADMIN_LOGINS` (and `DEV_USER` in dev). |
 | `POST /r/<owner>/<repo>/ask` | The assistant: streams an answer as plain text. |
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
 | `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
@@ -142,7 +147,7 @@ On start-up Hush brings older data forward, once each:
 
 - Deploy: `cd status && fly deploy -a factory-status`.
 - Secrets: `SECRET` and `SETUP_TOKEN` (required), `DATABASE_URL` (Neon), `OPENROUTER_API_KEY`
-  and optionally `HUSH_MODEL` (the assistant). Set with `fly secrets set NAME=value -a factory-status`.
+  and optionally `HUSH_MODEL` (the assistant) and `ADMIN_LOGINS` (comma-separated GitHub logins that can read `/admin/landing`). Set with `fly secrets set NAME=value -a factory-status`.
 - Logs: `fly logs -a factory-status`.
 - The machine auto-stops when idle; the first request after that pays a cold start, which the
   stored snapshots hide.

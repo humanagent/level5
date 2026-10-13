@@ -2,8 +2,6 @@
 const REPO = "https://github.com/humanagent/hush";
 // Every number in the preview is invented and labelled as an example.
 
-const GITHUB = `<svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
-
 // 30 days per example monitor: o = ok, d = degraded, s = skipped, . = no run
 const EXAMPLE = [
   ["errors", "Operational", "ok", "oooooooooooooooooooooooooooooo", "100"],
@@ -76,7 +74,7 @@ const INTEGRATIONS = [
   ["vercel", "#000000", LOGO_VERCEL, "Vercel", "Daily spend per project, and heartbeats from your deploys and crons."],
 ];
 
-export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars = null, viewer = null }) {
+export function landingPage({ msg, esc, css, fonts, icon, mark, stars = null, viewer = null, wl = "" }) {
   // signed in (only reachable at /landing): every way in goes to the repos instead of to sign-in
   const enter = viewer ? `<a class="signin enter" href="/">Enter →</a>` : `<a class="signin" href="/auth/login">Sign in</a>`;
   const bars = (s) => [...s].map((c) => `<i data-s="${{ o: "ok", d: "degraded", s: "skipped", ".": "" }[c]}"></i>`).join("");
@@ -102,8 +100,17 @@ export function landingPage({ install, msg, esc, css, fonts, icon, mark, stars =
   const dur = (s) => (s >= 60 ? Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s" : s + "s");
   const liveRows = LIVE.map(([n, w, step, d, k, s]) => `<li class="lj" data-st="run"><span class="lj-i">${SPIN}</span><span class="lj-n"><b>${n}</b><small>${w}</small></span><span class="lj-s">${step} <em>${d}/${k}</em></span><span class="lj-t">${dur(s)}</span><span class="lj-bar"><i style="width:${Math.round((d / k) * 100)}%"></i></span></li>`).join("");
 
-  const cta = () => `<div class="lcta">
-    ${viewer ? `<a class="lp pri" href="/">Open your repos →</a>` : `<a class="lp pri" href="${install}">${GITHUB}<span>Install on GitHub</span></a>`}
+  // Hush is a waitlist for now: every way in is an email. The form posts without JS too (back
+  // here with ?joined=1); with JS it answers in place. `wl` is that no-JS answer.
+  const WL_MSG = { joined: "You're on the list.", already: "You're already on the list.", invalid: "That email doesn't look right. Try again.", busy: "Too many tries from here. Try again later." };
+  const wlForm = (source) => `<form class="wl" method="post" action="/api/waitlist" data-wl${wl === "joined" || wl === "already" ? " data-done" : ""}>
+    <input type="hidden" name="source" value="${source}"><input class="wl-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <label class="wl-f"><span class="wl-sr">Email</span><input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@company.com"${source === "hero" ? ' id="join-email"' : ""}></label>
+    <button class="lp pri" type="submit" data-track="cta:${source}-submit">Join the waitlist</button>
+    <p class="wl-m" role="status" aria-live="polite"${wl === "invalid" || wl === "busy" ? ' data-s="bad"' : ""}>${WL_MSG[wl] || ""}</p>
+  </form>`;
+  const cta = (where) => `<div class="lcta">
+    ${viewer ? `<a class="lp pri" href="/">Open your repos →</a>` : `<a class="lp pri" href="#join" data-wl-go data-track="cta:${where}-waitlist">Join the waitlist</a>`}
   </div>`;
 
   // Line icons for the lhero cards and the feature heads, drawn in the accent.
@@ -154,6 +161,17 @@ body.land{margin:0;color:var(--l-ink);font-family:var(--f);font-size:15px;letter
 .land .lp.pri{color:#fff;background:var(--l-ink);box-shadow:0 10px 34px rgba(62,64,105,.18)}
 .land .lp.alt{color:var(--l-ink);background:color-mix(in srgb,var(--l-surface) 76%,transparent);box-shadow:inset 0 0 0 1px var(--l-line);backdrop-filter:blur(24px)}.lp.alt:hover{background:rgba(255,255,255,.6)}
 .lcta{display:flex;gap:10px;flex-wrap:wrap}
+/* waitlist: one email pill with the button inside it, a line under it for the answer */
+.wl{display:flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:460px;padding:5px;border-radius:999px;background:rgba(255,255,255,.62);box-shadow:inset 0 0 0 1px var(--l-line),0 10px 34px rgba(62,64,105,.1);backdrop-filter:blur(24px)}
+.wl-f{flex:1 1 200px;min-width:0}.wl-f input{width:100%;box-sizing:border-box;min-height:44px;padding:0 18px;border:0;border-radius:999px;background:transparent;color:var(--l-ink);font:500 15px var(--f);letter-spacing:-.3px;outline:none}
+.wl-f input::placeholder{color:rgba(25,30,45,.42)}.wl:focus-within{box-shadow:inset 0 0 0 1.5px var(--l-indigo),0 10px 34px rgba(91,77,255,.16)}
+.wl .lp{min-width:0;min-height:44px;padding:0 22px}.wl .lp[disabled]{opacity:.6;transform:none}
+.wl-m{flex:1 0 100%;margin:0;padding:0 18px;font-size:13.5px;color:var(--l-muted);min-height:0}.wl-m:empty{display:none}.wl-m[data-s=bad]{color:var(--bad)}
+.wl[data-done]{background:none;box-shadow:none;backdrop-filter:none;padding:0}.wl[data-done] .wl-f,.wl[data-done] .lp{display:none}
+.wl[data-done] .wl-m{padding:0;font-size:16px;font-weight:500;color:var(--l-indigo)}.wl[data-done] .wl-m::before{content:"✓ ";}
+.wl-sr,.wl-hp{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.lhero .wl{animation:lin .68s var(--l-ease) both;animation-delay:.22s}.inst-b .wl{margin:4px 0 2px;background:#fff}.inst-b .wl[data-done]{background:none}
+@media(max-width:760px){.wl{border-radius:22px}.wl .lp{flex:1 1 100%}}
 
 /* lhero */
 .lhero{position:relative;min-height:min(860px,100svh);display:grid;align-items:center;overflow:hidden;
@@ -332,17 +350,17 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script></head><body class="land">
 
 <nav class="lnav" id="lnav"><a class="logo" href="/">${mark()}<span>hush</span></a>
-  <span class="lnav-r"><a class="t" href="#status">Status</a><a class="t" href="#costs">Costs</a><a class="t" href="#factory">Factory</a><a class="t" href="#sources">Sources</a><a class="t" href="#install">Install</a><a class="t" href="${REPO}" target="_blank" rel="noopener">GitHub</a>
-  ${viewer ? `<a class="lp alt" href="/landing">${esc(viewer)}</a><a class="lp pri" href="/">Enter →</a>` : `<a class="lp alt" href="/auth/login">Sign in</a><a class="lp pri" href="${install}">${GITHUB}<span>Install</span></a>`}</span>
+  <span class="lnav-r"><a class="t" href="#status">Status</a><a class="t" href="#costs">Costs</a><a class="t" href="#factory">Factory</a><a class="t" href="#sources">Sources</a><a class="t" href="#install">Waitlist</a><a class="t" href="${REPO}" target="_blank" rel="noopener">GitHub</a>
+  ${viewer ? `<a class="lp alt" href="/landing">${esc(viewer)}</a><a class="lp pri" href="/">Enter →</a>` : `<a class="lp alt" href="/auth/login" data-track="nav:signin">Sign in</a><a class="lp pri" href="#join" data-wl-go data-track="cta:nav-waitlist">Join the waitlist</a>`}</span>
 </nav>
 
-<header class="lhero">
+<header class="lhero" id="hero">
   <canvas id="dither" aria-hidden="true"></canvas>
   <div class="lhero-in">
     <div>
       <h1>AI Native Observability <em>for Automated Developments</em></h1>
       <p class="lede">When agents ship more than you can read, Hush shows which routines ran, which went silent, and what each one cost.</p>
-      ${cta()}
+      ${viewer ? cta("hero") : `<div id="join">${wlForm("hero")}</div>`}
       <div class="harness"><span>For your harness</span><span class="hn"><img src="${SI("16.32.0", "claude")}" alt="">Claude Code</span><span class="hn"><img src="${SI("13.21.0", "openai")}" alt="">Codex<em>soon</em></span></div>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
@@ -352,7 +370,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 
 <main class="frame">
 
-<section class="tools" aria-label="Works with">
+<section class="tools" id="tools" aria-label="Works with">
   <p>Works with all the tools you use</p>
   <ul>${TOOLS.map(([name, logo]) => `<li>${logo ? `<img src="${logo}" alt="" loading="lazy">` : `<i aria-hidden="true">${name[0]}</i>`}${name}</li>`).join("")}</ul>
 </section>
@@ -360,7 +378,7 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 <section class="lsec" id="status">
   <div class="lsec-head">
     <div><span class="ltag">${ICONS.sm("beat")} Monitors</span><p class="lword">Status</p></div>
-    <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Hush checks them against your roster.</p>${cta()}</div>
+    <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Hush checks them against your roster.</p>${cta("status")}</div>
   </div>
   <div class="bento">
     <div class="tile b-status paint a" aria-label="Example status page">
@@ -488,22 +506,20 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 
 <section class="lsec" id="install">
   <div class="inst">
-    <div class="inst-l"><h2>Install Hush</h2><p>Connect GitHub, add Hush to the repo from Claude Code, and let it build the factory it will watch. Free and open source.</p></div>
+    <div class="inst-l"><h2>Join the waitlist</h2><p>Hush opens to a few factories at a time. Leave your email and we write when your spot is ready: connect GitHub, and let it build the factory it will watch. Free and open source.</p></div>
     <div class="inst-steps">
       <details name="inst" open>
-        <summary><span class="n">1</span>Connect GitHub</summary>
+        <summary><span class="n">1</span>Join the waitlist</summary>
         <div class="inst-b">
-          <p>Install the GitHub App on your account or organization, and pick one repo, a few or all of them. It only reads.</p>
-          ${viewer ? `<a class="lp pri" href="/">Open your repos →</a>` : `<a class="lp pri" href="${install}">${GITHUB}<span>Install on GitHub</span></a>`}
+          <p>Just an email. No card, no call.</p>
+          ${viewer ? `<a class="lp pri" href="/">Open your repos →</a>` : wlForm("install")}
         </div>
       </details>
       <details name="inst">
-        <summary><span class="n">2</span>Add Hush to the repo</summary>
+        <summary><span class="n">2</span>Get your invite</summary>
         <div class="inst-b">
-          <div class="inst-tabs" role="tablist"><span>Run in</span><button type="button" role="tab" aria-selected="true" data-tab="cc">Claude Code</button><button type="button" role="tab" aria-selected="false" data-tab="sh">Terminal</button></div>
-          <div class="cmdb" data-pane="cc"><span class="h">!</span><span data-cmd>curl -fsSL <span data-origin></span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span><button class="cp" type="button" aria-label="Copy" data-copy><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></div>
-          <div class="cmdb" data-pane="sh" hidden><span class="p">$</span><span data-cmd>curl -fsSL <span data-origin></span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span><button class="cp" type="button" aria-label="Copy" data-copy><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></div>
-          <p>At the root of the repo. Your ingest key is on the repo's Setup page in Hush, right after step 1. It adds a heartbeat hook, the <code>/hush-setup</code> skill and its templates under <code>.claude/</code>, and changes nothing else.</p>
+          <p>When your spot opens you get an email with the way in. Install the GitHub App on your account or organization and pick one repo, a few or all of them. It only reads.</p>
+          <p>Then one command at the root of the repo adds a heartbeat hook, the <code>/hush-setup</code> skill and its templates under <code>.claude/</code>, and changes nothing else.</p>
         </div>
       </details>
       <details name="inst">
@@ -530,6 +546,60 @@ background:radial-gradient(120% 80% at 70% 100%,#d9d4fb 0,transparent 60%),radia
 <footer class="lfoot"><span>hush · open source, MIT · <a href="${REPO}" target="_blank" rel="noopener">github.com/humanagent/hush</a></span><span>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login">Sign in</a>`}</span></footer>
 </main>
 
+${viewer ? "" : `<script>
+// First-party analytics, dogfooding: views, clicks, waitlist and how far each section is read go to
+// /api/track as beacons. An anonymous random id in localStorage, no cookies, nothing personal.
+(() => {
+  let aid; try { aid = localStorage.getItem("hush_aid") || (localStorage.setItem("hush_aid", aid = crypto.randomUUID()), aid); } catch { aid = "nostore"; }
+  const q = new URLSearchParams(location.search), utm = {};
+  for (const k of ["source", "medium", "campaign", "term", "content"]) if (q.get("utm_" + k)) utm[k] = q.get("utm_" + k).slice(0, 100);
+  const sec = (el) => { const s = el && el.closest("section[id],header[id],nav[id],footer"); return s ? s.id || s.tagName.toLowerCase() : ""; };
+  const track = window.hushTrack = (type, o = {}) => {
+    const b = JSON.stringify({ aid, type, path: location.pathname, ref: document.referrer, utm, vw: innerWidth, ...o });
+    try { navigator.sendBeacon ? navigator.sendBeacon("/api/track", new Blob([b], { type: "text/plain" })) : fetch("/api/track", { method: "POST", body: b, keepalive: true }); } catch {}
+  };
+  track("view");
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest && e.target.closest("a,button,[data-track]"); if (!el) return;
+    const label = el.dataset.track || el.getAttribute("aria-label") || el.textContent.replace(/\\s+/g, " ").trim().slice(0, 60);
+    track("click", { label, href: el.getAttribute("href") || "", section: sec(el) });
+  }, { capture: true });
+  // scroll depth: once per section, when its top reaches the middle of the screen
+  const seen = new Set(), io = new IntersectionObserver((es) => es.forEach((x) => {
+    if (!x.isIntersecting || seen.has(x.target.id)) return; seen.add(x.target.id); io.unobserve(x.target); track("scroll", { label: x.target.id, section: x.target.id });
+  }), { rootMargin: "0px 0px -50% 0px" });
+  document.querySelectorAll("header.lhero[id],section[id]").forEach((s) => io.observe(s));
+})();
+</script>`}
+<script>
+// Waitlist: post in place (the form also works without JS), then say so where the button was.
+(() => {
+  const T = (t, o) => window.hushTrack && window.hushTrack(t, o);
+  if (/[?&]joined=1/.test(location.search)) history.replaceState(null, "", location.pathname + location.hash);
+  document.querySelectorAll("[data-wl-go]").forEach((a) => a.addEventListener("click", (e) => {
+    const i = document.getElementById("join-email"); if (!i) return;
+    e.preventDefault(); i.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => i.focus({ preventScroll: true }), 350);
+  }));
+  document.querySelectorAll("form[data-wl]").forEach((f) => f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(f), m = f.querySelector(".wl-m"), btn = f.querySelector("button"), source = fd.get("source");
+    const q = new URLSearchParams(location.search), utm = {};
+    for (const k of ["source", "medium", "campaign", "term", "content"]) if (q.get("utm_" + k)) utm[k] = q.get("utm_" + k);
+    T("waitlist_submit", { label: source, section: source });
+    btn.disabled = true; delete m.dataset.s; m.textContent = "";
+    try {
+      const r = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: fd.get("email"), source, website: fd.get("website"), ref: document.referrer, utm }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Something went wrong. Try again.");
+      document.querySelectorAll("form[data-wl]").forEach((x) => { x.dataset.done = ""; x.querySelector(".wl-m").textContent = j.already ? "You're already on the list." : "You're on the list."; });
+      T("waitlist_join", { label: source, section: source });
+    } catch (err) {
+      m.dataset.s = "bad"; m.textContent = err.message; btn.disabled = false;
+      T("waitlist_error", { label: String(err.message).slice(0, 60), section: source });
+    }
+  }));
+})();
+</script>
 <script>
 // Install: the commands carry this Hush's own address, the tabs switch the shell, copy copies.
 (() => {

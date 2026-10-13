@@ -64,6 +64,15 @@ const SCHEMA = (pg) => `
     repo_id BIGINT NOT NULL, routine TEXT NOT NULL, url TEXT NOT NULL, token TEXT NOT NULL,
     created_by TEXT NOT NULL, created_at TEXT NOT NULL, last_fired_at TEXT, last_fired_by TEXT,
     last_session_url TEXT, last_error TEXT, PRIMARY KEY (repo_id, routine));
+  CREATE TABLE IF NOT EXISTS waitlist (
+    id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, email TEXT NOT NULL, created_at TEXT NOT NULL, source TEXT NOT NULL,
+    referrer TEXT NOT NULL, utm_source TEXT, utm_medium TEXT, utm_campaign TEXT, utm_term TEXT, utm_content TEXT, ua TEXT NOT NULL);
+  CREATE UNIQUE INDEX IF NOT EXISTS waitlist_email ON waitlist((lower(email)));
+  CREATE TABLE IF NOT EXISTS landing_events (
+    id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, ts TEXT NOT NULL, anon_id TEXT NOT NULL, type TEXT NOT NULL, label TEXT NOT NULL,
+    href TEXT NOT NULL, section TEXT NOT NULL, path TEXT NOT NULL, referrer TEXT NOT NULL, utm_source TEXT, utm_medium TEXT,
+    utm_campaign TEXT, utm_term TEXT, utm_content TEXT, vw INTEGER, ua TEXT NOT NULL, country TEXT);
+  CREATE INDEX IF NOT EXISTS landing_events_ts ON landing_events(ts);
 `;
 
 export async function openDb({ url, dataDir }) {

@@ -3031,14 +3031,14 @@ async function refreshStars() {
   } catch {}
 }
 
-function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
+function homePage(user, repos = [], msg = "", snaps = {}, viewer = null, wl = "") {
   const app = appConfig();
   if (!app) {
     return page("hush", `<header class="top">${LOGO}</header>
       <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK, stars: STARS.n, viewer: viewer?.login || null });
+  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK, stars: STARS.n, viewer: viewer?.login || null, wl });
   // Every repo the person can see, grouped by account, with the numbers from its last snapshot.
   const usdF = (n) => (n == null ? "–" : "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2)));
   const STATE_LABEL = { ok: "Operational", degraded: "Degraded", down: "Needs attention" };
@@ -3143,6 +3143,149 @@ async function insertBeat(repoId, b) {
   const ts = b.ts && !Number.isNaN(Date.parse(b.ts)) ? new Date(b.ts).toISOString() : new Date().toISOString();
   const body = JSON.stringify({ source: b.source === "session" ? "session" : "skill", window: b.window || "", swept: b.swept || {}, suppressed: b.suppressed ?? null, filed: (b.filed || []).map(Number).filter(Boolean), note: String(b.note || "").slice(0, 500), ...(b.report ? { report: String(b.report).slice(0, 60000), title: String(b.title || "").slice(0, 140) } : {}) });
   await db.run("INSERT INTO heartbeats (repo_id, monitor, ts, status, body) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", repoId, String(b.monitor).slice(0, 80), ts, status, body);
+}
+
+// --- landing: waitlist and first-party analytics ------------------------------------------------
+// Hush is a waitlist for now. The landing posts emails to /api/waitlist (JSON from its script, a
+// plain form post without JS) and its own beacons to /api/track: views, clicks, waitlist steps and
+// how far each section is read, under an anonymous id from localStorage. No cookies, no third
+// parties. Read at /admin/landing by the logins in ADMIN_LOGINS (and DEV_USER in dev).
+const ADMINS = new Set((process.env.ADMIN_LOGINS || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
+const isAdmin = (u) => !!u && (ADMINS.has(u.login.toLowerCase()) || (DEV && u.login === process.env.DEV_USER));
+const clientIp = (req) => req.headers["fly-client-ip"] || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
+// at most n per window per key, in memory (one process); idle keys go once the map grows
+const hits = new Map();
+function allowed(key, n, ms) {
+  const now = Date.now(), recent = (hits.get(key) || []).filter((t) => now - t < ms);
+  if (recent.length >= n) return false;
+  recent.push(now);
+  hits.set(key, recent);
+  if (hits.size > 2e4) for (const [k, v] of hits) if (now - v.at(-1) > 36e5) hits.delete(k);
+  return true;
+}
+const UTM = ["source", "medium", "campaign", "term", "content"];
+const utmOf = (o) => UTM.map((k) => (o && o[k] ? String(o[k]).slice(0, 100) : null));
+const BOT = /bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|embedly|curl|wget|python|node-fetch|go-http|axios|okhttp|httpclient|monitor/i;
+const TRACK_TYPES = new Set(["view", "click", "scroll", "waitlist_submit", "waitlist_join", "waitlist_error"]);
+// the landing's sections, top to bottom, for scroll depth
+const LANDING_SECTIONS = ["hero", "tools", "status", "costs", "factory", "sources", "install"];
+
+async function waitlistJoin(req, res, origin) {
+  const isForm = !/json/.test(req.headers["content-type"] || "");
+  // without JS: back to the landing it came from, with the answer in the URL
+  const back = (state, source) => {
+    let path = "/";
+    try { const r = new URL(req.headers.referer); if (r.origin === origin && r.pathname === "/landing") path = "/landing"; } catch {}
+    return redirect(res, `${path}?joined=${state}#${source === "install" ? "install" : "join"}`);
+  };
+  const site = req.headers["sec-fetch-site"];
+  if (site && site !== "same-origin" && site !== "none") return isForm ? redirect(res, "/") : json(res, 403, { error: "From the Hush page only." });
+  let b;
+  try {
+    const raw = await readBody(req, 8e3);
+    b = isForm ? Object.fromEntries(new URLSearchParams(raw)) : JSON.parse(raw || "{}");
+  } catch {
+    return isForm ? back("invalid") : json(res, 400, { error: "That did not go through. Try again." });
+  }
+  const source = ["hero", "install"].includes(b.source) ? b.source : "other";
+  if (!allowed(`wl:${clientIp(req)}`, 10, 36e5)) return isForm ? back("busy", source) : json(res, 429, { error: "Too many tries from here. Try again later." });
+  if (b.website) return isForm ? back(1, source) : json(res, 200, { ok: true }); // the hidden field: only a bot fills it
+  const email = String(b.email || "").trim();
+  if (email.length > 254 || !/^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[a-z]{2,}$/i.test(email)) return isForm ? back("invalid", source) : json(res, 400, { error: "That email doesn't look right." });
+  // the script sends the visit's referrer and utm; without JS the utm ride on the landing's URL (this post's Referer)
+  let utm = b.utm && typeof b.utm === "object" ? b.utm : {};
+  if (isForm) try { const r = new URL(req.headers.referer); utm = Object.fromEntries(UTM.map((k) => [k, r.searchParams.get("utm_" + k)])); } catch {}
+  const already = await db.one("SELECT id FROM waitlist WHERE lower(email) = $1", email.toLowerCase());
+  if (!already) await db.run("INSERT INTO waitlist (email, created_at, source, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content, ua) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING", email, new Date().toISOString(), source, String(b.ref || "").slice(0, 500), ...utmOf(utm), String(req.headers["user-agent"] || "").slice(0, 300));
+  return isForm ? back(already ? "already" : 1, source) : json(res, 200, { ok: true, already: !!already });
+}
+
+// A beacon never waits on the answer and never sees an error: always 204, bad input is dropped.
+async function landingTrack(req, res) {
+  try {
+    const ua = String(req.headers["user-agent"] || "");
+    const raw = await readBody(req, 4e3);
+    if (!ua || BOT.test(ua) || !allowed(`tr:${clientIp(req)}`, 600, 36e5)) return;
+    const b = JSON.parse(raw), s = (v, n) => String(v ?? "").slice(0, n);
+    if (!TRACK_TYPES.has(b.type) || !/^[\w-]{1,64}$/.test(b.aid || "")) return;
+    const vw = Number.isFinite(Number(b.vw)) ? Math.max(0, Math.min(1e4, Math.round(Number(b.vw)))) : null;
+    const country = s(req.headers["cf-ipcountry"] || req.headers["x-vercel-ip-country"], 8) || null;
+    await db.run("INSERT INTO landing_events (ts, anon_id, type, label, href, section, path, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content, vw, ua, country) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+      new Date().toISOString(), b.aid, b.type, s(b.label, 80), s(b.href, 300), s(b.section, 40), s(b.path, 100), s(b.ref, 500), ...utmOf(b.utm), vw, ua.slice(0, 300), country);
+  } catch {} finally {
+    if (!res.headersSent) { res.writeHead(204, { "cache-control": "no-store" }); res.end(); }
+  }
+}
+
+const csvCell = (v) => {
+  let x = String(v ?? "");
+  if (/^[=+\-@\t\r]/.test(x)) x = "'" + x; // a spreadsheet must not read it as a formula
+  return /[",\n\r]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x;
+};
+async function waitlistCsv() {
+  const cols = ["created_at", "email", "source", "referrer", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ua"];
+  const rows = await db.all(`SELECT ${cols.join(", ")} FROM waitlist ORDER BY created_at DESC`);
+  return [cols.join(","), ...rows.map((r) => cols.map((c) => csvCell(r[c])).join(","))].join("\n") + "\n";
+}
+
+async function landingAdmin(user, origin) {
+  const since = new Date(Date.now() - 30 * 864e5).toISOString();
+  const ev = (q) => db.all(q, since);
+  const [days, labels, [f], refs, utms, depth, wlTotal, [wl30], list] = await Promise.all([
+    ev("SELECT substr(ts, 1, 10) AS day, COUNT(*)::int AS views, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'view' AND ts >= $1 GROUP BY substr(ts, 1, 10) ORDER BY day"),
+    ev("SELECT label, section, COUNT(*)::int AS n, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'click' AND ts >= $1 GROUP BY label, section ORDER BY n DESC LIMIT 25"),
+    ev(`SELECT COUNT(DISTINCT CASE WHEN type = 'view' THEN anon_id END)::int AS v, COUNT(DISTINCT CASE WHEN type = 'click' AND label LIKE 'cta:%' THEN anon_id END)::int AS c,
+      COUNT(DISTINCT CASE WHEN type = 'waitlist_submit' THEN anon_id END)::int AS s, COUNT(DISTINCT CASE WHEN type = 'waitlist_join' THEN anon_id END)::int AS j, COUNT(*)::int AS n FROM landing_events WHERE ts >= $1`),
+    ev("SELECT referrer, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'view' AND ts >= $1 GROUP BY referrer ORDER BY u DESC LIMIT 2000"),
+    ev("SELECT utm_source AS s, COALESCE(utm_medium, '') AS m, COALESCE(utm_campaign, '') AS c, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'view' AND ts >= $1 AND utm_source IS NOT NULL GROUP BY utm_source, utm_medium, utm_campaign ORDER BY u DESC LIMIT 20"),
+    ev("SELECT label, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'scroll' AND ts >= $1 GROUP BY label"),
+    db.one("SELECT COUNT(*)::int AS n FROM waitlist"),
+    ev("SELECT COUNT(*)::int AS n FROM waitlist WHERE created_at >= $1"),
+    db.all("SELECT * FROM waitlist ORDER BY created_at DESC LIMIT 500"),
+  ]);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "–");
+  const meter = (a, b) => `<span style="display:block;height:6px;border-radius:3px;background:var(--line);margin-top:6px"><i style="display:block;height:100%;width:${b ? Math.min(100, (a / b) * 100) : 0}%;border-radius:3px;background:#5b4dff"></i></span>`;
+  const empty = (n, t) => `<tr><td colspan="${n}" class="hint">${t}</td></tr>`;
+  // views per day: 30 columns, today on the right, unique visitors in the darker part
+  const byDay = Object.fromEntries(days.map((d) => [d.day, d]));
+  const span = [...Array(30)].map((_, i) => new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10));
+  const max = Math.max(1, ...days.map((d) => d.views));
+  const chart = `<div style="display:flex;align-items:flex-end;gap:3px;height:120px;padding:16px 16px 6px">${span.map((d) => { const x = byDay[d] || { views: 0, u: 0 }; return `<span title="${d}: ${x.views} views, ${x.u} visitors" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><i style="display:block;height:${((x.views - x.u) / max) * 100}%;background:#c9c4ff;border-radius:2px 2px 0 0"></i><i style="display:block;height:${(x.u / max) * 100}%;background:#5b4dff;border-radius:${x.views > x.u ? 0 : "2px 2px"} 0 0"></i></span>`; }).join("")}</div><div class="axis" style="display:flex;justify-content:space-between;padding:0 16px 12px;font-size:11.5px;color:var(--faint)"><span>${span[0]}</span><span>views (light) and unique visitors (dark) per day</span><span>today</span></div>`;
+  const views = days.reduce((a, d) => a + d.views, 0);
+  // referrers by site; the landing's own address and none at all are "direct"
+  const hosts = new Map();
+  const self = new URL(origin).hostname;
+  for (const r of refs) {
+    let h = "Direct";
+    try { const x = new URL(r.referrer).hostname; if (x !== self) h = x.replace(/^www\./, ""); } catch {}
+    hosts.set(h, (hosts.get(h) || 0) + r.u);
+  }
+  const topRefs = [...hosts].sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const depthBy = Object.fromEntries(depth.map((d) => [d.label, d.u]));
+  const steps = [["Viewed the landing", f.v], ["Clicked a waitlist button", f.c], ["Submitted the form", f.s], ["Joined (with JS)", f.j]];
+  const ago = (t) => { const m = Math.round((Date.now() - Date.parse(t)) / 6e4); return m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
+  return page("Landing · hush", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Landing</b></nav></header>
+    <main class="main"><header class="vh"><h1>Landing</h1><p>The last 30 days of the public landing, from its own beacons (no cookies, anonymous ids), and the waitlist. For ${esc(user.login)}.</p></header>
+    <div class="group"><div class="stats">
+      <div class="stat"><b>${views}</b><span>Views</span></div>
+      <div class="stat"><b>${f.v}</b><span>Unique visitors</span></div>
+      <div class="stat"><b>${f.c}</b><span>Clicked a waitlist button <span class="faint">${pct(f.c, f.v)}</span></span></div>
+      <div class="stat"><b>${wl30.n}</b><span>Joined the waitlist <span class="faint">${wlTotal.n} in all</span></span></div>
+    </div></div>
+    <h2>Views per day</h2><div class="group">${chart}</div>
+    <h2>Funnel <span class="faint">unique visitors</span></h2>
+    <div class="group"><table class="tbl"><thead><tr><th>Step</th><th>Visitors</th><th>Of the step before</th><th>Of all visitors</th></tr></thead><tbody>${steps.map(([t, n], i) => `<tr><td>${t}${meter(n, f.v)}</td><td>${n}</td><td>${i ? pct(n, steps[i - 1][1]) : ""}</td><td>${pct(n, f.v)}</td></tr>`).join("")}</tbody></table></div>
+    <h2>Top clicks</h2>
+    <div class="group"><table class="tbl"><thead><tr><th>Label</th><th>Section</th><th>Clicks</th><th>Visitors</th></tr></thead><tbody>${labels.map((l) => `<tr><td><b>${esc(l.label) || '<span class="faint">(no label)</span>'}</b></td><td>${esc(l.section)}</td><td>${l.n}</td><td>${l.u}</td></tr>`).join("") || empty(4, "No clicks yet.")}</tbody></table></div>
+    <div class="grid2" style="gap:24px;background:none;border:0;overflow:visible">
+      <div><h2>Referrers</h2><div class="group"><table class="tbl"><thead><tr><th>Site</th><th>Visitors</th></tr></thead><tbody>${topRefs.map(([h, u]) => `<tr><td>${esc(h)}</td><td>${u}</td></tr>`).join("") || empty(2, "No views yet.")}</tbody></table></div></div>
+      <div><h2>Campaigns</h2><div class="group"><table class="tbl"><thead><tr><th>utm_source</th><th>Medium</th><th>Campaign</th><th>Visitors</th></tr></thead><tbody>${utms.map((x) => `<tr><td>${esc(x.s)}</td><td>${esc(x.m)}</td><td>${esc(x.c)}</td><td>${x.u}</td></tr>`).join("") || empty(4, "No utm-tagged visits yet.")}</tbody></table></div></div>
+    </div>
+    <h2>Scroll depth <span class="faint">visitors who reached each section</span></h2>
+    <div class="group"><table class="tbl"><thead><tr><th>Section</th><th>Visitors</th><th>Of all visitors</th></tr></thead><tbody>${LANDING_SECTIONS.map((sct) => `<tr><td>#${sct}${meter(depthBy[sct] || 0, f.v)}</td><td>${depthBy[sct] || 0}</td><td>${pct(depthBy[sct] || 0, f.v)}</td></tr>`).join("")}</tbody></table></div>
+    <h2>Waitlist <span class="faint">${wlTotal.n}</span> <a href="/admin/landing/waitlist.csv" style="font-size:13px;font-weight:500;margin-left:8px">Export CSV</a></h2>
+    <div class="group"><table class="tbl"><thead><tr><th>Email</th><th>Joined</th><th>Form</th><th>Referrer</th><th>utm</th></tr></thead><tbody>${list.map((w) => `<tr><td><b>${esc(w.email)}</b></td><td title="${esc(w.created_at)}">${ago(w.created_at)}</td><td>${esc(w.source)}</td><td>${esc(w.referrer) || '<span class="faint">–</span>'}</td><td>${esc([w.utm_source, w.utm_medium, w.utm_campaign].filter(Boolean).join(" / ")) || '<span class="faint">–</span>'}</td></tr>`).join("") || empty(5, "Nobody yet.")}</tbody></table>${wlTotal.n > list.length ? `<p class="hint" style="padding:0 14px">The latest ${list.length}; the CSV has all ${wlTotal.n}.</p>` : ""}</div>
+    </main></div>`);
 }
 
 // --- assistant ---------------------------------------------------------------------------
@@ -3386,13 +3529,18 @@ createServer(async (req, res) => {
       return json(res, 200, { ok: true, stored: list.length });
     }
 
+    if (url.pathname === "/api/waitlist" && req.method === "POST") return waitlistJoin(req, res, origin);
+    if (url.pathname === "/api/track" && req.method === "POST") return landingTrack(req, res);
+
     const user = await sessionUser(req);
 
     // the public landing, also for someone signed in who wants to see it
     if ((url.pathname === "/landing" || (url.pathname === "/" && !user)) && req.method === "GET") await refreshStars();
-    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null, [], "", {}, user));
+    // ?joined=1 (or already, invalid) is the no-JS waitlist form coming back; ?out=1 in dev shows the signed-out landing
+    const wl = { 1: "joined", already: "already", invalid: "invalid", busy: "busy" }[url.searchParams.get("joined")] || "";
+    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null, [], "", {}, DEV && url.searchParams.has("out") ? null : user, wl));
     if (url.pathname === "/" && req.method === "GET") {
-      if (!user) return send(res, 200, homePage(null));
+      if (!user) return send(res, 200, homePage(null, [], "", {}, null, wl));
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
       const ids = repos.map((r) => r.id);
@@ -3480,6 +3628,12 @@ createServer(async (req, res) => {
         <main class="main"><header class="vh"><h1>Settings</h1><p>For ${esc(user.login)}. Hush stores everything in UTC and shows it in this time zone.</p></header>
         <form method="post" class="settings"><label><span>Time zone</span><select name="tz"><option value=""${tz ? "" : " selected"}>Use my browser's time zone</option>${opts}</select></label><button type="submit">Save</button>${url.searchParams.has("saved") ? `<span class="faint">Saved.</span>` : ""}</form>
         <p class="hint" id="tz-now"></p></main></div><script>(()=>{const b=Intl.DateTimeFormat().resolvedOptions().timeZone;document.getElementById("tz-now").textContent="Your browser says "+b+"."})()</script>`));
+    }
+    if (url.pathname === "/admin/landing" || url.pathname === "/admin/landing/waitlist.csv") {
+      if (!user) return redirect(res, "/auth/login");
+      if (!isAdmin(user)) return send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">This page does not exist.</p>`));
+      if (url.pathname.endsWith(".csv")) return send(res, 200, await waitlistCsv(), { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="hush-waitlist-${new Date().toISOString().slice(0, 10)}.csv"` });
+      return send(res, 200, await landingAdmin(user, origin));
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 

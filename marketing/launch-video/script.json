@@ -1,0 +1,67 @@
+[
+ {
+  "id": "num",
+  "text": "Anthropic went from twenty-five hundred merges a day, to thirty thousand.",
+  "min": 4.6
+ },
+ {
+  "id": "accel",
+  "text": "Software is accelerating. The tools around it have to keep up.",
+  "min": 4.2
+ },
+ {
+  "id": "mark",
+  "text": "Meet Type Five.",
+  "min": 3.4
+ },
+ {
+  "id": "status",
+  "text": "The monitor of the monitors. When a routine goes quiet, Type Five notices.",
+  "min": 5.0
+ },
+ {
+  "id": "live",
+  "text": "Every automation, running live.",
+  "min": 3.8
+ },
+ {
+  "id": "code",
+  "text": "Every line your agents merged.",
+  "min": 4.0
+ },
+ {
+  "id": "costs",
+  "text": "What the factory burns, with price rules that fire before the invoice.",
+  "min": 4.6
+ },
+ {
+  "id": "report",
+  "text": "One day of the factory, in one email, every morning.",
+  "min": 4.0
+ },
+ {
+  "id": "factory",
+  "text": "Your whole software factory, in 3D.",
+  "min": 4.4
+ },
+ {
+  "id": "grow",
+  "text": "One developer. A factory. A city of them. A planet. A star. A galaxy. Every universe.",
+  "min": 9.4
+ },
+ {
+  "id": "sources",
+  "text": "Read only. It works with the tools you already use.",
+  "min": 4.2
+ },
+ {
+  "id": "install",
+  "text": "Built for Claude Code. Join the waitlist.",
+  "min": 3.4
+ },
+ {
+  "id": "end",
+  "text": "Type Five. For a new class of developer. Accelerate.",
+  "min": 4.4
+ }
+]

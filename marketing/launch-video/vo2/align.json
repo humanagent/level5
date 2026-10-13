@@ -1,0 +1,67 @@
+[
+ {
+  "id": "num",
+  "start": 0.0,
+  "end": 3.42
+ },
+ {
+  "id": "accel",
+  "start": 5.9,
+  "end": 9.38
+ },
+ {
+  "id": "mark",
+  "start": 10.08,
+  "end": 10.66
+ },
+ {
+  "id": "status",
+  "start": 11.66,
+  "end": 17.28
+ },
+ {
+  "id": "live",
+  "start": 18.04,
+  "end": 19.94
+ },
+ {
+  "id": "code",
+  "start": 20.56,
+  "end": 22.28
+ },
+ {
+  "id": "costs",
+  "start": 23.06,
+  "end": 27.56
+ },
+ {
+  "id": "report",
+  "start": 28.33,
+  "end": 31.98
+ },
+ {
+  "id": "factory",
+  "start": 32.54,
+  "end": 35.42
+ },
+ {
+  "id": "grow",
+  "start": 36.18,
+  "end": 44.9
+ },
+ {
+  "id": "sources",
+  "start": 45.78,
+  "end": 49.12
+ },
+ {
+  "id": "install",
+  "start": 49.84,
+  "end": 51.98
+ },
+ {
+  "id": "end",
+  "start": 53.16,
+  "end": 57.34
+ }
+]

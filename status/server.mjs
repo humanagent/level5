@@ -3031,14 +3031,14 @@ async function refreshStars() {
   } catch {}
 }
 
-function homePage(user, repos = [], msg = "", snaps = {}, viewer = null, wl = "") {
+function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
   const app = appConfig();
   if (!app) {
     return page("hush", `<header class="top">${LOGO}</header>
       <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
-  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, icon: ICON, mark: MARK, stars: STARS.n, viewer: viewer?.login || null, wl });
+  if (!user) return landingPage({ install, msg, esc, css: CSS + THEME, fonts: FONTS, viewer: viewer?.login || null });
   // Every repo the person can see, grouped by account, with the numbers from its last snapshot.
   const usdF = (n) => (n == null ? "–" : "$" + (n >= 100 ? Math.round(n).toLocaleString("en-US") : n.toFixed(2)));
   const STATE_LABEL = { ok: "Operational", degraded: "Degraded", down: "Needs attention" };
@@ -3146,10 +3146,10 @@ async function insertBeat(repoId, b) {
 }
 
 // --- landing: waitlist and first-party analytics ------------------------------------------------
-// Hush is a waitlist for now. The landing posts emails to /api/waitlist (JSON from its script, a
-// plain form post without JS) and its own beacons to /api/track: views, clicks, waitlist steps and
-// how far each section is read, under an anonymous id from localStorage. No cookies, no third
-// parties. Read at /admin/landing by the logins in ADMIN_LOGINS (and DEV_USER in dev).
+// The landing (Type V) posts its own beacons to /api/track: views, clicks (Start free is
+// cta:*-start, Run your own cta:*-selfhost) and how far each section is read, under an anonymous id from localStorage. No cookies, no third
+// parties. /api/waitlist and its table stay from when the landing was a waitlist; nothing posts to
+// it now, but the list is still readable and exportable. Read at /admin/landing by the logins in ADMIN_LOGINS (and DEV_USER in dev).
 const ADMINS = new Set((process.env.ADMIN_LOGINS || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean));
 const isAdmin = (u) => !!u && (ADMINS.has(u.login.toLowerCase()) || (DEV && u.login === process.env.DEV_USER));
 const clientIp = (req) => req.headers["fly-client-ip"] || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
@@ -3234,8 +3234,8 @@ async function landingAdmin(user, origin) {
   const [days, labels, [f], refs, utms, depth, wlTotal, [wl30], list] = await Promise.all([
     ev("SELECT substr(ts, 1, 10) AS day, COUNT(*)::int AS views, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'view' AND ts >= $1 GROUP BY substr(ts, 1, 10) ORDER BY day"),
     ev("SELECT label, section, COUNT(*)::int AS n, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'click' AND ts >= $1 GROUP BY label, section ORDER BY n DESC LIMIT 25"),
-    ev(`SELECT COUNT(DISTINCT CASE WHEN type = 'view' THEN anon_id END)::int AS v, COUNT(DISTINCT CASE WHEN type = 'click' AND label LIKE 'cta:%' THEN anon_id END)::int AS c,
-      COUNT(DISTINCT CASE WHEN type = 'waitlist_submit' THEN anon_id END)::int AS s, COUNT(DISTINCT CASE WHEN type = 'waitlist_join' THEN anon_id END)::int AS j, COUNT(*)::int AS n FROM landing_events WHERE ts >= $1`),
+    ev(`SELECT COUNT(DISTINCT CASE WHEN type = 'view' THEN anon_id END)::int AS v, COUNT(DISTINCT CASE WHEN type = 'click' AND label LIKE 'cta:%-start' THEN anon_id END)::int AS c,
+      COUNT(DISTINCT CASE WHEN type = 'click' AND label LIKE 'cta:%-selfhost' THEN anon_id END)::int AS sh, COUNT(DISTINCT CASE WHEN type = 'click' AND label = 'nav:github' THEN anon_id END)::int AS gh, COUNT(*)::int AS n FROM landing_events WHERE ts >= $1`),
     ev("SELECT referrer, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'view' AND ts >= $1 GROUP BY referrer ORDER BY u DESC LIMIT 2000"),
     ev("SELECT utm_source AS s, COALESCE(utm_medium, '') AS m, COALESCE(utm_campaign, '') AS c, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'view' AND ts >= $1 AND utm_source IS NOT NULL GROUP BY utm_source, utm_medium, utm_campaign ORDER BY u DESC LIMIT 20"),
     ev("SELECT label, COUNT(DISTINCT anon_id)::int AS u FROM landing_events WHERE type = 'scroll' AND ts >= $1 GROUP BY label"),
@@ -3262,19 +3262,19 @@ async function landingAdmin(user, origin) {
   }
   const topRefs = [...hosts].sort((a, b) => b[1] - a[1]).slice(0, 15);
   const depthBy = Object.fromEntries(depth.map((d) => [d.label, d.u]));
-  const steps = [["Viewed the landing", f.v], ["Clicked a waitlist button", f.c], ["Submitted the form", f.s], ["Joined (with JS)", f.j]];
+  const steps = [["Viewed the landing", f.v], ["Clicked Start free", f.c]];
   const ago = (t) => { const m = Math.round((Date.now() - Date.parse(t)) / 6e4); return m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
   return page("Landing · hush", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Landing</b></nav></header>
-    <main class="main"><header class="vh"><h1>Landing</h1><p>The last 30 days of the public landing, from its own beacons (no cookies, anonymous ids), and the waitlist. For ${esc(user.login)}.</p></header>
+    <main class="main"><header class="vh"><h1>Landing</h1><p>The last 30 days of the public landing, from its own beacons (no cookies, anonymous ids). Start free installs the GitHub App; Run your own goes to the repo. For ${esc(user.login)}.</p></header>
     <div class="group"><div class="stats">
       <div class="stat"><b>${views}</b><span>Views</span></div>
       <div class="stat"><b>${f.v}</b><span>Unique visitors</span></div>
-      <div class="stat"><b>${f.c}</b><span>Clicked a waitlist button <span class="faint">${pct(f.c, f.v)}</span></span></div>
-      <div class="stat"><b>${wl30.n}</b><span>Joined the waitlist <span class="faint">${wlTotal.n} in all</span></span></div>
+      <div class="stat"><b>${f.c}</b><span>Clicked Start free <span class="faint">${pct(f.c, f.v)}</span></span></div>
+      <div class="stat"><b>${f.sh}</b><span>Clicked Run your own <span class="faint">${pct(f.sh, f.v)} · ${f.gh} more on the nav's GitHub</span></span></div>
     </div></div>
     <h2>Views per day</h2><div class="group">${chart}</div>
     <h2>Funnel <span class="faint">unique visitors</span></h2>
-    <div class="group"><table class="tbl"><thead><tr><th>Step</th><th>Visitors</th><th>Of the step before</th><th>Of all visitors</th></tr></thead><tbody>${steps.map(([t, n], i) => `<tr><td>${t}${meter(n, f.v)}</td><td>${n}</td><td>${i ? pct(n, steps[i - 1][1]) : ""}</td><td>${pct(n, f.v)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="group"><table class="tbl"><thead><tr><th>Step</th><th>Visitors</th><th>Of the step before</th><th>Of all visitors</th></tr></thead><tbody>${steps.map(([t, n], i) => `<tr><td>${t}${meter(n, f.v)}</td><td>${n}</td><td>${i ? pct(n, steps[i - 1][1]) : ""}</td><td>${pct(n, f.v)}</td></tr>`).join("")}<tr><td>Clicked Run your own <span class="faint">self-host, alongside Start free</span>${meter(f.sh, f.v)}</td><td>${f.sh}</td><td></td><td>${pct(f.sh, f.v)}</td></tr></tbody></table></div>
     <h2>Top clicks</h2>
     <div class="group"><table class="tbl"><thead><tr><th>Label</th><th>Section</th><th>Clicks</th><th>Visitors</th></tr></thead><tbody>${labels.map((l) => `<tr><td><b>${esc(l.label) || '<span class="faint">(no label)</span>'}</b></td><td>${esc(l.section)}</td><td>${l.n}</td><td>${l.u}</td></tr>`).join("") || empty(4, "No clicks yet.")}</tbody></table></div>
     <div class="grid2" style="gap:24px;background:none;border:0;overflow:visible">
@@ -3283,7 +3283,7 @@ async function landingAdmin(user, origin) {
     </div>
     <h2>Scroll depth <span class="faint">visitors who reached each section</span></h2>
     <div class="group"><table class="tbl"><thead><tr><th>Section</th><th>Visitors</th><th>Of all visitors</th></tr></thead><tbody>${LANDING_SECTIONS.map((sct) => `<tr><td>#${sct}${meter(depthBy[sct] || 0, f.v)}</td><td>${depthBy[sct] || 0}</td><td>${pct(depthBy[sct] || 0, f.v)}</td></tr>`).join("")}</tbody></table></div>
-    <h2>Waitlist <span class="faint">${wlTotal.n}</span> <a href="/admin/landing/waitlist.csv" style="font-size:13px;font-weight:500;margin-left:8px">Export CSV</a></h2>
+    <h2>Waitlist <span class="faint">${wlTotal.n} · closed, from before Start free (${wl30.n} in 30 days)</span> <a href="/admin/landing/waitlist.csv" style="font-size:13px;font-weight:500;margin-left:8px">Export CSV</a></h2>
     <div class="group"><table class="tbl"><thead><tr><th>Email</th><th>Joined</th><th>Form</th><th>Referrer</th><th>utm</th></tr></thead><tbody>${list.map((w) => `<tr><td><b>${esc(w.email)}</b></td><td title="${esc(w.created_at)}">${ago(w.created_at)}</td><td>${esc(w.source)}</td><td>${esc(w.referrer) || '<span class="faint">–</span>'}</td><td>${esc([w.utm_source, w.utm_medium, w.utm_campaign].filter(Boolean).join(" / ")) || '<span class="faint">–</span>'}</td></tr>`).join("") || empty(5, "Nobody yet.")}</tbody></table>${wlTotal.n > list.length ? `<p class="hint" style="padding:0 14px">The latest ${list.length}; the CSV has all ${wlTotal.n}.</p>` : ""}</div>
     </main></div>`);
 }
@@ -3536,11 +3536,10 @@ createServer(async (req, res) => {
 
     // the public landing, also for someone signed in who wants to see it
     if ((url.pathname === "/landing" || (url.pathname === "/" && !user)) && req.method === "GET") await refreshStars();
-    // ?joined=1 (or already, invalid) is the no-JS waitlist form coming back; ?out=1 in dev shows the signed-out landing
-    const wl = { 1: "joined", already: "already", invalid: "invalid", busy: "busy" }[url.searchParams.get("joined")] || "";
-    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null, [], "", {}, DEV && url.searchParams.has("out") ? null : user, wl));
+    // ?out=1 in dev shows the signed-out landing
+    if (url.pathname === "/landing" && req.method === "GET") return send(res, 200, homePage(null, [], "", {}, DEV && url.searchParams.has("out") ? null : user));
     if (url.pathname === "/" && req.method === "GET") {
-      if (!user) return send(res, 200, homePage(null, [], "", {}, null, wl));
+      if (!user) return send(res, 200, homePage(null, [], "", {}, null));
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
       const ids = repos.map((r) => r.id);
@@ -3632,7 +3631,7 @@ createServer(async (req, res) => {
     if (url.pathname === "/admin/landing" || url.pathname === "/admin/landing/waitlist.csv") {
       if (!user) return redirect(res, "/auth/login");
       if (!isAdmin(user)) return send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">This page does not exist.</p>`));
-      if (url.pathname.endsWith(".csv")) return send(res, 200, await waitlistCsv(), { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="hush-waitlist-${new Date().toISOString().slice(0, 10)}.csv"` });
+      if (url.pathname.endsWith(".csv")) return send(res, 200, await waitlistCsv(), { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="typev-waitlist-${new Date().toISOString().slice(0, 10)}.csv"` });
       return send(res, 200, await landingAdmin(user, origin));
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });

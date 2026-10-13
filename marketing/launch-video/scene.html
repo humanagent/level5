@@ -184,16 +184,16 @@ td{padding:15px 0;border-top:1px solid #f0f1f6;text-align:right;font-variant-num
 </section>
 
 <section class="s" id="install"><div class="c">
-  <div class="cc-tag" id="cctag"><img src="https://cdn.simpleicons.org/claude/191e2d" alt="">Built for Claude Code</div>
-  <div class="h1" style="font-size:100px">Join the waitlist</div>
-  <div class="wl"><div class="in" id="email"><span class="ph">you@company.com</span></div><div class="pp pri" id="join">Join the waitlist</div></div>
-  <div class="ok" id="okmsg">✓ You're on the list.</div>
+  <div class="cc-tag" id="cctag"><img src="https://cdn.simpleicons.org/claude/D97757" alt="">Works with Claude Code</div>
+  <div class="h1" style="font-size:110px">Free. Open source.<br><em>Run your own.</em></div>
+  <div class="wl"><div class="in" id="email" style="width:700px;font-family:var(--mono);font-size:30px"><span class="ph">factory-status.fly.dev</span></div><div class="pp pri" id="join">Start free</div></div>
+  <div class="ok" id="okmsg" style="color:var(--muted);font-family:var(--mono);font-size:26px">MIT · github.com/humanagent/hush</div>
 </div></section>
 
 <section class="s end" id="end"><div class="c">
   <div class="logo" id="endlogo" style="font-size:120px;justify-content:center;margin-bottom:44px"></div>
   <div class="h1">For a new class of developer.<br><em id="accw">Accelerate.</em></div>
-  <div class="endrow"><span class="pp pri">Join the waitlist</span><span class="pp alt"><img src="https://cdn.simpleicons.org/claude/191e2d" alt="">For Claude Code</span></div>
+  <div class="endrow"><span class="pp pri">Start free · factory-status.fly.dev</span><span class="pp alt"><img src="https://cdn.simpleicons.org/claude/D97757" alt="">Works with Claude Code</span></div>
 </div></section>
 
 <script>
@@ -370,7 +370,7 @@ window.render = (t) => {
   document.querySelectorAll("#logos .lg").forEach((e, i) => { const p = out4(seg(l.u, .3 + i * .06, .8 + i * .06)); e.style.opacity = p; e.style.transform = `translateY(${(1 - p) * 30}px) scale(${.9 + .1 * p})`; });
 
   l = L("install", t); $("install").style.opacity = l.v;
-  const EM = "you@company.com", n = Math.round(EM.length * seg(l.u, .6, 1.6));
+  const EM = "factory-status.fly.dev", n = Math.round(EM.length * seg(l.u, .6, 1.6));
   $("email").innerHTML = n ? EM.slice(0, n) + (l.u < 1.9 ? `<span class="cur"></span>` : "") : `<span class="ph">${EM}</span>`;
   const press = seg(l.u, 1.9, 2.05) * (1 - seg(l.u, 2.05, 2.25)); $("join").style.transform = `scale(${1 - .05 * press})`;
   $("okmsg").style.opacity = out4(seg(l.u, 2.2, 2.6)); $("cctag").style.opacity = out4(seg(l.u, 0, .5));

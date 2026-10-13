@@ -10,11 +10,13 @@ Needs Node, ffmpeg, `uvx`, and `OPENROUTER_API_KEY` (from `status/.env.local`). 
 2. **Voice**: Jessica on ElevenLabs v3 through OpenRouter, the whole `script.json` in one take
    (`vo2/take.mp3`, committed). `uvx --with faster-whisper --with numpy python align.py vo2/take.mp3 script.json vo2/align.json`
    finds each line; `node cut.mjs` cuts one clip per line and writes `timeline.json`, which paces every scene.
+   The install line ("Works with Claude Code. Free, and open source. Run your own.") was re-recorded alone as
+   `vo2/install.mp3` after the waitlist came off; its clip replaces `vo2/install.wav` and the timeline was adjusted by hand.
 3. **Music**: `python3 lyria.py` asks Lyria 3 for the track (`lyria-energy.mp3`, committed). `beats.py` finds
    its tempo and bars; `rebar.py` rebuilds it bar by bar so the drops land on the logo, Type V and the end:
-   `uvx --with numpy python rebar.py lyria-energy.mp3 music3.wav 0.647 0,1,0,1,2,3,4,…,21,24,25,26,27,28,29,30,28,29,30,31`
+   `uvx --with numpy python rebar.py lyria-energy.mp3 music3.wav 0.647 0,1,0,1,2,3,4,…,21,24,25,26,27,28,29,30,28,29,29,30,31`
 4. **Mix**: `MUSIC=music3.wav node mix.mjs` (voice on top, the music ducking under it), then gain to −14 LUFS.
 5. **Frames and MP4**: `mkdir frames && node render.mjs frames 30` (about 25 min), then
-   `ffmpeg -framerate 30 -i frames/%04d.png -i mix2.wav -t 68.2 -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac typeV-launch.mp4`.
+   `ffmpeg -framerate 30 -i frames/%04d.png -i mix2.wav -t 70.4 -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac typeV-launch.mp4`.
 
 `CHROME=<path>` points Playwright at a specific Chrome if its own isn't installed.

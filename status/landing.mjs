@@ -222,6 +222,17 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 .ccw{animation:lin .9s var(--v-ease) .2s both}}
 @keyframes blink{50%{opacity:0}}@keyframes lin{from{opacity:0;transform:translate3d(0,16px,0)}}
 
+/* plugin: what it adds to a session, four tiles with a terminal each */
+.hero-cmd{max-width:520px;margin:0 0 18px}
+.plug{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.plug .tile-cap h4 code{font:500 15px var(--mono);color:var(--v-tx)}.plug .tile-cap h4 small{font:400 11px var(--mono);color:var(--v-faint);text-transform:uppercase;letter-spacing:.08em}
+.plug .tile-cap p code,.plug-more code{font:12.5px var(--mono);color:var(--v-tx);background:rgba(255,255,255,.06);border:1px solid var(--v-ln);border-radius:5px;padding:1px 5px}
+.mini{display:block;margin:auto 18px 18px;padding:13px 15px;border:1px solid var(--v-ln);border-radius:10px;background:#07080e;color:var(--v-mut);font:12.5px/1.75 var(--mono);white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.mini .m{color:var(--v-faint)}.mini .w{color:var(--v-tx)}.mini .c{color:var(--v-clay2)}.mini .g{color:var(--v-ok)}
+.mini .band{display:inline-flex;align-items:center;gap:8px}.mini .band b{color:var(--v-tx);font-weight:600}.mini .band .warn{color:#f0b35e}.mini .band .hide{padding:0 6px;border:1px solid var(--v-ln2);border-radius:4px;color:var(--v-mut);line-height:1.5}
+.mini .inp{display:flex;align-items:center;gap:8px;margin-top:6px;padding:4px 10px;border:1px solid var(--v-ln2);border-radius:7px}.mini .caret{width:7px;height:14px;background:var(--v-mut)}
+.plug-more{margin:22px 0 0;color:var(--v-mut);font-size:14.5px}.plug-more a{color:var(--v-tx);text-underline-offset:3px}
+@media(max-width:760px){.plug{grid-template-columns:minmax(0,1fr)}.mini{margin:auto 12px 12px;font-size:11.5px}}
 /* pillars: one ruled strip under the hero */
 .pillars{position:relative;z-index:2;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));max-width:1192px;margin:0 auto;border-block:1px solid var(--v-ln);box-sizing:border-box}
 .pillar{display:flex;flex-direction:column;gap:10px;padding:22px 22px 24px;text-decoration:none;border-left:1px solid var(--v-ln);transition:background .2s ease-out}
@@ -403,7 +414,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script></head><body class="land">
 
 <nav class="lnav" id="lnav" aria-label="Main"><div class="lnav-in"><a class="logo" href="/" aria-label="Type V, home">${WORDMARK(24)}</a>
-  <span class="lnav-r"><a class="t" href="#status">status</a><a class="t" href="#costs">costs</a><a class="t" href="#factory">factory</a><a class="t" href="#sources">sources</a><a class="t" href="#install">start</a><a class="t" href="${REPO}" target="_blank" rel="noopener" data-track="nav:github">github</a>
+  <span class="lnav-r"><a class="t" href="#plugin">plugin</a><a class="t" href="#status">status</a><a class="t" href="#costs">costs</a><a class="t" href="#factory">factory</a><a class="t" href="#sources">sources</a><a class="t" href="#install">start</a><a class="t" href="${REPO}" target="_blank" rel="noopener" data-track="nav:github">github</a>
   ${viewer ? `<a class="lp alt" href="/landing">${esc(viewer)}</a><a class="lp pri" href="/">Enter <span aria-hidden="true">→</span></a>` : `<a class="lp alt" href="/auth/login" data-track="nav:signin">Sign in</a><a class="lp pri" href="${esc(install)}" data-track="cta:nav-start">Start free</a>`}</span>
 </div></nav>
 
@@ -411,19 +422,22 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
   <canvas id="stars" aria-hidden="true"></canvas>
   <div class="lhero-in">
     <div>
-      <p class="kick"><b>${MARKV(13)}Type V</b>observability for agent factories</p>
+      <p class="kick"><b>${MARKV(13)}Type V</b>a Claude Code plugin</p>
       <h1>For a new class of developer. <em>Accelerate.</em></h1>
-      <p class="lede">Observability for the factory your agents run: which routines ran, which went silent, and what each one cost.</p>
+      <p class="lede">A Claude Code plugin that watches the factory your agents run: which routines ran, which went silent, and what each one cost.</p>
+      <div class="cmdb hero-cmd"><span class="p">&gt;</span><span data-cmd>/plugin install typev --marketplace humanagent/typev</span>${copyBtn}</div>
       ${cta("hero")}
-      <div class="works"><span>Works with</span><span class="hn"><span class="lg" style="--u:url(${SI("16.32.0", "claude")})" aria-hidden="true"></span>Claude Code</span><span class="hn soon"><img src="${SI("13.21.0", "openai")}" alt="" width="16" height="16">Codex <em>soon</em></span></div>
+      <div class="works"><span>Plugin for</span><span class="hn"><span class="lg" style="--u:url(${SI("16.32.0", "claude")})" aria-hidden="true"></span>Claude Code</span><span class="hn soon"><img src="${SI("13.21.0", "openai")}" alt="" width="16" height="16">Codex <em>soon</em></span></div>
       <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
-    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: /typev:setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
+    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: the Type V plugin is installed, then /typev:setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
       <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~/acme/api</span><span>claude</span></div>
       <div class="ccw-body" aria-hidden="true">
         <div class="ccw-wel"><span class="sp">✳</span> <b>Welcome to Claude Code</b><br><span class="m">  cwd: ~/acme/api</span></div>
-        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/typev:setup">/typev:setup</span></div>
+        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/plugin install typev --marketplace humanagent/typev">/plugin install typev --marketplace humanagent/typev</span></div>
+        <div class="ccw-l" data-step data-wait="900"><span class="m">  ⎿  </span><span class="g">✓</span> Installed typev. Plugin is now active.</div>
+        <div class="ccw-l in" data-step data-wait="400"><span class="pr">&gt;</span> <span data-type="/typev:setup fsk_…">/typev:setup fsk_…</span></div>
         <div class="ccw-l" data-step data-spin="Reading the repo" data-wait="1500"><span class="w">⏺</span> Read the repo</div>
         <div class="ccw-l" data-step data-wait="250"><span class="m">  ⎿  </span>Sentry in 2 apps · 12 skills · 6 workflows · <span class="c">no monitors</span></div>
         <div class="ccw-l" data-step data-spin="Choosing monitors" data-wait="1300"><span class="w">⏺</span> Monitors it will create</div>
@@ -450,9 +464,35 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
   <ul>${TOOLS.map(([name, logo]) => `<li>${logo ? `<img src="${logo}" alt="" loading="lazy" width="18" height="18">` : `<i aria-hidden="true">${name[0]}</i>`}${name}</li>`).join("")}</ul>
 </section>
 
+<section class="lsec" id="plugin">
+  <div class="lsec-head">
+    <div>${ey("01", "claude code plugin")}<h2 class="lword">Plugin</h2></div>
+    <div class="r"><h3>It lives in Claude Code</h3><p>Type V is a Claude Code plugin, open source, installed in one line. It adds four things to your sessions, and writes the one hook your routines need into the repo, since a routine runs on a fresh clone.</p>
+      <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/plugin install typev --marketplace humanagent/typev</span>${copyBtn}</div></div>
+  </div>
+  <div class="plug">
+    <div class="tile"><div class="tile-cap"><h4><code>/typev:setup</code> <small>skill</small></h4><p>Reads the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the merge it creates the routines.</p></div>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/typev:setup fsk_…</span>
+<span class="w">⏺</span> Opened <span class="c">PR #142</span> · 5 skills, 3 workflows
+<span class="g">✓</span> Factory ready · 5 monitors watching acme/api</div></div>
+    <div class="tile"><div class="tile-cap"><h4>Above the prompt <small>mod</small></h4><p>What needs a look, where you already are. Silent when all is clear. <code>/typev</code> says the rest.</p></div>
+      <div class="mini"><span class="band"><b>Type V</b> <span class="warn">typev-report missed its last run</span> <span class="m">/typev</span> <span class="hide">Hide</span></span>
+<span class="inp"><span class="m">&gt;</span> <span class="caret"></span></span></div></div>
+    <div class="tile"><div class="tile-cap"><h4><code>/typev:sweep</code> <small>workflow</small></h4><p>Runs every monitor now. A finding becomes an issue only after two skeptics fail to refute it.</p></div>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/typev:sweep</span>
+<span class="w">⏺</span> 3 monitors · 4 findings · <span class="m">3 refuted</span>
+<span class="g">✓</span> Filed <span class="c">#311</span> · heartbeats sent</div></div>
+    <div class="tile"><div class="tile-cap"><h4><code>/typev:mend</code> <small>workflow</small></h4><p>The fixer. A test that fails first, the smallest fix, one PR per issue. It never merges.</p></div>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/typev:mend</span>
+<span class="w">⏺</span> <span class="c">#311</span> → <span class="c">PR #312</span> · 1 test, 4 lines
+<span class="g">✓</span> Fails without the fix, passes with it</div></div>
+  </div>
+  <p class="plug-more">Also <code>/typev:new-monitor</code>, a monitor for any source from one line. Every file is in <a href="${REPO}/tree/main/plugin" target="_blank" rel="noopener" data-track="plugin:source">plugin/</a> on GitHub.</p>
+</section>
+
 <section class="lsec" id="status">
   <div class="lsec-head">
-    <div>${ey("01", "monitors")}<h2 class="lword">Status</h2></div>
+    <div>${ey("02", "monitors")}<h2 class="lword">Status</h2></div>
     <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Type V checks them against your roster.</p>${cta("status")}</div>
   </div>
   <div class="bento">
@@ -519,7 +559,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 
 <section class="lsec" id="costs">
   <div class="lsec-head">
-    <div>${ey("02", "tokens and costs")}<h2 class="lword">Costs</h2></div>
+    <div>${ey("03", "tokens and costs")}<h2 class="lword">Costs</h2></div>
     <div class="r"><h3>What the factory burns</h3><p>Tokens for every routine run, next to what your cloud bills each day. A routine that burns 4× its usual tokens shows up the same day, not on the invoice.</p></div>
   </div>
   <div class="paint b">
@@ -541,7 +581,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 
 <section class="lsec" id="factory">
   <div class="lsec-head">
-    <div>${ey("03", "in 3d")}<h2 class="lword">Factory</h2></div>
+    <div>${ey("04", "in 3d")}<h2 class="lword">Factory</h2></div>
     <div class="r"><h3>Your software factory, in 3D</h3><p>Every component is a hall. Routines are the robot arms, agents are the workers, and every PR is a crate that rides the belt through the CI gates into main. Monitors are the light towers: the failing one flashes red.</p></div>
   </div>
   <div class="f3" id="f3">
@@ -556,7 +596,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 
 <section class="lsec" id="sources">
   <div class="lsec-head">
-    <div>${ey("04", "read-only")}<h2 class="lword">Sources</h2></div>
+    <div>${ey("05", "read-only")}<h2 class="lword">Sources</h2></div>
     <div class="r"><h3>Where it reads from</h3><p>Read-only on your code. No cloud or billing credentials: your jobs send what they already know.</p></div>
   </div>
   <div class="duo">
@@ -581,7 +621,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 
 <section class="lsec" id="install">
   <div class="inst">
-    <div class="inst-l">${ey("05", "start")}<h2>Start in a minute</h2><p>Connect GitHub on the hosted instance and let Claude Code build the factory it will watch. Or run the whole thing yourself: same code, MIT.</p>
+    <div class="inst-l">${ey("06", "start")}<h2>Start in a minute</h2><p>Connect GitHub on the hosted instance and let Claude Code build the factory it will watch. Or run the whole thing yourself: same code, MIT.</p>
       <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p></div>
     <ol class="steps">
       <li><span class="n">1</span><div>
@@ -702,22 +742,23 @@ ${viewer ? "" : `<script>
   };
   let t; addEventListener("resize", () => { clearTimeout(t); t = setTimeout(draw, 120); }); draw();
 })();
-// The hero session replays: the prompt types itself, a spark spins while Claude works, each line
+// The hero session replays: each prompt types itself, a spark spins while Claude works, each line
 // lands in turn, then a pause and again. With reduced motion the finished session just sits there.
 (() => {
   const w = document.getElementById("ccw"); if (!w || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const body = w.querySelector(".ccw-body"), typed = w.querySelector("[data-type]"), steps = [...w.querySelectorAll("[data-step]")];
+  const body = w.querySelector(".ccw-body"), typed = w.querySelector(".ccw-l.in:not([data-step]) [data-type]"), steps = [...w.querySelectorAll("[data-step]")];
   body.style.minHeight = body.offsetHeight + "px";
   const spin = document.createElement("div"); spin.className = "ccw-spin"; spin.hidden = true;
   spin.innerHTML = '<span class="g1">✳</span> <span class="t"></span>… <span class="m">(esc to interrupt)</span>';
   const glyph = spin.querySelector(".g1"), label = spin.querySelector(".t"), G = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
   let gi = 0; setInterval(() => { if (!spin.hidden) glyph.textContent = G[gi++ % G.length]; }, 110);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const type = async (el) => { for (const ch of el.dataset.type) { el.textContent += ch; await sleep(55 + Math.random() * 60); } };
   const run = async () => {
     for (;;) {
       steps.forEach((s) => (s.hidden = true)); typed.textContent = ""; spin.hidden = true;
       await sleep(700);
-      for (const ch of typed.dataset.type) { typed.textContent += ch; await sleep(55 + Math.random() * 60); }
+      await type(typed);
       await sleep(350);
       let last = typed.closest(".ccw-l");
       for (const s of steps) {
@@ -725,6 +766,7 @@ ${viewer ? "" : `<script>
         if (s.dataset.spin) { label.textContent = s.dataset.spin; last.after(spin); spin.hidden = false; }
         await sleep(wait);
         spin.hidden = true; s.hidden = false; last = s;
+        const t = s.querySelector("[data-type]"); if (t) { t.textContent = ""; await type(t); await sleep(350); }
       }
       await sleep(6500);
     }

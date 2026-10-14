@@ -1,7 +1,7 @@
 # Type V
 
 Observability for your software factory: whether every skill your agents run actually ran, and
-what it cost. Open source under the [MIT license](LICENSE). Use the hosted one at
+what it cost. Open source under the [MIT license](LICENSE). It installs as a Claude Code plugin. Use the hosted one at
 https://factory-status.fly.dev or [run your own](#run-and-deploy).
 
 ## What it shows per repo
@@ -29,26 +29,82 @@ Around it: **Actions** in the top bar (runs in progress and the latest finished)
 assistant panel that reads all of the above), the bell (notifications), **Settings** (your time
 zone), and **Repositories** (every repo you can see, by account, side by side).
 
-## How the data gets in
+## Install
 
-- **GitHub**: a read-only GitHub App (contents, issues, pull requests, actions, checks, metadata).
-  Users sign in with the app's OAuth and see only the repos their installations cover.
-- **Heartbeats**: `POST /api/heartbeat` with the repo's ingest key. The installer sets it up:
+In Claude Code, once per machine:
 
-  ```sh
-  curl -fsSL https://factory-status.fly.dev/install.sh | sh -s -- <ingest-key>
-  ```
+```
+/plugin install typev --marketplace humanagent/typev
+```
 
-  It adds `.claude/hooks/typev.sh` and a `SessionEnd` hook, so every Claude Code cloud routine that
-  runs a slash command reports itself when it ends. A skill can also send its own status and
-  volume with `.claude/hooks/typev.sh beat <id> ok '{"swept":{"events":120}}'`. The post is
-  detached with a 5 s cap and never fails or slows the caller; `TYPEV_DISABLED=1` turns it off.
+Then sign in at https://factory-status.fly.dev, connect a repo, and run this at its root with the
+ingest key the repo's page gives you:
+
+```
+/typev:setup <ingest-key>
+```
+
+It connects the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the
+merge, `/typev:setup routines` creates the Claude Code routines and runs each once. A self-hosted
+instance adds `--url <its address>`.
+
+## What it is made of
+
+Type V has three parts. The plugin is how it gets into Claude Code. The runtime is what the plugin
+writes into each repo, because routines run in cloud sessions on a fresh clone and a cloud session
+does not load plugins: only what is committed reaches them. The server stores the heartbeats and
+judges them.
+
+### The plugin (`plugin/`, on your machine)
+
+| Component | Kind | What it does |
+| --- | --- | --- |
+| `.claude-plugin/plugin.json` | manifest | Name, version, MIT, and two settings (`userConfig`) |
+| `band` | setting | When the status shows above the prompt: `problems` (default), `always`, `off` |
+| `key` | setting, kept in the keychain | The ingest key, only for a repo that does not commit `.claude/typev.json` |
+| `skills/setup/` | skill | `/typev:setup`: connects the repo, proposes the factory, opens one PR, creates the routines after the merge |
+| `skills/new-monitor/` | skill | `/typev:new-monitor`: one more monitor (logs, costs, LLM traces, any source) from one line, in its own PR |
+| `hooks/register.tsx` | mod | A band above the prompt with the monitors that need a look (stopped, late, degraded, "said ok, read nothing"), silent when all is clear; a toast when a session starts with one; `/typev` prints the repo's state |
+| `workflows/sweep.js` | workflow | `/typev:sweep`: runs the repo's monitors now; two skeptics try to refute every finding before it is filed |
+| `workflows/mend.js` | workflow | `/typev:mend`: the fixer. Per open `typev:*` issue: the five gates, a regression test that fails, the smallest fix, one PR, and a skeptic who reruns the test without the fix. Never merges |
+| `templates/` | files | The monitor, report and pulse `/typev:setup` copies into a repo |
+| `runtime/` | files | The heartbeat hook and skill `/typev:setup` copies into a repo |
+
+`.claude-plugin/marketplace.json` at the repo root makes this repo the `typev` marketplace.
+
+### The runtime (in each repo, written by `/typev:setup`)
+
+| Component | Kind | What it does |
+| --- | --- | --- |
+| `.claude/hooks/typev.sh` | script | `beat`, `cost` and `session-end`. Detached, 5 s cap, never fails the caller; `TYPEV_DISABLED=1` turns it off |
+| `SessionEnd` in `.claude/settings.json` | hook | When a routine ends: its tokens by model, and a heartbeat named after the command it ran |
+| `.claude/typev.json` | config | `{ "url", "key" }`. The key only posts this repo's heartbeats and costs and reads its daily summary. `TYPEV_URL` and `TYPEV_KEY` override it |
+| `.claude/factory.json` | config | The roster: each monitor and routine, with its schedule ([docs](docs/factory-json.md)) |
+| `.claude/skills/typev/` | skill | Teaches any skill to end with its heartbeat: `typev.sh beat <id> ok '{"swept":{"events":120}}'` |
+| `.claude/skills/typev-monitor-errors/` | skill on a routine | Sentry: an issue per new or regressed error worth a look |
+| `.claude/skills/typev-report/` | skill on a routine | The day as one GitHub issue, closing the one before |
+| `.github/workflows/typev-pulse.yml` | GitHub Action | The monitor of the monitors: an issue per monitor that stopped, ran late or said ok after reading nothing. It runs apart from the routines on purpose |
+
+### The server (`status/`, https://factory-status.fly.dev)
+
+| Path | What |
+| --- | --- |
+| `status/server.mjs` | The app: GitHub App auth, readers, judging rules, assistant, HTML, routes, `POST /api/heartbeat`, `POST /api/cost`, `GET /api/report`. |
+| `status/db.mjs` | Storage: Postgres (Neon) with `DATABASE_URL`, local SQLite otherwise. Multi-tenant schema. |
+| `status/landing.mjs` | The public landing at `/`. |
+| `status/report.mjs` | The daily factory report, as an email and as data. |
+| `status/install.sh` | Served at `/install.sh`: says Type V installs as a plugin, and how. |
+| `status/Dockerfile`, `status/fly.toml` | Fly app `factory-status`, region `gru`, volume `factory_data` on `/data`. |
+| `index.html`, `PRODUCT.md`, `.impeccable/` | The earlier landing prototype (a claude.ai artifact) and its product brief. |
+
+GitHub comes in through a read-only GitHub App (contents, issues, pull requests, actions, checks,
+metadata). Users sign in with the app's OAuth and see only the repos their installations cover.
 
 ## Docs
 
-- [Heartbeats](docs/heartbeats.md): the API, the installer, the `SessionEnd` hook, isolation guarantees.
+- [Heartbeats](docs/heartbeats.md): the API, connecting a repo, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
-- [`/typev-setup`](docs/setup.md): building the factory in one PR, as new typev-* skills, workflows and routines.
+- [`/typev:setup`](docs/setup.md): building the factory in one PR, as new typev-* skills, workflows and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
 - [Daily factory report](docs/report.md): one email with everything that happened in the factory that day.
@@ -56,16 +112,13 @@ zone), and **Repositories** (every repo you can see, by account, side by side).
 - [How Type V judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
 
-## Layout
+## Plugin dev
 
-| Path | What |
-| --- | --- |
-| `status/server.mjs` | The app: GitHub App auth, readers, judging rules, assistant, HTML, routes. |
-| `status/db.mjs` | Storage: Postgres (Neon) with `DATABASE_URL`, local SQLite otherwise. Multi-tenant schema. |
-| `status/landing.mjs` | The public landing at `/`. |
-| `status/install.sh` | The one-line installer, served at `/install.sh` with the origin filled in. |
-| `status/Dockerfile`, `status/fly.toml` | Fly app `factory-status`, region `gru`, volume `factory_data` on `/data`. |
-| `index.html`, `PRODUCT.md`, `.impeccable/` | The earlier landing prototype (a claude.ai artifact) and its product brief. |
+```sh
+claude --plugin-dir ./plugin     # a session with the plugin loaded from this folder
+claude plugin validate ./plugin  # what it hooks and calls, and anything Claude Code would refuse
+claude plugin test ./plugin      # the mod's tests
+```
 
 ## Local dev
 

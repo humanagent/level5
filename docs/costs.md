@@ -6,7 +6,7 @@ same ingest key it uses for heartbeats.
 
 ## Claude Code sessions (automatic)
 
-The `SessionEnd` hook installed by `install.sh` reads the session transcript when a cloud session
+The `SessionEnd` hook `/typev:setup` writes into the repo reads the session transcript when a cloud session
 ends and posts its token usage by model:
 
 ```json

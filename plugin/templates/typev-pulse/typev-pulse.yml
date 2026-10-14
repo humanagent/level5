@@ -1,4 +1,4 @@
-# Type V Pulse: the monitor of the monitors. Added by /typev-setup.
+# Type V Pulse: the monitor of the monitors. Added by /typev:setup.
 #
 # Runs on GitHub Actions, apart from the routines it watches: what stops them must not stop this.
 # It asks Type V which monitors need a look (dead, said ok after reading nothing, degraded, missed
@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
-      TYPEV_URL: ${{ vars.TYPEV_URL || '__ORIGIN__' }}
+      TYPEV_URL: ${{ vars.TYPEV_URL || '{{TYPEV_URL}}' }}
       TYPEV_KEY: ${{ secrets.TYPEV_KEY }}
     steps:
       - name: Ask Type V

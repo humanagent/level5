@@ -1,24 +1,26 @@
-# `/typev-setup`
+# `/typev:setup`
 
 Builds a factory Type V can watch, from nothing or on top of what a repo already has: monitors,
 a daily report and a pulse, the roster that declares them, and the Claude Code routines that run
 them. The compute is the repo's own: its routines and its GitHub Actions. Type V stores the
 heartbeats and judges them.
 
-The installer puts the skill in `.claude/skills/typev-setup/` and the templates it adds in
-`.claude/typev/templates/`. Run it in Claude Code at the repo root:
+The skill and the templates it adds come with the [plugin](../README.md#install)
+(`plugin/skills/setup/`, `plugin/templates/`). Run it in Claude Code at the repo root:
 
 ```
-/typev-setup          read the repo, propose, add the pieces, open one PR
-/typev-setup --dry    only read and propose
-/typev-setup routines after the PR is merged: create the routines, run each once
+/typev:setup <ingest-key>        connect the repo, read it, propose, add the pieces, open one PR
+/typev:setup <ingest-key> --dry  connect and propose only
+/typev:setup routines            after the PR is merged: create the routines, run each once
+/typev:new-monitor "<name>" --cron "<cron>" --model <model> -- <what it does>
+                                 one more monitor, in its own PR
 ```
 
 ## The contract
 
 1. **Add, never edit.** Type V adds files and does not change, move or delete a file it did not
-   create. What it adds is named typev: `.claude/skills/typev-*/`, `.github/workflows/typev-*.yml`,
-   `.claude/typev/`. Two exceptions, both append only: the `SessionEnd` hook in
+   create. What it adds is named typev: `.claude/hooks/typev.sh`, `.claude/typev.json`,
+   `.claude/skills/typev*/`, `.github/workflows/typev-*.yml`. Two exceptions, both append only: the `SessionEnd` hook in
    `.claude/settings.json`, and new entries in `.claude/factory.json`.
 2. **One PR**, from the branch `typev/setup`. Nothing goes to the default branch directly.
 3. **Asks before leaving the repo**: creating routines, setting secrets, running a routine.
@@ -45,4 +47,5 @@ The installer puts the skill in `.claude/skills/typev-setup/` and the templates 
   It runs on GitHub Actions, apart from the routines it watches, so what stops them does not stop
   it.
 
-Not covered yet: logs, costs and LLM traces. `/typev-setup` says so in its proposal.
+Not covered yet by a template: logs, costs and LLM traces. `/typev:setup` says so in its proposal, and
+`/typev:new-monitor` writes a monitor for any of them from one line.

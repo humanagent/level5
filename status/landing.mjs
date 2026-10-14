@@ -301,8 +301,6 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 .land .steps code,.land .own code{font:12.5px var(--mono);color:var(--v-tx);background:rgba(255,255,255,.06);border:1px solid var(--v-ln);border-radius:5px;padding:1px 5px}
 .steps .lcta{align-items:center;margin-bottom:12px}.steps .lcta .lp{min-height:40px;padding:0 18px;font-size:14px}
 .steps .alt-link{font:400 13px var(--mono);color:var(--v-mut);text-underline-offset:3px}.steps .alt-link:hover{color:var(--v-tx)}
-.inst-tabs{display:flex;align-items:center;gap:4px;margin:0 0 8px;font:400 12px var(--mono)}.inst-tabs span{color:var(--v-faint);margin-right:6px}
-.inst-tabs button{padding:5px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--v-mut);font:500 12px var(--mono);cursor:pointer}.inst-tabs button[aria-selected=true]{border-color:var(--v-ln2);background:rgba(255,255,255,.05);color:var(--v-tx)}
 .cmdb{position:relative;display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:13px 48px 13px 14px;border-radius:10px;background:#07080e;border:1px solid var(--v-ln);color:#e9e8f0;font:12.5px/1.5 var(--mono);overflow-x:auto;white-space:nowrap}
 .cmdb .p{color:var(--v-faint)}.cmdb .h{color:var(--v-clay)}.cmdb .k{color:var(--v-indigo2)}
 .cmdb .cp,.own-t .cp{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:rgba(255,255,255,.06);color:#c4c7d4;cursor:pointer}.cmdb .cp:hover,.own-t .cp:hover{background:rgba(255,255,255,.12)}.cmdb .cp svg,.own-t .cp svg{width:14px;height:14px}
@@ -421,11 +419,11 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
       <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
-    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: /typev-setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
+    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: /typev:setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
       <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~/acme/api</span><span>claude</span></div>
       <div class="ccw-body" aria-hidden="true">
         <div class="ccw-wel"><span class="sp">✳</span> <b>Welcome to Claude Code</b><br><span class="m">  cwd: ~/acme/api</span></div>
-        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/typev-setup">/typev-setup</span></div>
+        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/typev:setup">/typev:setup</span></div>
         <div class="ccw-l" data-step data-spin="Reading the repo" data-wait="1500"><span class="w">⏺</span> Read the repo</div>
         <div class="ccw-l" data-step data-wait="250"><span class="m">  ⎿  </span>Sentry in 2 apps · 12 skills · 6 workflows · <span class="c">no monitors</span></div>
         <div class="ccw-l" data-step data-spin="Choosing monitors" data-wait="1300"><span class="w">⏺</span> Monitors it will create</div>
@@ -592,17 +590,14 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
         <div class="lcta">${start("install")}${viewer ? "" : `<a class="alt-link" href="/auth/login" data-track="install:signin">or sign in</a>`}</div>
       </div></li>
       <li><span class="n">2</span><div>
-        <h3>Add the heartbeat from Claude Code</h3>
-        <p>At the repo root, with the ingest key you get once the repo is connected:</p>
-        <div class="inst-tabs" role="tablist" aria-label="Where to run it"><span>run in</span><button type="button" role="tab" aria-selected="true" data-tab="cc">Claude Code</button><button type="button" role="tab" aria-selected="false" data-tab="sh">Shell</button></div>
-        <div class="cmdb" data-pane="cc"><span class="h">!</span><span data-cmd>curl -fsSL <span data-origin>${SITE}</span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
-        <div class="cmdb" data-pane="sh" hidden><span class="p">$</span><span data-cmd>curl -fsSL <span data-origin>${SITE}</span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
-        <p>It adds a <code>SessionEnd</code> hook, the <code>/typev-setup</code> skill and its templates under <code>.claude/</code>, and changes nothing else.</p>
+        <h3>Add the plugin to Claude Code</h3>
+        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/plugin install typev --marketplace humanagent/typev</span>${copyBtn}</div>
+        <p>Once per machine. It brings <code>/typev:setup</code>, what needs a look above the prompt, and <code>/typev:sweep</code> and <code>/typev:mend</code> for a sweep or a fix on demand.</p>
       </div></li>
       <li><span class="n">3</span><div>
         <h3>Let it build the factory</h3>
-        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/typev-setup</span>${copyBtn}</div>
-        <p>It reads the repo, proposes monitors, a daily report and a pulse, and opens one PR with new <code>typev-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
+        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/typev:setup <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
+        <p>At the repo root, with the key you get once the repo is connected. It writes the heartbeat hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR with new <code>typev-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
       </div></li>
     </ol>
   </div>
@@ -661,18 +656,12 @@ ${viewer ? "" : `<script>
 })();
 </script>`}
 <script>
-// Install: the commands carry this instance's own address, the tabs switch the shell, copy copies.
+// Install: copy copies.
 (() => {
-  document.querySelectorAll("[data-origin]").forEach((e) => (e.textContent = location.origin));
-  document.querySelectorAll(".inst-tabs button").forEach((b) => b.addEventListener("click", () => {
-    const box = b.closest("li");
-    box.querySelectorAll(".inst-tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
-    box.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
-  }));
   const done = (b) => { b.dataset.done = ""; setTimeout(() => delete b.dataset.done, 1400); };
   document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
-    const box = b.closest(".cmdb"), pre = box.dataset.pane === "cc" ? "! " : "";
-    try { await navigator.clipboard.writeText(pre + box.querySelector("[data-cmd]").textContent); done(b); } catch {}
+    const box = b.closest(".cmdb");
+    try { await navigator.clipboard.writeText(box.querySelector("[data-cmd]").textContent); done(b); } catch {}
   }));
   document.querySelectorAll("[data-copy-own]").forEach((b) => b.addEventListener("click", async () => {
     const lines = b.parentElement.querySelector("[data-own]").textContent.split("\\n").filter((l) => l.startsWith("$ ")).map((l) => l.slice(2).replace(/\\s+#.*$/, ""));

@@ -1,0 +1,27 @@
+{
+  "name": "typev",
+  "displayName": "Type V",
+  "version": "0.1.0",
+  "description": "Observability for your software factory: whether every skill your agents run actually ran, and what it cost.",
+  "author": { "name": "humanagent", "url": "https://github.com/humanagent" },
+  "homepage": "https://factory-status.fly.dev",
+  "repository": "https://github.com/humanagent/typev",
+  "license": "MIT",
+  "keywords": ["monitoring", "observability", "routines", "heartbeats", "costs"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "band": {
+      "type": "string",
+      "title": "Status above the prompt",
+      "description": "problems: only when something needs a look. always: also the all clear. off: never.",
+      "options": ["problems", "always", "off"],
+      "default": "problems"
+    },
+    "key": {
+      "type": "string",
+      "title": "Ingest key",
+      "description": "Only when the repo does not commit .claude/typev.json. The key from the repo's page on Type V.",
+      "sensitive": true
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "typev",
+  "owner": { "name": "humanagent", "url": "https://github.com/humanagent" },
+  "metadata": { "description": "Type V: observability for your software factory." },
+  "plugins": [
+    {
+      "name": "typev",
+      "source": "./plugin",
+      "description": "Sets up the monitors, report and pulse a repo's routines run, shows what needs a look above the prompt, and sweeps and fixes on demand.",
+      "category": "monitoring"
+    }
+  ]
+}

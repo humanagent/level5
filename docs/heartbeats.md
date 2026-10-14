@@ -1,7 +1,7 @@
 # Heartbeats
 
 A heartbeat is the only proof that a scheduled job ran. Without one, a dead monitor and a healthy
-system look the same: both are silent. Hush stores every heartbeat a repo sends and judges each
+system look the same: both are silent. Type V stores every heartbeat a repo sends and judges each
 monitor from them (see [judging.md](judging.md)).
 
 ## The API
@@ -48,31 +48,36 @@ Run at the repo root, then commit `.claude/`. It writes, and changes nothing els
 
 | File | What |
 | --- | --- |
-| `.claude/hush.json` | `{ "url", "key" }`. `HUSH_URL` and `HUSH_KEY` env vars override it. |
-| `.claude/hooks/hush.sh` | The client: `beat` and `session-end`. |
+| `.claude/typev.json` | `{ "url", "key" }`. `TYPEV_URL` and `TYPEV_KEY` env vars override it. |
+| `.claude/hooks/typev.sh` | The client: `beat` and `session-end`. |
 | `.claude/settings.json` | Adds the `SessionEnd` hook. Existing content is kept; running twice adds it once. |
-| `.claude/skills/hush/SKILL.md` | Tells agents to end a routine skill with a heartbeat. |
-| `.claude/skills/hush-setup/SKILL.md` | [`/hush-setup`](setup.md): adds monitors, a report and a pulse in one PR. |
-| `.claude/hush/templates/` | The pieces `/hush-setup` can add. Reinstalling replaces only these. |
+| `.claude/skills/typev/SKILL.md` | Tells agents to end a routine skill with a heartbeat. |
+| `.claude/skills/typev-setup/SKILL.md` | [`/typev-setup`](setup.md): adds monitors, a report and a pulse in one PR. |
+| `.claude/typev/templates/` | The pieces `/typev-setup` can add. Reinstalling replaces only these. |
 | `.claude/factory.json` | A starter roster, only if the repo has none. |
 
 It needs `node` (to merge `settings.json`) and must run at the root of a git repo.
 
-**Where the key lives.** Committing `.claude/hush.json` puts a live key in the repo's history: anyone
-with a clone can post fake heartbeats. In a repo that keeps secrets in a vault, set `HUSH_URL` and
-`HUSH_KEY` there instead, gitignore `.claude/hush.json`, and let the environment provide them:
+**Installed before the rename to Type V?** That install keeps reporting, and the setup page says
+so. Run the installer again to move it to the names above: it swaps the old `SessionEnd` hook for
+the new one, removes the old config and kit, and keeps the old hook file as a one-line forwarder to
+`typev.sh`, since skills copied from the old templates still call it.
+
+**Where the key lives.** Committing `.claude/typev.json` puts a live key in the repo's history: anyone
+with a clone can post fake heartbeats. In a repo that keeps secrets in a vault, set `TYPEV_URL` and
+`TYPEV_KEY` there instead, gitignore `.claude/typev.json`, and let the environment provide them:
 
 - **Claude Code cloud routines:** the variables a session-start hook exports into `$CLAUDE_ENV_FILE`
   reach the commands the session runs (so skill heartbeats work), but **not the `SessionEnd` hook**.
-  Have the session-start hook also write `.claude/hush.json` inside the container (not committed), so
-  `hush.sh session-end` finds the key.
-- **GitHub Actions:** pass both to the job that calls `hush.sh`, and make sure its checkout includes
-  `.claude/hooks/hush.sh` (a sparse checkout that leaves it out skips the copy silently).
+  Have the session-start hook also write `.claude/typev.json` inside the container (not committed), so
+  `typev.sh session-end` finds the key.
+- **GitHub Actions:** pass both to the job that calls `typev.sh`, and make sure its checkout includes
+  `.claude/hooks/typev.sh` (a sparse checkout that leaves it out skips the copy silently).
 
 ## Two ways a routine reports
 
 **Automatic: the `SessionEnd` hook.** When a Claude Code session ends in the cloud
-(`CLAUDE_CODE_REMOTE=true`), `hush.sh session-end` reads the transcript, takes the first slash
+(`CLAUDE_CODE_REMOTE=true`), `typev.sh session-end` reads the transcript, takes the first slash
 command the session ran (`/fix-issues`), and posts `{monitor: "fix-issues", status: "ok", source:
 "session"}`, and the session's token usage by model and its duration (see [costs.md](costs.md)).
 Local sessions send nothing. This proves the routine ran, not that it went well. A
@@ -80,13 +85,13 @@ session beat named after a declared routine counts as that routine's run and doe
 monitor row of its own. Routines whose prompt is free text, with no slash command, send nothing
 this way.
 
-**Explicit: `hush.sh beat`.** A skill ends with:
+**Explicit: `typev.sh beat`.** A skill ends with:
 
 ```sh
-.claude/hooks/hush.sh beat monitor-infra ok '{"swept":{"log_events":41233},"filed":[2634],"note":"one box without cameras"}'
+.claude/hooks/typev.sh beat monitor-infra ok '{"swept":{"log_events":41233},"filed":[2634],"note":"one box without cameras"}'
 ```
 
-This carries the status and the volume, so Hush can tell a monitor that read nothing from one that
+This carries the status and the volume, so Type V can tell a monitor that read nothing from one that
 read a lot and found nothing. Once a monitor sends its own beats, session beats with the same id
 are ignored for it.
 
@@ -94,16 +99,16 @@ From anywhere else (a Lambda, another CI, a cron box), post the JSON directly.
 
 ## Isolation guarantees
 
-`hush.sh` must never change how the repo it lives in behaves:
+`typev.sh` must never change how the repo it lives in behaves:
 
 - The post runs in the background, detached, with a 5 s cap. The caller's output, exit code and
   duration do not change.
-- No network, no curl, no `.claude/hush.json` or no key: it exits 0.
-- `HUSH_DISABLED=1` turns it off entirely, before any network call.
+- No network, no curl, no `.claude/typev.json` or no key: it exits 0.
+- `TYPEV_DISABLED=1` turns it off entirely, before any network call.
 - `session-end` does nothing outside a cloud session.
 
-Tested: with an unreachable server, a reachable one, `HUSH_DISABLED=1`, and a local
+Tested: with an unreachable server, a reachable one, `TYPEV_DISABLED=1`, and a local
 `session-end`, every case exits 0 in about 0.02 s.
 
-When a repo already has its own heartbeat store, call `hush.sh beat` as the **last** step, after
-the existing writes, so the copy to Hush can never affect them.
+When a repo already has its own heartbeat store, call `typev.sh beat` as the **last** step, after
+the existing writes, so the copy to Type V can never affect them.

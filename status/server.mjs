@@ -2376,8 +2376,9 @@ function heartbeatSetup(origin, key, waiting, st = null) {
     <li class="done">${DONE}<div><b>Level 5 can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue come from it.</span></div></li>
     ${step(2, installed, "Connect the repo", false, legacy ? `The heartbeat from before the rename to Level 5 is in the repo and still reports. Run <code>/level5:setup</code> again to update it.` : `<code>.claude/hooks/level5.sh</code> and the SessionEnd hook are in the repo. Every cloud routine reports itself when it ends.`, `<span>In Claude Code, add the Level 5 plugin once:</span>
       <div class="cmd"><pre>/plugin install level5 --marketplace humanagent/level5</pre>${COPY}</div>
-      <span>Then, at the repo root, connect it. It writes the SessionEnd hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR.</span>
-      <div class="cmd"><pre>/level5:setup ${esc(key)}</pre>${COPY}</div>
+      <span>Then, at the repo root, connect it. It gets this repo's key with your GitHub login (<code>gh</code>), writes the SessionEnd hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR.</span>
+      <div class="cmd"><pre>/level5:setup</pre>${COPY}</div>
+      <span>No <code>gh</code> on that machine: <code>/level5:setup ${esc(key)}</code> does the same with the key.</span>
       <span>The files go in the repo because routines run on a fresh clone, where plugins do not load. No change to your skills.</span>${st && st.level5_sh && !st.hook ? `<span class="err">Found <code>level5.sh</code> but not the SessionEnd hook in <code>.claude/settings.json</code>. Run <code>/level5:setup</code> again.</span>` : ""}`)}
     ${step(3, beats, "Say how each run went", true, `${st?.skill_beats} monitor${st?.skill_beats === 1 ? "" : "s"} send their own status and volume.`, `<span>A skill ends with this to send its status and how much it read. A monitor that says ok after reading nothing gets flagged.</span>
       <div class="cmd"><pre>.claude/hooks/level5.sh beat errors ok '{"swept":{"events":120}}'</pre>${COPY}</div>
@@ -3422,6 +3423,25 @@ async function askStream(res, system, messages, origin) {
   res.end();
 }
 
+async function connectRepo(req, res, origin) {
+  const app = appConfig();
+  if (!app || app.dev) return json(res, 503, { error: "this instance has no GitHub App yet" });
+  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const { repo } = JSON.parse((await readBody(req, 4e3)) || "{}");
+  if (!token) return json(res, 401, { error: "send your GitHub token: authorization: Bearer $(gh auth token)" });
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo || "")) return json(res, 400, { error: "repo must be owner/name" });
+  const me = await gh(token, "user").catch(() => null);
+  if (!me?.login) return json(res, 401, { error: "GitHub did not accept that token" });
+  const meta = await gh(token, `repos/${repo}`).catch(() => null);
+  if (!meta) return json(res, 404, { error: `${repo} is not visible to ${me.login}` });
+  if (!meta.permissions?.push) return json(res, 403, { error: `${me.login} cannot push to ${meta.full_name}` });
+  const r = await fetch(`https://api.github.com/repos/${meta.full_name}/installation`, { headers: { authorization: `Bearer ${appJwt(app)}`, accept: "application/vnd.github+json", "user-agent": "factory-status" } }).catch(() => null);
+  if (!r?.ok) return json(res, 404, { error: `the Level 5 app is not installed on ${meta.full_name}`, install: `https://github.com/apps/${app.slug}/installations/new` });
+  const inst = await r.json();
+  const row = await ensureRepo({ id: meta.id, full_name: meta.full_name, installation_id: inst.id, account: { id: inst.account.id, login: inst.account.login, type: inst.account.type } }, { login: me.login });
+  return json(res, 200, { repo: row.full_name, key: row.ingest_key, url: origin, page: `${origin}/r/${row.full_name}` });
+}
+
 // A repo row is created the first time someone who can see it opens its page. It is keyed by the
 // GitHub repo id; name, account and installation are refreshed from GitHub on every visit, so a
 // rename, a transfer or a reinstall keeps its history and its ingest key.
@@ -3525,6 +3545,10 @@ createServer(async (req, res) => {
       await evalRules(repo.id, { fire: true }).catch((e) => console.error("rules:", e.message));
       return json(res, 200, { ok: true, stored: list.length });
     }
+    // /level5:setup with no key: the person's own GitHub token (gh auth token) proves they can push to
+    // the repo, the app's own token proves the app is installed on it, and the answer is that repo's
+    // ingest key. The GitHub token is only used for these two reads and never stored.
+    if (url.pathname === "/api/connect" && req.method === "POST") return connectRepo(req, res, origin);
     // The day's report as data, for the repo's own report skill. The ingest key is the only key a
     // routine holds, so it may read this one summary of its own repo (and nothing else).
     if (url.pathname === "/api/report" && req.method === "GET") {

@@ -77,7 +77,7 @@ export function describe(s: Summary | null, why: string | null): string {
   if (!s) {
     return why
       ? `Level 5 could not read this repo: ${why}.`
-      : 'This repo is not connected to Level 5. Run /level5:setup <ingest-key>, with the key from the repo\'s page on Level 5.'
+      : 'This repo is not connected to Level 5. Run /level5:setup at its root.'
   }
   const lines = [s.needs.length ? `${s.repo}: ${s.needs.length} need${s.needs.length === 1 ? 's' : ''} a look` : `${s.repo}: all clear`]
   for (const n of s.needs) lines.push(`  ${say(n)}`)

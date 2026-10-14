@@ -88,6 +88,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `POST /api/track` | The landing's beacons (4 KB, bots dropped, 600 per IP per hour). Always 204. |
 | `GET /admin/landing`, `/admin/landing/waitlist.csv` | Views, visitors, funnel, clicks, referrers, campaigns, scroll depth and the waitlist, for `ADMIN_LOGINS` (and `DEV_USER` in dev). |
 | `POST /r/<owner>/<repo>/ask` | The assistant: streams an answer as plain text. |
+| `POST /api/connect` | A repo's ingest key for `/level5:setup`, given a GitHub token that can push to it ([heartbeats.md](heartbeats.md)). |
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
 | `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
 | `POST /api/inventory` | Security inventory ingest ([security.md](security.md)). |

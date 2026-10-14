@@ -422,7 +422,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
         <div class="ccw-wel"><span class="sp">✳</span> <b>Welcome to Claude Code</b><br><span class="m">  cwd: ~/acme/api</span></div>
         <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/plugin install level5 --marketplace humanagent/level5">/plugin install level5 --marketplace humanagent/level5</span></div>
         <div class="ccw-l" data-step data-wait="900"><span class="m">  ⎿  </span><span class="g">✓</span> Installed level5. Plugin is now active.</div>
-        <div class="ccw-l in" data-step data-wait="400"><span class="pr">&gt;</span> <span data-type="/level5:setup fsk_…">/level5:setup fsk_…</span></div>
+        <div class="ccw-l in" data-step data-wait="400"><span class="pr">&gt;</span> <span data-type="/level5:setup">/level5:setup</span></div>
         <div class="ccw-l" data-step data-spin="Reading the repo" data-wait="1500"><span class="w">⏺</span> Read the repo</div>
         <div class="ccw-l" data-step data-wait="250"><span class="m">  ⎿  </span>Sentry in 2 apps · 12 skills · 6 workflows · <span class="c">no monitors</span></div>
         <div class="ccw-l" data-step data-spin="Choosing monitors" data-wait="1300"><span class="w">⏺</span> Monitors it will create</div>
@@ -457,7 +457,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
   </div>
   <div class="plug">
     <div class="tile"><div class="tile-cap"><h4><code>/level5:setup</code> <small>skill</small></h4><p>Reads the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the merge it creates the routines.</p></div>
-      <div class="mini"><span class="m">&gt;</span> <span class="w">/level5:setup fsk_…</span>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/level5:setup</span>
 <span class="w">⏺</span> Opened <span class="c">PR #142</span> · 5 skills, 3 workflows
 <span class="g">✓</span> Factory ready · 5 monitors watching acme/api</div></div>
     <div class="tile"><div class="tile-cap"><h4>Above the prompt <small>mod</small></h4><p>What needs a look, where you already are. Silent when all is clear. <code>/level5</code> says the rest.</p></div>
@@ -621,8 +621,8 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
       </div></li>
       <li><span class="n">3</span><div>
         <h3>Let it build the factory</h3>
-        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/level5:setup <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
-        <p>At the repo root, with the key you get once the repo is connected. It writes the heartbeat hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR with new <code>level5-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
+        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/level5:setup</span>${copyBtn}</div>
+        <p>At the repo root. It gets the repo's key with your GitHub login, writes the heartbeat hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR with new <code>level5-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
       </div></li>
     </ol>
   </div>

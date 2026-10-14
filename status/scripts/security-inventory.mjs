@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// security-inventory.mjs: send Type V an inventory of AWS IAM and Infisical secret NAMES.
+// security-inventory.mjs: send Level 5 an inventory of AWS IAM and Infisical secret NAMES.
 //
 //   node security-inventory.mjs [--infisical-project <id>] [--envs prod,staging] [--dry]
 //
-// Uses the CLIs already logged in on this machine or in this job (aws, infisical). Type V gets no
+// Uses the CLIs already logged in on this machine or in this job (aws, infisical). Level 5 gets no
 // credentials. Secret VALUES never leave this process: the Infisical export is reduced to key names
 // before anything is built, and the payload is checked for values before it is sent.
 //
-// Where to send: TYPEV_URL and TYPEV_KEY, or .claude/typev.json in the current repo.
+// Where to send: LEVEL5_URL and LEVEL5_KEY, or .claude/level5.json in the current repo.
 // --dry prints the payload instead of sending it.
 
 import { execFileSync } from "node:child_process";
@@ -96,8 +96,8 @@ const body = JSON.stringify(payload);
 // last guard: nothing that looks like a credential may leave
 if (/AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|-----BEGIN|sk-or-v1-|sk-ant-|postgres(ql)?:\/\/[^"]*@|ghp_|gho_|ghs_|xox[bp]-/.test(body)) { console.error("security-inventory: refused, the payload looks like it contains a credential"); process.exit(1); }
 if (DRY) { console.log(JSON.stringify(payload, null, 2)); process.exit(0); }
-let url = process.env.TYPEV_URL, key = process.env.TYPEV_KEY;
-if ((!url || !key) && existsSync(".claude/typev.json")) { const c = JSON.parse(readFileSync(".claude/typev.json", "utf8")); url ||= c.url; key ||= c.key; }
-if (!url || !key) { console.error("security-inventory: set TYPEV_URL and TYPEV_KEY, or run in a repo with .claude/typev.json"); process.exit(1); }
+let url = process.env.LEVEL5_URL, key = process.env.LEVEL5_KEY;
+if ((!url || !key) && existsSync(".claude/level5.json")) { const c = JSON.parse(readFileSync(".claude/level5.json", "utf8")); url ||= c.url; key ||= c.key; }
+if (!url || !key) { console.error("security-inventory: set LEVEL5_URL and LEVEL5_KEY, or run in a repo with .claude/level5.json"); process.exit(1); }
 const r = await fetch(`${url}/api/inventory`, { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json" }, body });
 console.log(`security-inventory: ${r.status} ${await r.text()} (${a ? `${a.users.length} users, ${a.roles.length} roles` : "no AWS"}; ${f ? `${f.folders.reduce((n, x) => n + x.keys.length, 0)} secret names in ${f.folders.length} folders` : "no Infisical"})`);

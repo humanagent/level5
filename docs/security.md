@@ -1,6 +1,6 @@
 # Security
 
-An inventory of AWS IAM and the secret names in Infisical, judged into findings. **Type V never
+An inventory of AWS IAM and the secret names in Infisical, judged into findings. **Level 5 never
 receives a secret value or a credential**: only names and metadata. There is no Security section in
 the app: critical and high findings show as one alert on Status, and new ones are notifications.
 
@@ -10,7 +10,7 @@ the app: critical and high findings show as one alert on Status, and new ones ar
 in (a laptop, or a routine), at the repo root:
 
 ```sh
-node status/scripts/security-inventory.mjs            # sends to .claude/typev.json, or TYPEV_URL + TYPEV_KEY
+node status/scripts/security-inventory.mjs            # sends to .claude/level5.json, or LEVEL5_URL + LEVEL5_KEY
 node status/scripts/security-inventory.mjs --dry      # prints the payload, sends nothing
   --infisical-project <id>   # default: .infisical.json in the current directory
   --envs prod,staging        # default: prod,staging,dev (missing ones are skipped)

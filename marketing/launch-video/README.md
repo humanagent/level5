@@ -1,8 +1,11 @@
-# Type V launch video
+# Level 5 launch video
 
 The 68 s launch film (quote of Anthropic's source-control post): the hook, every landing feature, the
-3D factory, the Kardashev zoom out to Type V, the waitlist. `scene.html` is the whole film as one page
-whose `render(t)` draws any instant; the scripts turn it into an MP4.
+3D factory, the zoom out through the five levels of autonomy to Level 5, the install line. `scene.html` is
+the whole film as one page whose `render(t)` draws any instant; the scripts turn it into an MP4.
+
+The recorded voice (`vo2/take.mp3`, `vo2/install.mp3`) predates the rename to Level 5 and the new story:
+the lines `accel`, `mark`, `status`, `grow` and `end` in `script.json` changed and need a new take.
 
 Needs Node, ffmpeg, `uvx`, and `OPENROUTER_API_KEY` (from `status/.env.local`). `npm i` here first.
 
@@ -13,10 +16,10 @@ Needs Node, ffmpeg, `uvx`, and `OPENROUTER_API_KEY` (from `status/.env.local`). 
    The install line ("Works with Claude Code. Free, and open source. Run your own.") was re-recorded alone as
    `vo2/install.mp3` after the waitlist came off; its clip replaces `vo2/install.wav` and the timeline was adjusted by hand.
 3. **Music**: `python3 lyria.py` asks Lyria 3 for the track (`lyria-energy.mp3`, committed). `beats.py` finds
-   its tempo and bars; `rebar.py` rebuilds it bar by bar so the drops land on the logo, Type V and the end:
+   its tempo and bars; `rebar.py` rebuilds it bar by bar so the drops land on the logo, Level 5 and the end:
    `uvx --with numpy python rebar.py lyria-energy.mp3 music3.wav 0.647 0,1,0,1,2,3,4,…,21,24,25,26,27,28,29,30,28,29,29,30,31`
 4. **Mix**: `MUSIC=music3.wav node mix.mjs` (voice on top, the music ducking under it), then gain to −14 LUFS.
 5. **Frames and MP4**: `mkdir frames && node render.mjs frames 30` (about 25 min), then
-   `ffmpeg -framerate 30 -i frames/%04d.png -i mix2.wav -t 70.4 -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac typeV-launch.mp4`.
+   `ffmpeg -framerate 30 -i frames/%04d.png -i mix2.wav -t 70.4 -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac level5-launch.mp4`.
 
 `CHROME=<path>` points Playwright at a specific Chrome if its own isn't installed.

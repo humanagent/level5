@@ -1,1 +1,1 @@
-{ "name": "type-v-launch-video", "private": true, "type": "module", "dependencies": { "playwright": "^1.64.0" } }
+{ "name": "level5-launch-video", "private": true, "type": "module", "dependencies": { "playwright": "^1.64.0" } }

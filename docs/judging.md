@@ -1,4 +1,4 @@
-# How Type V judges
+# How Level 5 judges
 
 Everything is stored and computed in UTC; the page prints times in the viewer's time zone (see
 Settings in [architecture.md](architecture.md)). The rules live in `judge()`, `readSkills()`,
@@ -39,7 +39,7 @@ Evaluated in this order; the first that matches wins.
 
 | State | Rule |
 | --- | --- |
-| **No heartbeat yet** | Type V has never heard from it. Grey, not an alert. |
+| **No heartbeat yet** | Level 5 has never heard from it. Grey, not an alert. |
 | **Down** | No heartbeat within its tolerance (see Schedules). |
 | **Said ok, read nothing** | The last heartbeat is `ok` with `swept[volume_key] = 0`, unless `zero_ok`. |
 | **Chronically degraded** | At least 4 runs in the last 14 days and more than 30% of them not `ok`; or the last two runs both not `ok`. |
@@ -80,7 +80,7 @@ a run whose span is over 3 hours is left out, since that is a re-run days later,
 ## Promotions
 
 Under CI. A repo that promotes from an integration branch to production (staging → main, develop →
-master…) does it with pull requests into the production branch. Type V finds the two branches by name
+master…) does it with pull requests into the production branch. Level 5 finds the two branches by name
 (or from `"promotion": {"from": "staging", "to": "main"}` in `.claude/factory.json`) and lists what
 is waiting for production and the recent promotions.
 

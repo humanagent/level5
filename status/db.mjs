@@ -8,14 +8,22 @@
 // read without a repo_id that the request was authorized for.
 
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-// The local SQLite file. Servers set up before the rename to Type V wrote it under the old name: move it
-// (with its WAL files) to the new name once, so their data stays.
+// The local SQLite file. Servers set up under an earlier name of the product wrote it under that
+// name: when level5.db is missing and the data dir holds exactly one other .db file, move it (with its
+// WAL files) to level5.db once, so its data stays. factory.db is the first storage, which the server
+// reads on its own (migrateLegacy), so it never counts.
 export function liteFile(dataDir) {
-  const file = join(dataDir, "typev.db"), old = join(dataDir, "hush.db");
-  if (!existsSync(file) && existsSync(old)) for (const x of ["", "-wal", "-shm"]) if (existsSync(old + x)) renameSync(old + x, file + x);
+  const file = join(dataDir, "level5.db");
+  if (!existsSync(file) && existsSync(dataDir)) {
+    const others = readdirSync(dataDir).filter((f) => f.endsWith(".db") && f !== "factory.db");
+    if (others.length === 1) {
+      const old = join(dataDir, others[0]);
+      for (const x of ["", "-wal", "-shm"]) if (existsSync(old + x)) renameSync(old + x, file + x);
+    }
+  }
   return file;
 }
 

@@ -1,6 +1,6 @@
-// Type V inside the session: a band above the prompt when a monitor needs a look, a toast when the
-// session starts with one, and /typev for the repo's state on demand. It reads the repo's summary
-// from Type V with the same key the routines post with (.claude/typev.json, the routine's
+// Level 5 inside the session: a band above the prompt when a monitor needs a look, a toast when the
+// session starts with one, and /level5 for the repo's state on demand. It reads the repo's summary
+// from Level 5 with the same key the routines post with (.claude/level5.json, the routine's
 // environment, or the plugin's own setting), every 15 minutes. Silence is the default: with
 // everything fine the band draws nothing.
 import { atom, read, update } from 'claude-code'
@@ -8,9 +8,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Need, Summary } from '../types'
 
-const summary = atom({ plugin: 'typev', key: 'summary' } as const, null)
-const problem = atom({ plugin: 'typev', key: 'problem' } as const, null)
-const isHidden = atom({ plugin: 'typev', key: 'isHidden' } as const, false)
+const summary = atom({ plugin: 'level5', key: 'summary' } as const, null)
+const problem = atom({ plugin: 'level5', key: 'problem' } as const, null)
+const isHidden = atom({ plugin: 'level5', key: 'isHidden' } as const, false)
 
 const DEFAULT_URL = 'https://factory-status.fly.dev'
 const EVERY = 15 * 60e3
@@ -32,10 +32,10 @@ type Conn = { url: string; key: string }
 async function connection($: EngineInterface, key: string): Promise<Conn | null> {
   let file: { url?: string; key?: string } = {}
   try {
-    file = JSON.parse(await $.fs.read('.claude/typev.json'))
+    file = JSON.parse(await $.fs.read('.claude/level5.json'))
   } catch {}
-  const url = (await $.env.get('TYPEV_URL')) || file.url || DEFAULT_URL
-  const k = (await $.env.get('TYPEV_KEY')) || file.key || key
+  const url = (await $.env.get('LEVEL5_URL')) || file.url || DEFAULT_URL
+  const k = (await $.env.get('LEVEL5_KEY')) || file.key || key
   return k ? { url: url.replace(/\/+$/, ''), key: k } : null
 }
 
@@ -62,7 +62,7 @@ async function refresh($: EngineInterface, key: string): Promise<Summary | null>
   }
   try {
     const r = await $.http.fetch(`${conn.url}/api/report`, { headers: { authorization: `Bearer ${conn.key}` } })
-    if (!r.ok) throw new Error(r.status === 401 ? 'the ingest key was refused' : `Type V answered ${r.status}`)
+    if (!r.ok) throw new Error(r.status === 401 ? 'the ingest key was refused' : `Level 5 answered ${r.status}`)
     const s = toSummary(JSON.parse(r.text))
     await update($, summary, () => s)
     await update($, problem, () => null)
@@ -76,8 +76,8 @@ async function refresh($: EngineInterface, key: string): Promise<Summary | null>
 export function describe(s: Summary | null, why: string | null): string {
   if (!s) {
     return why
-      ? `Type V could not read this repo: ${why}.`
-      : 'This repo is not connected to Type V. Run /typev:setup <ingest-key>, with the key from the repo\'s page on Type V.'
+      ? `Level 5 could not read this repo: ${why}.`
+      : 'This repo is not connected to Level 5. Run /level5:setup <ingest-key>, with the key from the repo\'s page on Level 5.'
   }
   const lines = [s.needs.length ? `${s.repo}: ${s.needs.length} need${s.needs.length === 1 ? 's' : ''} a look` : `${s.repo}: all clear`]
   for (const n of s.needs) lines.push(`  ${say(n)}`)
@@ -95,16 +95,16 @@ export const register: Register = (on, options) => {
   const key = String(options.key ?? '')
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'typev', description: 'What Type V says about this repo now' })
+    await $.command.register({ name: 'level5', description: 'What Level 5 says about this repo now' })
     const s = await refresh($, key)
     if (s?.needs.length && band !== 'off') {
-      $.ui.toast(`Type V: ${s.needs.length} need${s.needs.length === 1 ? 's' : ''} a look. /typev`, { timeoutMs: 6000 })
+      $.ui.toast(`Level 5: ${s.needs.length} need${s.needs.length === 1 ? 's' : ''} a look. /level5`, { timeoutMs: 6000 })
     }
     $.clock.every(EVERY, () => void refresh($, key))
     return next(e)
   })
 
-  on('command.run', { command: 'typev' }, async $ => {
+  on('command.run', { command: 'level5' }, async $ => {
     await update($, isHidden, () => false)
     const s = await refresh($, key)
     return { text: describe(s, await read($, problem)) }
@@ -122,13 +122,13 @@ export const register: Register = (on, options) => {
 
     return (
       <Box>
-        <Text bold>Type V </Text>
+        <Text bold>Level 5 </Text>
         {s.needs.length ? (
           <Text color="warning">{`${first}${more} `}</Text>
         ) : (
           <Text dimColor>{`all clear${s.usd != null ? ` · ${usd(s.usd)} yesterday` : ''} `}</Text>
         )}
-        <Text dimColor>/typev </Text>
+        <Text dimColor>/level5 </Text>
         <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
       </Box>
     )

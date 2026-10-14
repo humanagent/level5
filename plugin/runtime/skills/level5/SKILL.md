@@ -1,17 +1,17 @@
 ---
-name: typev
-description: Send a Type V heartbeat. Every skill that runs on a Claude Code routine (a monitor, a sweep, a report, a fixer) ends by calling this, clean run or not, so the status page can tell a healthy silent monitor from a dead one. Use for "heartbeat", "typev beat", "report to type v".
-allowed-tools: Bash(.claude/hooks/typev.sh *)
+name: level5
+description: Send a Level 5 heartbeat. Every skill that runs on a Claude Code routine (a monitor, a sweep, a report, a fixer) ends by calling this, clean run or not, so the status page can tell a healthy silent monitor from a dead one. Use for "heartbeat", "level5 beat", "report to level 5".
+allowed-tools: Bash(.claude/hooks/level5.sh *)
 ---
 
-# Type V heartbeat
+# Level 5 heartbeat
 
-The SessionEnd hook already tells Type V that a routine ran. That proves the routine is
+The SessionEnd hook already tells Level 5 that a routine ran. That proves the routine is
 alive. It does not say whether the run was any good. For that, the skill sends its own
 heartbeat as its last step:
 
 ```bash
-.claude/hooks/typev.sh beat <monitor-id> <ok|degraded|skipped> '{"swept":{"<volume_key>":<n>},"filed":[<issue numbers>],"note":"<one line>"}'
+.claude/hooks/level5.sh beat <monitor-id> <ok|degraded|skipped> '{"swept":{"<volume_key>":<n>},"filed":[<issue numbers>],"note":"<one line>"}'
 ```
 
 - `ok`: the sweep ran end to end and saw data.
@@ -24,5 +24,5 @@ under the monitor's `volume_key` from `.claude/factory.json`: an `ok` with zero 
 flagged as "said ok, read nothing".
 
 A skill that writes a report (a weekly summary, an email, a digest) also sends the report
-itself, so it can be read in Type V under Reports: add `"title"` and `"report"` (markdown, up to
+itself, so it can be read in Level 5 under Reports: add `"title"` and `"report"` (markdown, up to
 60,000 characters) to the same JSON.

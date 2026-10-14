@@ -1,6 +1,6 @@
 export const meta = {
   name: 'sweep',
-  description: "Run the repo's Type V monitors now, try to refute every finding, and file only what survives",
+  description: "Run the repo's Level 5 monitors now, try to refute every finding, and file only what survives",
   whenToUse: 'A monitor sweep on demand, with each finding checked by skeptics before it becomes an issue. Pass monitor ids to run only those.',
   phases: [
     { title: 'Roster', detail: 'the monitors in .claude/factory.json' },
@@ -67,14 +67,14 @@ phase('Roster')
 const only = Array.isArray(args) ? args : typeof args === 'string' && args.trim() ? args.trim().split(/[\s,]+/) : []
 const roster = await agent(
   `Read .claude/factory.json and list its monitors whose skill exists at .claude/skills/<id>/SKILL.md. ` +
-    `Leave out typev-report (a report, not a monitor) and any monitor that is a GitHub Actions workflow. ` +
+    `Leave out level5-report (a report, not a monitor) and any monitor that is a GitHub Actions workflow. ` +
     (only.length ? `Keep only these ids: ${only.join(', ')}. ` : '') +
     `Return each with its id, the skill path, and its volume_key. No .claude/factory.json: return no monitors.`,
   { schema: ROSTER, effort: 'low' },
 )
 
 if (!roster || !roster.monitors.length) {
-  log('No monitors to run. /typev:setup builds them, /typev:new-monitor adds one.')
+  log('No monitors to run. /level5:setup builds them, /level5:new-monitor adds one.')
   return { monitors: [] }
 }
 log(`${roster.monitors.length} monitor${roster.monitors.length === 1 ? '' : 's'}: ${roster.monitors.map(m => m.id).join(', ')}`)
@@ -111,7 +111,7 @@ const results = await pipeline(
     const keep = run.judged.filter(f => f.survives)
     return agent(
       `File these issues the way ${m.skill} files them (its label, its title format, its dedupe check right ` +
-        `before each), then send its heartbeat with .claude/hooks/typev.sh exactly as the skill's last step says, ` +
+        `before each), then send its heartbeat with .claude/hooks/level5.sh exactly as the skill's last step says, ` +
         `with status ${run.status}, swept ${JSON.stringify(run.swept)}, the issue numbers you filed, and the note ` +
         `"sweep: ${run.judged.length - keep.length} refuted. ${run.note.replace(/"/g, "'")}". ` +
         `Return the numbers filed, and the titles you skipped as already open.\n\n` +

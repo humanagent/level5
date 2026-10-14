@@ -1,7 +1,7 @@
 # Architecture
 
 One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres on Neon when
-`DATABASE_URL` is set, and a local SQLite file (`/data/typev.db`) otherwise, behind the same calls
+`DATABASE_URL` is set, and a local SQLite file (`/data/level5.db`) otherwise, behind the same calls
 (`db.mjs`). The only dependency is the `postgres` driver.
 
 ## Tenancy
@@ -28,7 +28,7 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | Judging | `judge`, `routineState`, `snapshot` ([judging.md](judging.md)) |
 | Automations | `syncAutomations` ([automations.md](automations.md)) |
 | HTML | `statusPage` (a left-nav app, one view per URL hash: Status, Monitors, Automations, CI, Pull requests, Issues, Costs, Reports, Services, Setup), `skeletonPage`, `heartbeatSetup`, `landing.mjs` |
-| Heartbeat client | `plugin/runtime/hooks/typev.sh`, written into each repo by `/typev:setup` ([heartbeats.md](heartbeats.md)) |
+| Heartbeat client | `plugin/runtime/hooks/level5.sh`, written into each repo by `/level5:setup` ([heartbeats.md](heartbeats.md)) |
 
 ## Storage
 
@@ -78,7 +78,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `GET /r/<owner>/<repo>/live` | Live Actions plus the heartbeat count. |
 | `GET /r/<owner>/<repo>/setup` | Heartbeat setup for the repo. |
 | `POST /r/<owner>/<repo>/key` | Replace the repo's ingest key (same-site form post); the old one works 24 h more. |
-| `GET /r/<owner>/<repo>/triggers`, `POST` | The routines that can be run from Type V; POST saves or removes one's API trigger (same-site only). The token is sealed and never sent back. |
+| `GET /r/<owner>/<repo>/triggers`, `POST` | The routines that can be run from Level 5; POST saves or removes one's API trigger (same-site only). The token is sealed and never sent back. |
 | `POST /r/<owner>/<repo>/fire` | Run a routine now through its API trigger, with an optional text for the run (same-site only). |
 | `POST /r/<owner>/<repo>/rules` | Create, edit, pause or delete a price rule; `{text}` makes one from a sentence. |
 | `GET /settings`, `POST` | The signed-in person's settings: their time zone. |
@@ -91,7 +91,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
 | `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
 | `POST /api/inventory` | Security inventory ingest ([security.md](security.md)). |
-| `GET /install.sh` | Says Type V installs as a Claude Code plugin, and how. |
+| `GET /install.sh` | Says Level 5 installs as a Claude Code plugin, and how. |
 | `GET /setup?t=SETUP_TOKEN` | One-time GitHub App creation from a manifest. |
 | `GET /auth/login`, `/auth/callback`, `POST /logout` | Sign in with GitHub. |
 | `GET /healthz` | Health check. |
@@ -99,7 +99,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 ## Security model
 
 - **Read-only on GitHub.** The app asks for read access to contents, issues, pull requests,
-  actions, checks and metadata, and nothing else. Type V never writes to a repo.
+  actions, checks and metadata, and nothing else. Level 5 never writes to a repo.
 - **No personal tokens stored for reads.** Reads use short-lived installation tokens. The user's
   OAuth token is only used to list which installations they can see.
 - **A user sees a repo only if one of their installations covers it.**
@@ -108,7 +108,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 
 ## Notifications
 
-The bell in the top bar. Every time a repo's snapshot is refreshed, Type V compares it with the
+The bell in the top bar. Every time a repo's snapshot is refreshed, Level 5 compares it with the
 previous one and records what changed as events. A background job refreshes every repo opened in
 the last 7 days every 10 minutes, so events accrue between visits (while the machine is awake).
 Each person sees the events of every repo their installations cover; opening the panel marks them
@@ -131,23 +131,23 @@ and background refreshes, and the open set is in the URL (`?w=`).
 
 A panel on the right of the repo page, opened from Ask in the top bar; it stays open across sections
 and refreshes, and the page makes room for it. It is also where price rules are made: it has tools to
-create, list and delete them ([costs.md](costs.md)). Each question is one OpenRouter call (`TYPEV_MODEL`, default
-`openai/gpt-6.1-sol`) whose system prompt carries everything Type V has on the repo: the snapshot,
+create, list and delete them ([costs.md](costs.md)). Each question is one OpenRouter call (`LEVEL5_MODEL`, default
+`openai/gpt-6.1-sol`) whose system prompt carries everything Level 5 has on the repo: the snapshot,
 30 days of heartbeats with their notes and volumes, the cost rows, and a one-line summary of every
 other repo the person can see. The conversation lives in the page only; nothing is stored.
 
 ## Moving storage
 
-On start-up Type V brings older data forward, once each:
+On start-up Level 5 brings older data forward, once each:
 
 - from the first storage (`/data/factory.db`, keyed by repo name), resolving names to GitHub ids;
-- when running on Postgres, from the local `/data/typev.db` collected before the switch.
+- when running on Postgres, from the local `/data/level5.db` collected before the switch.
 
 ## Operations
 
 - Deploy: `cd status && fly deploy -a factory-status`.
 - Secrets: `SECRET` and `SETUP_TOKEN` (required), `DATABASE_URL` (Neon), `OPENROUTER_API_KEY`
-  and optionally `TYPEV_MODEL` (the assistant) and `ADMIN_LOGINS` (comma-separated GitHub logins that can read `/admin/landing`). Set with `fly secrets set NAME=value -a factory-status`.
+  and optionally `LEVEL5_MODEL` (the assistant) and `ADMIN_LOGINS` (comma-separated GitHub logins that can read `/admin/landing`). Set with `fly secrets set NAME=value -a factory-status`.
 - Logs: `fly logs -a factory-status`.
 - The machine auto-stops when idle; the first request after that pays a cold start, which the
   stored snapshots hide.
@@ -155,7 +155,7 @@ On start-up Type V brings older data forward, once each:
 ## Known gaps
 
 - **Backups depend on the storage.** On Neon they come with it; on the local SQLite there are none.
-- **Notifications only in the app.** The bell and price rules notify inside Type V; nothing is sent
+- **Notifications only in the app.** The bell and price rules notify inside Level 5; nothing is sent
   by email or chat yet.
 - **Per-day charts are UTC days**, whatever the viewer's time zone.
 - **No deploy pipeline.** Deploys are manual `fly deploy`.

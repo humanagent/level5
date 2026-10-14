@@ -2,7 +2,7 @@
 
 An automation is one scheduled job: a Claude Code routine (`.claude/factory.json` or the older
 `cloud-routine.md` table) or a scheduled GitHub Actions workflow. It can run in several places and
-leave traces in several logs, but Type V treats it as **one object**, stored with its own state, cost,
+leave traces in several logs, but Level 5 treats it as **one object**, stored with its own state, cost,
 tokens and runs. Anything in the app that names an automation (the week calendar, Status, a monitor's
 "runs in", a notification) opens the same window.
 
@@ -44,7 +44,7 @@ hook does not still shows its runs, without tokens.
 
 | State | When |
 | --- | --- |
-| Not reporting | No run of it has ever reached Type V. |
+| Not reporting | No run of it has ever reached Level 5. |
 | Missed the last run | Its schedule says it should have run last time and nothing arrived. |
 | Last run degraded | The latest run was not `ok`. |
 | On schedule | Otherwise; the reason line gives the share of scheduled runs that happened. |
@@ -73,21 +73,21 @@ and log link), and the skills it runs, each opening its own window.
 - **Tokens and cost**: the `SessionEnd` hook, which posts the session's token usage.
 - **Duration**: the same hook, from the first and last timestamp in the transcript (`secs`).
 
-## Run and create from Type V
+## Run and create from Level 5
 
 Claude Code has no API to create, edit or pause a routine. It has one to start a routine that has an
-API trigger, so that is what Type V does:
+API trigger, so that is what Level 5 does:
 
 - **Run now.** Open a Claude Code routine's window, paste its API trigger (the URL and the
-  `sk-ant-…` token from the routine's settings on claude.ai) under "Run from Type V", and it gets a
+  `sk-ant-…` token from the routine's settings on claude.ai) under "Run from Level 5", and it gets a
   Run now button with an optional text for that run (an issue, a PR, an alert). The token is sealed
   at rest, never sent back to the page, and only posted to Anthropic's fire URL. Every run started
-  from Type V, and every one that failed to start, goes to the bell. Anthropic allows 30 starts per
-  routine and 100 per account an hour; Type V adds a 20 s pause between starts of the same routine.
+  from Level 5, and every one that failed to start, goes to the bell. Anthropic allows 30 starts per
+  routine and 100 per account an hour; Level 5 adds a 20 s pause between starts of the same routine.
 - **New routine.** The button on Automations opens a form (name, what it does, when, model) that
-  writes a `/typev:new-monitor …` command. Pasted in Claude Code, it adds the `typev-*` skill and its
-  roster entry in one PR; after the merge, `/typev:setup routines` creates the routine in the
-  person's Claude account. Type V itself stays read-only on the repo.
+  writes a `/level5:new-monitor …` command. Pasted in Claude Code, it adds the `level5-*` skill and its
+  roster entry in one PR; after the merge, `/level5:setup routines` creates the routine in the
+  person's Claude account. Level 5 itself stays read-only on the repo.
 
 Pausing, editing and deleting a routine stay on claude.ai.
 

@@ -4,7 +4,7 @@ end = TL["end"]["b"]
 prompt = (f"Instrumental track for a {round(end)} second high-energy tech product launch video. 128 BPM, driving, punchy and energizing from the very first second. "
  f"0 to {TL['mark']['a']:.0f}s: a tight pulsing synth bassline and filtered drums, already moving, building fast with a riser. "
  f"At {TL['mark']['a']:.0f}s a big hit and the full beat drops: hard four-on-the-floor kick, crisp claps, sidechained bass, bright synth stabs and a fast arpeggio. Relentless momentum, like a sprint. "
- f"At {TL['grow']['a']:.0f}s a short breakdown with a snare roll and a rising riser that accelerates, then a massive drop at {TL['grow']['b']:.0f}s, the most intense moment. "
+ f"At {TL['grow']['a']:.0f}s a short breakdown with a snare roll and a rising riser that speeds up, then a massive drop at {TL['grow']['b']:.0f}s, the most intense moment. "
  f"Keep the energy up to {TL['end']['a']:.0f}s, then end on a hard, clean final hit. "
  "Modern electronic, like a Nike or Apple ad: confident, fast, exciting. Leaves room for a voice-over in the mids. No vocals.")
 print(prompt, file=sys.stderr)

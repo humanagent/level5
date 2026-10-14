@@ -1,5 +1,5 @@
 {
-  "name": "typev-status",
+  "name": "level5-status",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },

@@ -38,28 +38,31 @@ for that one repo, and read that repo's daily report ([report.md](report.md)).
 keeps working for 24 hours, so there is time to update wherever it is stored before heartbeats stop.
 Replace it whenever it leaked: committed to git, pasted somewhere.
 
-## The installer
+## Connecting a repo
 
-```sh
-curl -fsSL https://factory-status.fly.dev/install.sh | sh -s -- <ingest-key>
+In Claude Code, with the [plugin](../README.md#install) added, at the repo root:
+
+```
+/typev:setup <ingest-key>
 ```
 
-Run at the repo root, then commit `.claude/`. It writes, and changes nothing else:
+It writes these into the repo, in the PR it opens, and changes nothing else. They go in the repo
+and not in the plugin because routines run in cloud sessions on a fresh clone, and a cloud session
+does not load plugins: only what is committed reaches them.
 
 | File | What |
 | --- | --- |
 | `.claude/typev.json` | `{ "url", "key" }`. `TYPEV_URL` and `TYPEV_KEY` env vars override it. |
-| `.claude/hooks/typev.sh` | The client: `beat` and `session-end`. |
+| `.claude/hooks/typev.sh` | The client: `beat`, `cost` and `session-end`. |
 | `.claude/settings.json` | Adds the `SessionEnd` hook. Existing content is kept; running twice adds it once. |
 | `.claude/skills/typev/SKILL.md` | Tells agents to end a routine skill with a heartbeat. |
-| `.claude/skills/typev-setup/SKILL.md` | [`/typev-setup`](setup.md): adds monitors, a report and a pulse in one PR. |
-| `.claude/typev/templates/` | The pieces `/typev-setup` can add. Reinstalling replaces only these. |
-| `.claude/factory.json` | A starter roster, only if the repo has none. |
+| `.claude/factory.json` | The roster, created if missing, appended to otherwise. |
 
-It needs `node` (to merge `settings.json`) and must run at the root of a git repo.
+The source of the first three is `plugin/runtime/` in this repo; a plugin update reaches a repo the
+next time `/typev:setup` runs there.
 
-**Installed before the rename to Type V?** That install keeps reporting, and the setup page says
-so. Run the installer again to move it to the names above: it swaps the old `SessionEnd` hook for
+**Connected before the rename to Type V?** That install keeps reporting, and the setup page says
+so. Run `/typev:setup` again to move it to the names above: it swaps the old `SessionEnd` hook for
 the new one, removes the old config and kit, and keeps the old hook file as a one-line forwarder to
 `typev.sh`, since skills copied from the old templates still call it.
 

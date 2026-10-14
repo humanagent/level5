@@ -28,7 +28,7 @@ One Node 24 process on Fly (`factory-status`, region `gru`). Storage is Postgres
 | Judging | `judge`, `routineState`, `snapshot` ([judging.md](judging.md)) |
 | Automations | `syncAutomations` ([automations.md](automations.md)) |
 | HTML | `statusPage` (a left-nav app, one view per URL hash: Status, Monitors, Automations, CI, Pull requests, Issues, Costs, Reports, Services, Setup), `skeletonPage`, `heartbeatSetup`, `landing.mjs` |
-| Heartbeat client | `install.sh` ([heartbeats.md](heartbeats.md)) |
+| Heartbeat client | `plugin/runtime/hooks/typev.sh`, written into each repo by `/typev:setup` ([heartbeats.md](heartbeats.md)) |
 
 ## Storage
 
@@ -91,7 +91,7 @@ HTML is served `no-store`, so a browser never shows an old build of a page.
 | `POST /api/heartbeat` | Heartbeat ingest ([heartbeats.md](heartbeats.md)). |
 | `POST /api/cost` | Cost ingest ([costs.md](costs.md)). |
 | `POST /api/inventory` | Security inventory ingest ([security.md](security.md)). |
-| `GET /install.sh` | The installer, with this origin filled in. |
+| `GET /install.sh` | Says Type V installs as a Claude Code plugin, and how. |
 | `GET /setup?t=SETUP_TOKEN` | One-time GitHub App creation from a manifest. |
 | `GET /auth/login`, `/auth/callback`, `POST /logout` | Sign in with GitHub. |
 | `GET /healthz` | Health check. |

@@ -85,8 +85,8 @@ API trigger, so that is what Type V does:
   from Type V, and every one that failed to start, goes to the bell. Anthropic allows 30 starts per
   routine and 100 per account an hour; Type V adds a 20 s pause between starts of the same routine.
 - **New routine.** The button on Automations opens a form (name, what it does, when, model) that
-  writes a `/typev-setup add …` command. Pasted in Claude Code, it adds the `typev-*` skill and its
-  roster entry in one PR; after the merge, `/typev-setup routines` creates the routine in the
+  writes a `/typev:new-monitor …` command. Pasted in Claude Code, it adds the `typev-*` skill and its
+  roster entry in one PR; after the merge, `/typev:setup routines` creates the routine in the
   person's Claude account. Type V itself stays read-only on the repo.
 
 Pausing, editing and deleting a routine stay on claude.ai.

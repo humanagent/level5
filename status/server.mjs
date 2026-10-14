@@ -22,7 +22,6 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, r
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
-import { installer } from "./kit.mjs";
 import { dailyReport, reportData } from "./report.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -34,7 +33,8 @@ const DATA = process.env.DATA_DIR || "./data";
 const SECRET = process.env.SECRET || "dev-secret-change-me";
 const KEY = createHash("sha256").update(SECRET).digest();
 const WINDOW = 30;
-const INSTALL = installer();
+// Type V installs as a Claude Code plugin; /install.sh only says how
+const INSTALL = readFileSync(new URL("./install.sh", import.meta.url), "utf8");
 mkdirSync(DATA, { recursive: true });
 
 // --- storage --------------------------------------------------------------
@@ -1837,7 +1837,7 @@ if(!ev.target.closest("#notif-panel"))toggle(false)});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")toggle(false)});
 document.addEventListener("typev:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
 // Routines from Type V: fill each .rt-fire box with its trigger (save one, run now, remove it), and
-// turn the New routine form into a /typev-setup command to copy.
+// turn the New routine form into a /typev:new-monitor command to copy.
 const TRIG_JS = `<script>(()=>{if(window.typevTrig)return;window.typevTrig=1;
 const base=()=>location.pathname.replace(/[/]$/,"");let cache=null,at=0;
 const e=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1856,7 +1856,7 @@ await sync(true)}catch(x){msg.textContent=x.message;btn.disabled=false}});
 document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-rt-remove]");if(!b)return;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to remove";return}const box=b.closest(".rt-fire");await post("/triggers",{routine:box.dataset.routine,remove:true}).catch(()=>{});sync(true)});
 const q=s=>'"'+String(s).replace(/["\\\\]/g,"")+'"';
 function cmd(f){const v=n=>f.elements[n].value.trim(),custom=v("preset")==="custom",cron=custom?v("cron"):v("preset");f.querySelector("[data-cron]").hidden=!custom;
-f.querySelector("[data-cmd]").textContent=v("name")&&v("what")?"/typev-setup add "+q(v("name"))+" --cron "+q(cron||"0 13 * * *")+" --model "+v("model")+" -- "+v("what").replace(/\\s+/g," "):"Fill in a name and what it does."}
+f.querySelector("[data-cmd]").textContent=v("name")&&v("what")?"/typev:new-monitor "+q(v("name"))+" --cron "+q(cron||"0 13 * * *")+" --model "+v("model")+" -- "+v("what").replace(/\\s+/g," "):"Fill in a name and what it does."}
 ["input","change"].forEach(t=>document.addEventListener(t,ev=>{const f=ev.target.closest&&ev.target.closest(".nr-form");if(f)cmd(f)}));
 document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-nr-copy]");if(!b)return;const t=b.closest(".nr-form").querySelector("[data-cmd]").textContent;if(!t.startsWith("/"))return;try{await navigator.clipboard.writeText(t);b.textContent="Copied"}catch(x){}});
 })()</script>`;
@@ -2361,9 +2361,11 @@ function heartbeatSetup(origin, key, waiting, st = null) {
   const costsOn = providers.length > 0 || (st?.sessions || 0) > 0;
   return `<ol class="ob">
     <li class="done">${DONE}<div><b>Type V can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue come from it.</span></div></li>
-    ${step(2, installed, "Install the heartbeat", false, legacy ? `The heartbeat from before the rename to Type V is in the repo and still reports. Run the installer again to update it.` : `<code>.claude/hooks/typev.sh</code> and the SessionEnd hook are in the repo. Every cloud routine reports itself when it ends.`, `<span>At the repo root, then commit <code>.claude/</code> and push.</span>
-      <div class="cmd"><pre>curl -fsSL ${esc(origin)}/install.sh | sh -s -- ${esc(key)}</pre>${COPY}</div>
-      <span>It adds a SessionEnd hook, so every Claude Code routine that runs a slash command reports itself when it ends. No change to your skills.</span>${st && st.typev_sh && !st.hook ? `<span class="err">Found <code>typev.sh</code> but not the SessionEnd hook in <code>.claude/settings.json</code>. Run the installer again.</span>` : ""}`)}
+    ${step(2, installed, "Connect the repo", false, legacy ? `The heartbeat from before the rename to Type V is in the repo and still reports. Run <code>/typev:setup</code> again to update it.` : `<code>.claude/hooks/typev.sh</code> and the SessionEnd hook are in the repo. Every cloud routine reports itself when it ends.`, `<span>In Claude Code, add the Type V plugin once:</span>
+      <div class="cmd"><pre>/plugin install typev --marketplace humanagent/typev</pre>${COPY}</div>
+      <span>Then, at the repo root, connect it. It writes the SessionEnd hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR.</span>
+      <div class="cmd"><pre>/typev:setup ${esc(key)}</pre>${COPY}</div>
+      <span>The files go in the repo because routines run on a fresh clone, where plugins do not load. No change to your skills.</span>${st && st.typev_sh && !st.hook ? `<span class="err">Found <code>typev.sh</code> but not the SessionEnd hook in <code>.claude/settings.json</code>. Run <code>/typev:setup</code> again.</span>` : ""}`)}
     ${step(3, beats, "Say how each run went", true, `${st?.skill_beats} monitor${st?.skill_beats === 1 ? "" : "s"} send their own status and volume.`, `<span>A skill ends with this to send its status and how much it read. A monitor that says ok after reading nothing gets flagged.</span>
       <div class="cmd"><pre>.claude/hooks/typev.sh beat errors ok '{"swept":{"events":120}}'</pre>${COPY}</div>
       <details class="more"><summary>Declare your monitors and routines, or post from somewhere else</summary>
@@ -2381,7 +2383,7 @@ function heartbeatSetup(origin, key, waiting, st = null) {
   -H "authorization: Bearer ${esc(key)}" \\
   -H "content-type: application/json" \\
   -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details>`)}
-    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.typev_sh && !st.cost_cmd ? " Your <code>typev.sh</code> predates this: run the installer again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
+    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.typev_sh && !st.cost_cmd ? " Your <code>typev.sh</code> predates this: run <code>/typev:setup</code> again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
       <div class="cmd"><pre>.claude/hooks/typev.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"S3":0.4}}'</pre>${COPY}</div>
       <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Type V never asks for billing credentials.</span>`)}
     ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/typev.sh beat install-test ok</code></span></div></li>` : ""}
@@ -2552,7 +2554,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       ${A?.runs?.length ? `<div class="ar-list more5">${A.runs.map(runRow).join("")}${more(A.runs.length)}</div>` : `<p class="faint">No run recorded yet.</p>`}
       ${fed.length ? `<h4>Skills it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
   }
-  // New routine: there is no API to create a routine, so Type V writes the /typev-setup command that does it
+  // New routine: there is no API to create a routine, so Type V writes the /typev:new-monitor command that does it
   wins.push({ key: "new:routine", kind: "Automation", title: "New routine", body: `
       <form class="nr-form" onsubmit="return false">
         <label>Name<input name="name" placeholder="Logs sweep" maxlength="60"></label>
@@ -2560,7 +2562,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
         <label>When<select name="preset"><option value="0 13 * * *">Every day at 13:00 UTC</option><option value="0 13 * * 1-5">Weekdays at 13:00 UTC</option><option value="0 12 * * 1">Mondays at 12:00 UTC</option><option value="0 */6 * * *">Every 6 hours</option><option value="custom">Custom cron</option></select></label>
         <label data-cron hidden>Cron (UTC)<input name="cron" placeholder="0 13 * * *"></label>
         <label>Model<select name="model"><option>sonnet</option><option>opus</option><option>haiku</option></select></label>
-        <p class="faint">Paste this in Claude Code at the repo root. It adds a new <code>typev-*</code> skill and its roster entry in one PR, changing nothing else. After the merge, <code>/typev-setup routines</code> creates the routine in your Claude account.</p>
+        <p class="faint">Paste this in Claude Code at the repo root. It adds a new <code>typev-*</code> skill and its roster entry in one PR, changing nothing else. After the merge, <code>/typev:setup routines</code> creates the routine in your Claude account.</p>
         <div class="nr-cmd" data-cmd>Fill in a name and what it does.</div>
         <div><button class="btn-sm" type="button" data-nr-copy>Copy command</button></div>
       </form>` });

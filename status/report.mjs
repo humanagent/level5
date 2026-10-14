@@ -152,7 +152,7 @@ export function dailyReport(s, { origin = "", day } = {}) {
       <tr><td style="padding: 24px 24px 30px 24px;">${body}</td></tr>
     </table>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px;"><tr><td align="center" style="padding: 22px 4px 0 4px; font-family: ${FONT}; font-size: 11px; color: ${R.inkMute}; line-height: 1.6;">
-      <span style="font-weight: 700; color: ${R.inkSoft}; font-size: 12px;">hush<span style="color: ${R.accent};">.</span></span><br>Observability for your software factory. Times are UTC.
+      <span style="font-weight: 700; color: ${R.inkSoft}; font-size: 12px;">Type V</span><br>Observability for your software factory. Times are UTC.
     </td></tr></table>
   </td></tr></table>
 </body></html>`;

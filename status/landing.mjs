@@ -1,6 +1,6 @@
-// The public landing at "/", for people who are not signed in. Branded Type V (after the Kardashev
-// scale); the signed-in app is still "hush".
-const REPO = "https://github.com/humanagent/hush";
+// The public landing at "/", for people who are not signed in. Type V, after the Kardashev
+// scale.
+const REPO = "https://github.com/humanagent/typev";
 // Every number in the preview is invented and labelled as an example.
 
 // 30 days per example monitor: o = ok, d = degraded, s = skipped, . = no run
@@ -421,19 +421,19 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
       <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
-    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: /hush-setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
+    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: /typev-setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
       <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~/acme/api</span><span>claude</span></div>
       <div class="ccw-body" aria-hidden="true">
         <div class="ccw-wel"><span class="sp">✳</span> <b>Welcome to Claude Code</b><br><span class="m">  cwd: ~/acme/api</span></div>
-        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/hush-setup">/hush-setup</span></div>
+        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/typev-setup">/typev-setup</span></div>
         <div class="ccw-l" data-step data-spin="Reading the repo" data-wait="1500"><span class="w">⏺</span> Read the repo</div>
         <div class="ccw-l" data-step data-wait="250"><span class="m">  ⎿  </span>Sentry in 2 apps · 12 skills · 6 workflows · <span class="c">no monitors</span></div>
         <div class="ccw-l" data-step data-spin="Choosing monitors" data-wait="1300"><span class="w">⏺</span> Monitors it will create</div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">  ⎿  </span><span class="w">hush-monitor-errors</span>  <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">hush-monitor-logs</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">hush-monitor-cost</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">hush-report</span>          <span class="m">routine </span> <span class="ix">0 14 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">hush-pulse</span>           <span class="m">workflow</span> <span class="ix">0 19 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">  ⎿  </span><span class="w">typev-monitor-errors</span>  <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-monitor-logs</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-monitor-cost</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-report</span>          <span class="m">routine </span> <span class="ix">0 14 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-pulse</span>           <span class="m">workflow</span> <span class="ix">0 19 * * *</span></div>
         <div class="ccw-l" data-step data-spin="Writing skills and workflows" data-wait="1700"><span class="w">⏺</span> Opened <span class="c">PR #142</span> · 5 skills, 3 workflows</div>
         <div class="ccw-l ok" data-step data-wait="700">✓ Factory ready · 5 monitors watching acme/api</div>
       </div>
@@ -597,12 +597,12 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
         <div class="inst-tabs" role="tablist" aria-label="Where to run it"><span>run in</span><button type="button" role="tab" aria-selected="true" data-tab="cc">Claude Code</button><button type="button" role="tab" aria-selected="false" data-tab="sh">Shell</button></div>
         <div class="cmdb" data-pane="cc"><span class="h">!</span><span data-cmd>curl -fsSL <span data-origin>${SITE}</span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
         <div class="cmdb" data-pane="sh" hidden><span class="p">$</span><span data-cmd>curl -fsSL <span data-origin>${SITE}</span>/install.sh | sh -s -- <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
-        <p>It adds a <code>SessionEnd</code> hook, the <code>/hush-setup</code> skill and its templates under <code>.claude/</code>, and changes nothing else.</p>
+        <p>It adds a <code>SessionEnd</code> hook, the <code>/typev-setup</code> skill and its templates under <code>.claude/</code>, and changes nothing else.</p>
       </div></li>
       <li><span class="n">3</span><div>
         <h3>Let it build the factory</h3>
-        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/hush-setup</span>${copyBtn}</div>
-        <p>It reads the repo, proposes monitors, a daily report and a pulse, and opens one PR with new <code>hush-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
+        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/typev-setup</span>${copyBtn}</div>
+        <p>It reads the repo, proposes monitors, a daily report and a pulse, and opens one PR with new <code>typev-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
       </div></li>
     </ol>
   </div>
@@ -614,7 +614,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
     </div>
     <div class="own-t" aria-label="Commands to run your own">
       <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~</span></div>
-      <pre data-own><span class="p">$</span> git clone ${REPO} &amp;&amp; cd hush/status
+      <pre data-own><span class="p">$</span> git clone ${REPO} &amp;&amp; cd typev/status
 <span class="p">$</span> npm install &amp;&amp; DATA_DIR=./data SECRET=dev SETUP_TOKEN=dev npm start
 <span class="m">  factory-status on :8080</span>
 <span class="p">$</span> fly launch <span class="m"># your own app, with a volume on /data</span>
@@ -632,18 +632,18 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
   <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
 </section>
 
-<footer class="lfoot"><span><a class="logo" href="/" aria-label="Type V, home">${WORDMARK(18)}</a></span><span>open source, MIT<i>·</i><a href="${REPO}" target="_blank" rel="noopener" data-track="foot:github">github.com/humanagent/hush</a><i>·</i>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login" data-track="foot:signin">Sign in</a>`}</span></footer>
+<footer class="lfoot"><span><a class="logo" href="/" aria-label="Type V, home">${WORDMARK(18)}</a></span><span>open source, MIT<i>·</i><a href="${REPO}" target="_blank" rel="noopener" data-track="foot:github">github.com/humanagent/typev</a><i>·</i>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login" data-track="foot:signin">Sign in</a>`}</span></footer>
 </main>
 
 ${viewer ? "" : `<script>
 // First-party analytics, dogfooding: views, clicks and how far each section is read go to
 // /api/track as beacons. An anonymous random id in localStorage, no cookies, nothing personal.
 (() => {
-  let aid; try { aid = localStorage.getItem("hush_aid") || (localStorage.setItem("hush_aid", aid = crypto.randomUUID()), aid); } catch { aid = "nostore"; }
+  let aid; try { aid = localStorage.getItem("typev_aid") || (localStorage.setItem("typev_aid", aid = crypto.randomUUID()), aid); } catch { aid = "nostore"; }
   const q = new URLSearchParams(location.search), utm = {};
   for (const k of ["source", "medium", "campaign", "term", "content"]) if (q.get("utm_" + k)) utm[k] = q.get("utm_" + k).slice(0, 100);
   const sec = (el) => { const s = el && el.closest("section[id],header[id],nav[id],footer"); return s ? s.id || s.tagName.toLowerCase() : ""; };
-  const track = window.hushTrack = (type, o = {}) => {
+  const track = window.typevTrack = (type, o = {}) => {
     const b = JSON.stringify({ aid, type, path: location.pathname, ref: document.referrer, utm, vw: innerWidth, ...o });
     try { navigator.sendBeacon ? navigator.sendBeacon("/api/track", new Blob([b], { type: "text/plain" })) : fetch("/api/track", { method: "POST", body: b, keepalive: true }); } catch {}
   };

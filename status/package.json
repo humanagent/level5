@@ -1,5 +1,5 @@
 {
-  "name": "hush-status",
+  "name": "typev-status",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },

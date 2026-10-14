@@ -23,7 +23,7 @@ Preview any day at `/r/<owner>/<repo>/report?day=YYYY-MM-DD`.
 
 ## For the repo's own report
 
-Hush sends no email. A repo that wants the report in its inbox gets the day as data and sends it
+Type V sends no email. A repo that wants the report in its inbox gets the day as data and sends it
 with its own template and email path, from a daily routine:
 
 ```

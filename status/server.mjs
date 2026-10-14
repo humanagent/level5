@@ -17,7 +17,7 @@ import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { openDb } from "./db.mjs";
+import { liteFile, openDb } from "./db.mjs";
 import { createCipheriv, createDecipheriv, createHash, createHmac, createSign, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -220,17 +220,21 @@ function cronPeriodHours(cron) {
 }
 
 // --- the factory, read from the repo -------------------------------------------------
+// The name before the rename to Type V. Repos installed before it have .claude/hooks/<it>.sh and
+// its SessionEnd hook: they still count as installed, and the setup page asks for a reinstall.
+const LEGACY = "hush";
 async function readFactory(token, repo) {
   return cached(`factory:${repo}`, 10 * 60e3, async () => {
     const notes = [];
-    const [meta, skillDirs, factoryJson, roster, routineDoc, workflowsList, hushSh, settingsJson] = await Promise.all([
+    const [meta, skillDirs, factoryJson, roster, routineDoc, workflowsList, typevSh, legacySh, settingsJson] = await Promise.all([
       gh(token, `repos/${repo}`),
       gh(token, `repos/${repo}/contents/.claude/skills`).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/factory.json`, true).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/skills/monitor-meta/roster.json`, true).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/skills/cloud-routine.md`, true).catch(() => null),
       gh(token, `repos/${repo}/actions/workflows?per_page=100`).catch(() => null),
-      gh(token, `repos/${repo}/contents/.claude/hooks/hush.sh`, true).catch(() => null),
+      gh(token, `repos/${repo}/contents/.claude/hooks/typev.sh`, true).catch(() => null),
+      gh(token, `repos/${repo}/contents/.claude/hooks/${LEGACY}.sh`, true).catch(() => null),
       gh(token, `repos/${repo}/contents/.claude/settings.json`, true).catch(() => null),
     ]);
 
@@ -284,7 +288,7 @@ async function readFactory(token, repo) {
     );
     routines = routines.concat(scheduled.flat());
 
-    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, promotion: config.promotion || null, client: { hush_sh: !!hushSh, cost_cmd: /\bcost\)/.test(hushSh || ""), hook: /hush\.sh session-end/.test(settingsJson || "") }, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
+    return { meta: { full_name: meta.full_name, private: meta.private, default_branch: meta.default_branch, url: meta.html_url }, skills, monitors, routines, notes, prices: config.prices || {}, promotion: config.promotion || null, client: { typev_sh: !!(typevSh || legacySh), legacy: !typevSh && !!legacySh, cost_cmd: /\bcost\)/.test(typevSh || legacySh || ""), hook: new RegExp(`(typev|${LEGACY})\\.sh session-end`).test(settingsJson || "") }, workflows: workflows.filter((w) => w.state === "active").map((w) => ({ id: w.id, name: w.name, path: w.path, url: w.html_url })) };
   });
 }
 
@@ -631,7 +635,7 @@ async function judge(factory, repoId) {
     const badShare = recent.length ? recent.filter((b) => b.status !== "ok").length / recent.length : 0;
     const h = last ? (Date.now() - new Date(last.ts)) / 36e5 : null;
     let state = "alive", why = "";
-    if (!last) [state, why] = ["silent", "no heartbeat yet: Hush has never heard from it"];
+    if (!last) [state, why] = ["silent", "no heartbeat yet: Type V has never heard from it"];
     else if (h > silence) [state, why] = ["dead", `last heartbeat ${Math.round(h)} h ago, tolerates ${silence} h`];
     else if (last.status === "ok" && vol(last) === 0 && !m.zero_ok) [state, why] = ["lying", `reported ok with ${m.volume_key} = 0`];
     else if (recent.length >= 4 && badShare > 0.3) [state, why] = ["degraded", `${Math.round(badShare * 100)}% of runs in 14 days were not ok`];
@@ -761,7 +765,7 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
     };
   };
   const rows = ids.map(row);
-  // routines that run skills Hush has never heard from still get a row: you should see them
+  // routines that run skills Type V has never heard from still get a row: you should see them
   for (const r of cc) if (!rows.some((x) => x.routine === r.name)) rows.push({ id: cmdOf(r) || r.name.replace(/^App: /, ""), weekly: cronPeriodHours(r.cron) >= 24 * 6, routine: r.name, unit: "", state: "silent", why: "no heartbeat from this routine yet", buckets: [...Array(cronPeriodHours(r.cron) >= 24 * 6 ? WEEKS : WINDOW)].map(() => ({ s: "", label: "", runs: 0 })), last: null, read: null, on_time: null, misses: 0 });
   const groups = [];
   for (const r of cc) {
@@ -847,7 +851,7 @@ async function syncAutomations(repoRow, factory, routines, status, token, repo) 
     // state, from the schedule's own buckets (missed = due and nothing arrived)
     const b = status?.routines?.[r.name]?.buckets || [], due = b.filter((x) => x.s), last = runs.map((x) => x.at).sort().pop() || r.last_seen || null;
     const missed = b.filter((x) => x.s === "miss").length, lastRun = runs.slice().sort((x, y) => (x.at < y.at ? 1 : -1))[0];
-    const [state, why] = !runs.length && !due.some((x) => x.s === "ok") ? ["not reporting", "no run of it has reached Hush"] : due.at(-1)?.s === "miss" ? ["missed", "the last scheduled run did not happen"] : lastRun && lastRun.status !== "ok" ? ["degraded", lastRun.note || `last run ${lastRun.status}`] : ["on schedule", due.length ? `${Math.round(((due.length - missed) / due.length) * 100)}% on time` : ""];
+    const [state, why] = !runs.length && !due.some((x) => x.s === "ok") ? ["not reporting", "no run of it has reached Type V"] : due.at(-1)?.s === "miss" ? ["missed", "the last scheduled run did not happen"] : lastRun && lastRun.status !== "ok" ? ["degraded", lastRun.note || `last run ${lastRun.status}`] : ["on schedule", due.length ? `${Math.round(((due.length - missed) / due.length) * 100)}% on time` : ""];
     const in30 = runs.filter((x) => Date.parse(x.at) >= d30), s30 = (k) => in30.reduce((a, x) => a + (x[k] || 0), 0);
     const row = { repo_id: id, key, name: r.name.replace(/^App: /, ""), source: r.source, cron: r.cron, command: r.source === "GitHub Actions" ? r.prompt : cmd ? `/${cmd}` : "", model: r.model || "", skills: JSON.stringify(skills), state, state_why: why, last_run_at: last, next_run_at: r.next_run || null, runs_30d: in30.length, missed_30d: missed, tokens_30d: s30("tokens"), usd_30d: Math.round(s30("usd") * 100) / 100, secs_30d: s30("secs"), updated_at: new Date().toISOString() };
     await db.run(`INSERT INTO automations (repo_id, key, name, source, cron, command, model, skills, state, state_why, last_run_at, next_run_at, runs_30d, missed_30d, tokens_30d, usd_30d, secs_30d, updated_at)
@@ -1040,7 +1044,7 @@ period: "day" | "week" (rolling 7 days) | "month" (month to date) | "forecast" (
 amount: number (dollars, or tokens); pct: number; days: number; service: substring of a service name or "" (known: ${JSON.stringify(services.slice(0, 40))});
 dow: array of weekday numbers it applies to, Sunday=0, [] = every day; from/to: "YYYY-MM-DD" or ""; severity: "warn" | "bad" (urgent, critical).
 Weekdays = [1,2,3,4,5]. Today is ${new Date().toISOString().slice(0, 10)}. Answer with the JSON object only.`;
-  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "x-title": "Hush" }, body: JSON.stringify({ model: ASK_MODEL, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: String(text).slice(0, 500) }] }), signal: AbortSignal.timeout(30000) });
+  const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "x-title": "Type V" }, body: JSON.stringify({ model: ASK_MODEL, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: String(text).slice(0, 500) }] }), signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw new Error(`the model did not answer (${r.status})`);
   const out = (await r.json()).choices?.[0]?.message?.content || "";
   const j = JSON.parse((out.match(/\{[\s\S]*\}/) || ["{}"])[0]);
@@ -1214,7 +1218,7 @@ function until(ts) {
 
 const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">`;
 const MARK = (color = "currentColor") => `<svg viewBox="0 0 40 40" width="22" height="22" aria-hidden="true"><path d="M3 22h9l3.5-9 6 18 3.5-9h12" fill="none" stroke="${color}" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const LOGO = `<a class="logo" href="/">${MARK()}<span>hush</span></a>`;
+const LOGO = `<a class="logo" href="/">${MARK()}<span>Type V</span></a>`;
 
 const CSS = `
 :root{--bg:#fff;--ink:#14161c;--muted:#666a73;--faint:#9a9ea5;--line:#ebecef;--ok:#2fb36b;--warn:#f0a92c;--bad:#e5484d;--empty:#e9eaed;
@@ -1518,7 +1522,7 @@ code.branch{font:500 11.5px var(--mono);color:#0969da;background:#ddf4ff;border-
 `;
 // Loaded after every other rule so it wins over the page's own styles.
 // The Linear-style layer, loaded after everything else: light, dense, thin borders, almost no
-// shadow, Inter, black primary buttons, indigo only for links and focus. Hush's orange stays in the
+// shadow, Inter, black primary buttons, indigo only for links and focus. Type V's orange stays in the
 // logo. Palette and type only; layout lives in the base styles.
 const THEME = `
 .sk-g{margin-bottom:28px}.sk-gh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}.sk-gh h2{margin:0}.sk-gh span{font-size:12.5px;color:var(--faint)}.sk-gh code{font:12px var(--mono);color:var(--muted)}.sk-gh b{color:var(--ink);font-weight:500}
@@ -1708,8 +1712,8 @@ const pull=async()=>{if(busy)return;busy=1;const w=document.querySelector(".wrap
 try{const r=await fetch(u,{credentials:"same-origin"});if(r.status===401){location.href="/auth/login";return}
 const d=new DOMParser().parseFromString(await r.text(),"text/html");const n=d.querySelector(".wrap");if(!n)throw 0;if(r.ok&&w.querySelector(".sk-nav")&&!n.querySelector(".sk-nav")){location.reload();return}
 if(!r.ok)throw 0;const open=[...w.querySelectorAll("details")].map(x=>x.open),on=[...w.querySelectorAll("input[type=radio]:checked")].map(x=>x.id);w.replaceWith(n);on.forEach(id=>{const x=document.getElementById(id);if(x)x.checked=true});
-n.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true});document.title=d.title;document.dispatchEvent(new Event("hush:swap"))}catch(e){w.dataset.loading="";w.dataset.failed="1"}finally{busy=0}};
-window.hushPull=pull;if(document.body.dataset.stale)pull();setInterval(()=>{if(!document.hidden)pull()},120e3);
+n.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true});document.title=d.title;document.dispatchEvent(new Event("typev:swap"))}catch(e){w.dataset.loading="";w.dataset.failed="1"}finally{busy=0}};
+window.typevPull=pull;if(document.body.dataset.stale)pull();setInterval(()=>{if(!document.hidden)pull()},120e3);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()})})()</script>`;
 // The "Actions" panel: polls /r/<repo>/live every 8 s while something runs, 30 s otherwise,
 // ticks the elapsed timers every second, and re-renders into the new .wrap after a swap.
@@ -1737,17 +1741,17 @@ return '<li class="job" data-st="'+e(j.status)+'">'+icon(j.status,j.conclusion)+
 return '<div class="run" data-st="'+e(r.status)+'"><a class="run-head" href="'+e(r.url)+'" target="_blank" rel="noopener">'+icon(r.status,r.conclusion)+'<span class="run-main"><span class="run-title">'+e(r.title||r.name)+'</span><span class="run-sub"><b>'+e(r.name)+'</b> #'+r.number+' · '+e(r.event)+(r.actor?" by "+e(r.actor):"")+'</span></span><span class="run-side"><code class="branch">'+e(r.branch)+'</code><span class="run-time"><span class="faint">'+verb(r)+'</span> <span data-since="'+e(r.started)+'">'+dur(Date.now()-new Date(r.started))+'</span></span></span></a>'+(jobs?'<ul class="jobs">'+jobs+'</ul>':"")+'</div>'}).join("")+'</div>'}
 if(data.recent.length&&!compact)h+='<div class="recent-label">Recently finished</div><div class="group recent">'+data.recent.map(r=>'<a class="line rrow'+(done.includes(r.id)?" just":"")+'" href="'+e(r.url)+'" target="_blank" rel="noopener"><span class="name">'+icon(r.status,r.conclusion)+'<span>'+e(r.name)+' <span class="faint">#'+r.number+'</span><span class="sub">'+e(r.title)+'</span></span></span><span class="meta"><code class="branch">'+e(r.branch)+'</code><span class="sub">'+dur(new Date(r.updated)-new Date(r.started))+' · '+ago(r.updated)+'</span></span></a>').join("")+'</div>';
 b.innerHTML=h}
-async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await fetch(u,{credentials:"same-origin"});if(r.ok){const d=await r.json();const finished=data&&data.active.some(x=>!d.active.some(y=>y.id===x.id));data=d;render();if(d.beats&&document.getElementById("onboard")&&window.hushPull)window.hushPull();else if(finished&&window.hushPull)setTimeout(window.hushPull,1500)}}catch(e){}}
+async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await fetch(u,{credentials:"same-origin"});if(r.ok){const d=await r.json();const finished=data&&data.active.some(x=>!d.active.some(y=>y.id===x.id));data=d;render();if(d.beats&&document.getElementById("onboard")&&window.typevPull)window.typevPull();else if(finished&&window.typevPull)setTimeout(window.typevPull,1500)}}catch(e){}}
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
-document.addEventListener("hush:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
+document.addEventListener("typev:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
 const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "reports", "services", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:var(--sel);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--link)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
-addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("hush:swap",set)})()</script>`;
-const ASK_MODEL = process.env.HUSH_MODEL || "openai/gpt-6.1-sol";
-const ASK_JS = `<script>(()=>{const S=window.hushChat||(window.hushChat={msgs:[],busy:false,draft:""});
+addEventListener("hashchange",()=>{set();scrollTo(0,0)});document.addEventListener("typev:swap",set)})()</script>`;
+const ASK_MODEL = process.env.TYPEV_MODEL || process.env[`${LEGACY.toUpperCase()}_MODEL`] || "openai/gpt-6.1-sol"; // the old name: set before the rename to Type V
+const ASK_JS = `<script>(()=>{const S=window.typevChat||(window.typevChat={msgs:[],busy:false,draft:""});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const md=t=>e(t).replace(/\x60\x60\x60([\\s\\S]*?)\x60\x60\x60/g,(m,c)=>"<pre>"+c.replace(/^\\w*\\n/,"")+"</pre>").replace(/\x60([^\x60\\n]+)\x60/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/^#{1,4} (.+)$/gm,"<b>$1</b>").replace(/^[-*] (.+)$/gm,"<li>$1</li>").replace(/(<li>.*<\\/li>\\n?)+/g,m=>"<ul>"+m.replace(/\\n/g,"")+"</ul>").replace(/\\n{2,}/g,"<br><br>").replace(/\\n/g,"<br>");
 function draw(){const log=document.getElementById("chat-log");if(!log)return;
@@ -1761,11 +1765,11 @@ if(!r.ok||!r.body){a.content=(await r.text())||"The assistant did not answer.";a
 document.addEventListener("submit",ev=>{if(ev.target.id!=="ask-form")return;ev.preventDefault();const i=document.getElementById("ask-input");const q=i.value;i.value="";ask(q)});
 document.addEventListener("keydown",ev=>{if(ev.target.id==="ask-input"&&ev.key==="Enter"&&!ev.shiftKey){ev.preventDefault();ev.target.form.requestSubmit()}});
 document.addEventListener("input",ev=>{if(ev.target.id==="ask-input")S.draft=ev.target.value});
-const H=document.documentElement,K="hush-ask",open=o=>{if(o)H.dataset.ask="1";else delete H.dataset.ask;try{localStorage.setItem(K,o?"1":"")}catch(x){}if(o)setTimeout(()=>{const i=document.getElementById("ask-input");if(i)i.focus()},0)};
+const H=document.documentElement,K="typev-ask",open=o=>{if(o)H.dataset.ask="1";else delete H.dataset.ask;try{localStorage.setItem(K,o?"1":"")}catch(x){}if(o)setTimeout(()=>{const i=document.getElementById("ask-input");if(i)i.focus()},0)};
 try{if(localStorage.getItem(K))H.dataset.ask="1"}catch(x){}if(location.hash==="#assistant"){open(true);history.replaceState(null,"",location.pathname+location.search+"#status")}
 document.addEventListener("click",ev=>{const t=ev.target.closest&&ev.target.closest("[data-ask-toggle]");if(t){open(!H.dataset.ask);return}const c=ev.target.closest&&ev.target.closest(".chip");if(c){open(true);ask(c.dataset.q)}});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&H.dataset.ask&&ev.target.closest&&ev.target.closest("#chat"))open(false)});
-document.addEventListener("hush:swap",draw);draw()})()</script>`;
+document.addEventListener("typev:swap",draw);draw()})()</script>`;
 // Floating windows, after the admin's PanelHost (docs/admin/crud-panel.md → Windows): one click on
 // an entity opens its own window; the same entity never opens twice (it comes to the front);
 // windows are dragged by the title bar, resized from any edge (min 380×280), cascade 28 px from
@@ -1773,7 +1777,7 @@ document.addEventListener("hush:swap",draw);draw()})()</script>`;
 // They live on <body>, outside the page, so section changes and background refreshes keep them;
 // their contents come from the page's <template>s and are refreshed with it. The open set is in
 // the URL (?w=), so a link reopens them. On a phone each window is a full-screen sheet.
-const WIN_JS = `<script>(()=>{const W=window.hushWin||(window.hushWin={list:[],frames:{}});
+const WIN_JS = `<script>(()=>{const W=window.typevWin||(window.typevWin={list:[],frames:{}});
 const MINW=380,MINH=280,STEP=28,TOP=56;
 const esc=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const tpl=k=>[...document.querySelectorAll("#win-tpl template")].find(t=>t.dataset.key===k);
@@ -1785,7 +1789,7 @@ function order(){const vis=W.list.filter(w=>!w.min);vis.forEach((w,i)=>{w.el.sty
 function renderDock(){const d=dockEl();const mins=W.list.filter(w=>w.min);d.innerHTML=mins.map(w=>'<button type="button" class="win-chip" data-key="'+esc(w.key)+'"><span>'+esc(w.kind)+'</span> '+esc(w.title)+"</button>").join("");d.hidden=!mins.length}
 function clamp(f){const vw=innerWidth,vh=innerHeight;f.w=Math.max(MINW,Math.min(f.w,vw-16));f.h=Math.max(MINH,Math.min(f.h,vh-TOP-8));f.x=Math.max(8-f.w+120,Math.min(f.x,vw-120));f.y=Math.max(TOP-6,Math.min(f.y,vh-40));return f}
 function place(w){if(phone()){w.el.removeAttribute("style");order();return}const f=clamp(W.frames[w.key]);Object.assign(w.el.style,{left:f.x+"px",top:f.y+"px",width:f.w+"px",height:f.h+"px"});order()}
-function fill(w){if(w.ad)return;const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;if(window.hushLocal)window.hushLocal();w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
+function fill(w){if(w.ad)return;const t=tpl(w.key),b=w.el.querySelector(".win-body");if(t){const st=b.scrollTop;b.replaceChildren(t.content.cloneNode(true));b.scrollTop=st;if(window.typevLocal)window.typevLocal();w.el.classList.remove("gone");w.title=t.dataset.title;w.el.querySelector(".win-title").textContent=t.dataset.title}else w.el.classList.add("gone")}
 function focus(w){W.list.splice(W.list.indexOf(w),1);W.list.push(w);if(w.min){w.min=false;w.el.hidden=false;renderDock()}order()}
 function close(w){w.el.remove();W.list.splice(W.list.indexOf(w),1);order();renderDock();syncUrl()}
 function open(key,quiet){const had=W.list.find(w=>w.key===key);if(had){focus(had);return true}const ad=W.adhoc&&W.adhoc[key];const t=ad?{dataset:{kind:ad.kind,title:ad.title,href:""}}:tpl(key);if(!t)return false;
@@ -1810,12 +1814,12 @@ const o=ev.target.closest("[data-open]");if(!o)return;if(ev.defaultPrevented||ev
 const inner=ev.target.closest("a,button");if(inner&&inner!==o&&!inner.hasAttribute("data-open"))return;if(open(o.dataset.open))ev.preventDefault()});
 document.addEventListener("keydown",ev=>{if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches&&ev.target.matches("[data-open][tabindex]")){ev.preventDefault();open(ev.target.dataset.open)}
 if(ev.key==="Escape"&&!ev.target.closest("input,textarea")){const top=W.list.filter(w=>!w.min).at(-1);if(top)close(top)}});
-document.addEventListener("hush:swap",()=>W.list.forEach(fill));addEventListener("resize",()=>W.list.forEach(place));
-window.hushOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href).searchParams.get("w")||"").split(",").filter(Boolean).forEach(k=>open(k,true));syncUrl()}})()</script>`;
+document.addEventListener("typev:swap",()=>W.list.forEach(fill));addEventListener("resize",()=>W.list.forEach(place));
+window.typevOpen=k=>open(k);if(!W.started){W.started=true;(new URL(location.href).searchParams.get("w")||"").split(",").filter(Boolean).forEach(k=>open(k,true));syncUrl()}})()</script>`;
 // The bell: polls /api/notifications every minute; opening the panel marks everything read. The
 // panel lives on <body> so background refreshes do not close it. A click on an entry goes to the
 // repo and opens the entity's window (in place when it is the repo on screen).
-const NOTIF_JS = `<script>(()=>{const N=window.hushNotif||(window.hushNotif={data:null});
+const NOTIF_JS = `<script>(()=>{const N=window.typevNotif||(window.typevNotif={data:null});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"status"};
@@ -1828,20 +1832,20 @@ function mark(ids){if(!N.data)return;const all=!ids;N.data.items.forEach(x=>{if(
 fetch("/api/notifications",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify(all?{all:true}:{ids})})}
 document.addEventListener("click",ev=>{if(ev.target.closest("#tb-bell")){ev.preventDefault();toggle();return}
 if(ev.target.closest(".notif-all")){ev.preventDefault();mark();return}
-const a=ev.target.closest(".notif-i");if(a){if(a.classList.contains("unread"))mark([+a.dataset.id]);const here=location.pathname.replace(/[/]$/,"")==="/r/"+a.dataset.repo;if(here&&window.hushOpen&&!ev.metaKey&&!ev.ctrlKey){ev.preventDefault();toggle(false);location.hash=a.hash.slice(1);if(a.dataset.entity)window.hushOpen(a.dataset.entity)}return}
+const a=ev.target.closest(".notif-i");if(a){if(a.classList.contains("unread"))mark([+a.dataset.id]);const here=location.pathname.replace(/[/]$/,"")==="/r/"+a.dataset.repo;if(here&&window.typevOpen&&!ev.metaKey&&!ev.ctrlKey){ev.preventDefault();toggle(false);location.hash=a.hash.slice(1);if(a.dataset.entity)window.typevOpen(a.dataset.entity)}return}
 if(!ev.target.closest("#notif-panel"))toggle(false)});
 document.addEventListener("keydown",ev=>{if(ev.key==="Escape")toggle(false)});
-document.addEventListener("hush:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
-// Routines from Hush: fill each .rt-fire box with its trigger (save one, run now, remove it), and
-// turn the New routine form into a /hush-setup command to copy.
-const TRIG_JS = `<script>(()=>{if(window.hushTrig)return;window.hushTrig=1;
+document.addEventListener("typev:swap",badge);if(!N.started){N.started=true;load();setInterval(()=>{if(!document.hidden)load()},6e4)}else badge()})()</script>`;
+// Routines from Type V: fill each .rt-fire box with its trigger (save one, run now, remove it), and
+// turn the New routine form into a /typev-setup command to copy.
+const TRIG_JS = `<script>(()=>{if(window.typevTrig)return;window.typevTrig=1;
 const base=()=>location.pathname.replace(/[/]$/,"");let cache=null,at=0;
 const e=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
 async function load(force){if(!force&&cache&&Date.now()-at<15e3)return cache;const r=await fetch(base()+"/triggers",{credentials:"same-origin"});cache=r.ok?await r.json():{};at=Date.now();return cache}
 async function post(path,body){const r=await fetch(base()+path,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
 function draw(box,t){
-if(!t){box.innerHTML='<p class="rt-hint">Give this routine an API trigger on claude.ai (open the routine, add a trigger, choose API), then paste its URL and token here. Hush keeps the token sealed and only uses it to start the routine.</p><form class="rt-form"><input name="url" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" required><input name="token" type="password" placeholder="sk-ant-…" required autocomplete="off"><div class="rt-row"><button class="btn-sm" type="submit">Save trigger</button><span class="rt-msg"></span></div></form>';return}
+if(!t){box.innerHTML='<p class="rt-hint">Give this routine an API trigger on claude.ai (open the routine, add a trigger, choose API), then paste its URL and token here. Type V keeps the token sealed and only uses it to start the routine.</p><form class="rt-form"><input name="url" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" required><input name="token" type="password" placeholder="sk-ant-…" required autocomplete="off"><div class="rt-row"><button class="btn-sm" type="submit">Save trigger</button><span class="rt-msg"></span></div></form>';return}
 const last=t.last_fired_at?(t.last_error?"Last try "+ago(t.last_fired_at)+": "+e(t.last_error):"Last started "+ago(t.last_fired_at)+" by "+e(t.last_fired_by)+(t.last_session_url?' · <a href="'+e(t.last_session_url)+'" target="_blank" rel="noopener">open the session</a>':"")):"Trigger saved "+ago(t.created_at)+" by "+e(t.created_by);
 box.innerHTML='<form class="rt-run"><textarea name="text" rows="2" placeholder="Optional: what this run should look at (an issue, a PR, an alert)"></textarea><div class="rt-row"><button class="btn-sm" type="submit">Run now</button><span class="rt-msg">'+last+'</span><button class="btn-plain danger" type="button" data-rt-remove>Remove trigger</button></div></form>'}
 async function sync(force){const boxes=[...document.querySelectorAll(".rt-fire")].filter(b=>force||!b.dataset.ready);if(!boxes.length)return;boxes.forEach(b=>b.dataset.ready=1);const all=await load(force).catch(()=>({}));boxes.forEach(b=>draw(b,all[b.dataset.routine]))}
@@ -1852,20 +1856,20 @@ await sync(true)}catch(x){msg.textContent=x.message;btn.disabled=false}});
 document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-rt-remove]");if(!b)return;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to remove";return}const box=b.closest(".rt-fire");await post("/triggers",{routine:box.dataset.routine,remove:true}).catch(()=>{});sync(true)});
 const q=s=>'"'+String(s).replace(/["\\\\]/g,"")+'"';
 function cmd(f){const v=n=>f.elements[n].value.trim(),custom=v("preset")==="custom",cron=custom?v("cron"):v("preset");f.querySelector("[data-cron]").hidden=!custom;
-f.querySelector("[data-cmd]").textContent=v("name")&&v("what")?"/hush-setup add "+q(v("name"))+" --cron "+q(cron||"0 13 * * *")+" --model "+v("model")+" -- "+v("what").replace(/\\s+/g," "):"Fill in a name and what it does."}
+f.querySelector("[data-cmd]").textContent=v("name")&&v("what")?"/typev-setup add "+q(v("name"))+" --cron "+q(cron||"0 13 * * *")+" --model "+v("model")+" -- "+v("what").replace(/\\s+/g," "):"Fill in a name and what it does."}
 ["input","change"].forEach(t=>document.addEventListener(t,ev=>{const f=ev.target.closest&&ev.target.closest(".nr-form");if(f)cmd(f)}));
 document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-nr-copy]");if(!b)return;const t=b.closest(".nr-form").querySelector("[data-cmd]").textContent;if(!t.startsWith("/"))return;try{await navigator.clipboard.writeText(t);b.textContent="Copied"}catch(x){}});
 })()</script>`;
-const RULES_JS = `<script>(()=>{if(window.hushRules)return;window.hushRules=1;
+const RULES_JS = `<script>(()=>{if(window.typevRules)return;window.typevRules=1;
 const base=()=>location.pathname.replace(/[/]$/,"")+"/rules";
 function deps(f){const v=n=>f.elements[n]&&f.elements[n].value;const sess=v("measure")==="session_tokens",fc=v("period")==="forecast",spike=!sess&&!fc&&v("cond")==="spike";
 f.querySelectorAll("[data-show]").forEach(l=>{const k=l.dataset.show;l.hidden=k==="period"?sess:k==="cond"?(sess||fc):k==="amount"?spike:k==="spike"?!spike:k==="service"?v("measure")!=="usd":false})}
 const sync=()=>document.querySelectorAll(".rule-form").forEach(deps);
 document.addEventListener("change",ev=>{const f=ev.target.closest&&ev.target.closest(".rule-form");if(f)deps(f)});
 const obs=new MutationObserver(sync);obs.observe(document.body,{childList:true,subtree:true});sync();
-async function post(url,body){const r=await fetch(url,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:body?JSON.stringify(body):"{}"});if(!r.ok)throw new Error(await r.text());if(window.hushPull)await window.hushPull()}
+async function post(url,body){const r=await fetch(url,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:body?JSON.stringify(body):"{}"});if(!r.ok)throw new Error(await r.text());if(window.typevPull)await window.typevPull()}
 document.addEventListener("submit",async ev=>{const n=ev.target.closest(".rule-nl");if(!n)return;ev.preventDefault();const i=n.elements.text,btn=n.querySelector("button"),msg=document.querySelector(".rule-msg");if(!i.value.trim())return;btn.disabled=true;msg.textContent="Reading it…";
-try{const r=await fetch(base(),{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({text:i.value})});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);i.value="";msg.textContent="Added.";if(window.hushPull)await window.hushPull()}catch(x){msg.textContent="Could not make a rule from that: "+x.message}btn.disabled=false});
+try{const r=await fetch(base(),{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify({text:i.value})});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);i.value="";msg.textContent="Added.";if(window.typevPull)await window.typevPull()}catch(x){msg.textContent="Could not make a rule from that: "+x.message}btn.disabled=false});
 document.addEventListener("submit",async ev=>{const f=ev.target.closest(".rule-form");if(!f)return;ev.preventDefault();const fd=new FormData(f),b={};for(const [k,v] of fd)if(k!=="dow")b[k]=v;b.dow=fd.getAll("dow").map(Number);
 const msg=f.querySelector(".f-msg"),btn=f.querySelector("[type=submit]");btn.disabled=true;msg.textContent="Saving…";
 try{await post(base()+(f.dataset.ruleId?"/"+f.dataset.ruleId:""),b);msg.textContent="Saved.";if(!f.dataset.ruleId){const w=f.closest(".win");w&&w.querySelector('[data-act="close"]').click()}}catch(x){msg.textContent="Could not save: "+x.message}btn.disabled=false});
@@ -1880,7 +1884,7 @@ const MAP_JS = `<script type="importmap">{"imports":{"three":"https://cdn.jsdeli
 // height come from 30-day spend; the halls stand in rows facing a yard road where trucks run. A
 // service with a price rule firing gets a red beacon on the roof. Physical materials, soft shadows,
 // ambient occlusion and a little bloom, as on the landing; without post-processing it renders flatter.
-const M = window.hushMap || (window.hushMap = {});
+const M = window.typevMap || (window.typevMap = {});
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const DISTRICTS = [
   ["run", 0x5f9e6e, /container|fargate|ec2|compute|lambda|app runner|batch|vercel|fly|lightsail|elastic beanstalk/i],
@@ -2123,7 +2127,7 @@ async function build() {
   });
   renderer.domElement.addEventListener("pointerleave", () => { tip.hidden = true; if (hover) hover.material.emissive.setHex(0); hover = null; });
   renderer.domElement.addEventListener("pointerdown", (ev) => (down = [ev.clientX, ev.clientY]));
-  renderer.domElement.addEventListener("pointerup", (ev) => { if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return; const o = pick(ev); if (o && window.hushOpen) window.hushOpen("service:" + o.userData.s.key); });
+  renderer.domElement.addEventListener("pointerup", (ev) => { if (!down || Math.hypot(ev.clientX - down[0], ev.clientY - down[1]) > 4) return; const o = pick(ev); if (o && window.typevOpen) window.typevOpen("service:" + o.userData.s.key); });
   const ro = new ResizeObserver(fit); ro.observe(host);
   let seen = true; const io = new IntersectionObserver((es) => (seen = es[0].isIntersecting)); io.observe(host);
 
@@ -2160,13 +2164,13 @@ async function build() {
     sky.dispose(); renderer.dispose(); renderer.domElement.remove(); layer.remove(); tip.remove(); M.host = null;
   };
 }
-addEventListener("hashchange", build); document.addEventListener("hush:swap", () => { M.dispose?.(); M.host = null; build(); }); build();
+addEventListener("hashchange", build); document.addEventListener("typev:swap", () => { M.dispose?.(); M.host = null; build(); }); build();
 </script>`;
 // The cost explorer, after AWS Cost Explorer: stacked/bar/line chart with a hover column and a
 // tooltip, and a parameters panel (time, compare, range, granularity, group by, service and
 // provider filters). Data comes once from /r/<repo>/costs; all filtering runs in the browser, and the
 // state survives background refreshes and reloads (localStorage).
-const CX_JS = `<script>(()=>{const X=window.hushCx||(window.hushCx={data:null,at:0,st:null});
+const CX_JS = `<script>(()=>{const X=window.typevCx||(window.typevCx={data:null,at:0,st:null});
 const PAL=["#5e6ad2","#26b5ce","#4cb782","#f2c94c","#f2994a","#eb5757","#bb87fc","#4ea7fc","#d4669a"],OTHER="#c4c6cc";
 const NAMES={aws:"AWS",vercel:"Vercel",neon:"Neon",anthropic:"Anthropic API","claude-code":"Claude Code",openai:"OpenAI",openrouter:"OpenRouter",fly:"Fly",cloudflare:"Cloudflare"};
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -2174,8 +2178,8 @@ const money=v=>"$"+(Math.abs(v)>=1000?Math.round(v).toLocaleString("en-US"):v.to
 const D=d=>new Date(d+"T00:00:00Z"),iso=t=>new Date(t).toISOString().slice(0,10),add=(d,n)=>iso(D(d).getTime()+n*864e5);
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DEF={mode:"stacked",compare:false,range:"30",from:"",to:"",gran:"daily",group:"service",services:[],providers:[]};
-function load(){try{return {...DEF,...JSON.parse(localStorage.getItem("hush.cx")||"{}")}}catch(x){return {...DEF}}}
-function save(){try{localStorage.setItem("hush.cx",JSON.stringify(X.st))}catch(x){}}
+function load(){try{return {...DEF,...JSON.parse(localStorage.getItem("typev.cx")||"{}")}}catch(x){return {...DEF}}}
+function save(){try{localStorage.setItem("typev.cx",JSON.stringify(X.st))}catch(x){}}
 if(!X.st)X.st=load();
 const root=()=>document.getElementById("cx");
 function period(){const s=X.st,today=X.data.today,y=add(today,-1);let a,b=y;
@@ -2245,15 +2249,15 @@ if(el.dataset.prov!=null){const v=el.dataset.prov,l=X.st.providers.filter(x=>x!=
 document.addEventListener("input",ev=>{if(ev.target.classList&&ev.target.classList.contains("ms-q")&&X.data)panel(compute())});
 addEventListener("resize",()=>{clearTimeout(X.rt);X.rt=setTimeout(draw,120)});
 addEventListener("hashchange",()=>draw());
-document.addEventListener("hush:swap",()=>{if(Date.now()-X.at>12e4)fetchData();else draw()});
+document.addEventListener("typev:swap",()=>{if(Date.now()-X.at>12e4)fetchData();else draw()});
 if(X.data)draw();else fetchData()})()</script>`;
-const SEC_JS = `<script>(()=>{if(window.hushSec)return;window.hushSec=1;
+const SEC_JS = `<script>(()=>{if(window.typevSec)return;window.typevSec=1;
 document.addEventListener("input",ev=>{if(!ev.target.classList||!ev.target.classList.contains("sec-q"))return;const q=ev.target.value.trim().toLowerCase();document.querySelectorAll(".sec-m tr[data-k]").forEach(r=>r.hidden=q&&!r.dataset.k.includes(q))});
 document.addEventListener("change",ev=>{if(ev.target.classList&&ev.target.classList.contains("sl-cb"))document.querySelectorAll(".roles-g").forEach(g=>g.classList.toggle("show-sl",ev.target.checked))})})()</script>`;
 // Tooltips: every title="a · b · c" in the app shows at once, styled like the cost chart's: the first
 // part (a date gets spelled out) as the heading, one line per other part. The native title is
 // moved to data-tip so the browser's own slow tooltip never shows.
-const TIP_JS = `<script>(()=>{if(window.hushTip)return;window.hushTip=1;const t=document.createElement("div");t.className="htip";t.hidden=true;document.body.appendChild(t);
+const TIP_JS = `<script>(()=>{if(window.typevTip)return;window.typevTip=1;const t=document.createElement("div");t.className="htip";t.hidden=true;document.body.appendChild(t);
 const e=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const day=x=>/^\\d{4}-\\d{2}-\\d{2}$/.test(x)?new Date(x+"T12:00:00Z").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",timeZone:"UTC"}):x;
 let cur=null;document.addEventListener("mouseover",ev=>{const el=ev.target.closest&&ev.target.closest("[title],[data-tip]");if(!el||el.closest(".win-bar,.tb-right,.cx-svg")){t.hidden=true;cur=null;return}
@@ -2263,12 +2267,12 @@ document.addEventListener("mousemove",ev=>{if(t.hidden)return;const w=t.offsetWi
 document.addEventListener("mouseout",ev=>{if(cur&&!cur.contains(ev.relatedTarget)){t.hidden=true;cur=null}});addEventListener("scroll",()=>{t.hidden=true},{passive:true});
 const TZ=()=>{const a=document.querySelector("[data-tz]");return (a&&a.dataset.tz)||Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"};
 const parts=(d,tz)=>{const o={};for(const p of new Intl.DateTimeFormat("en-US",{timeZone:tz||TZ(),year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false,weekday:"short"}).formatToParts(d))o[p.type]=p.value;if(o.hour==="24")o.hour="00";return o};
-window.hushTime={TZ,parts};
+window.typevTime={TZ,parts};
 const DW=["Sundays","Mondays","Tuesdays","Wednesdays","Thursdays","Fridays","Saturdays"],DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const local=()=>{const tz=TZ();if(tz==="UTC"||tz==="Etc/UTC")return;
 document.querySelectorAll(".utc:not([data-lt])").forEach(el=>{el.dataset.lt=1;el.title=(el.title?el.title+" · ":"")+el.textContent.trim()+(el.textContent.includes("UTC")?"":" UTC");el.textContent=el.textContent.replace(/(?:(Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays) )?(\\d{2}):(\\d{2})(?: UTC)?/g,(m,dw,h,mi)=>{const now=new Date(),wd=dw?DW.indexOf(dw):now.getUTCDay(),ref=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()+((wd-now.getUTCDay()+7)%7),+h,+mi)),p=parts(ref,tz),lw=DS.indexOf(p.weekday);return (dw?DW[lw]+" ":"")+p.hour+":"+p.minute})});
 document.querySelectorAll("[data-at]:not([data-lt])").forEach(el=>{el.dataset.lt=1;const d=new Date(el.dataset.at);if(isNaN(d))return;const p=parts(d,tz);el.title=el.textContent;el.textContent=p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute})};
-window.hushLocal=local;local();document.addEventListener("hush:swap",local);
+window.typevLocal=local;local();document.addEventListener("typev:swap",local);
 document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-more]");if(!b)return;const g=b.parentElement,all=g.classList.toggle("all");b.textContent=all?"Show less":"Show all "+b.dataset.more})})()</script>`;
 // The Automations week as a calendar, drawn in the viewer's time zone: Monday to Sunday, hours
 // down, each run a block at its time, coloured by what happened; the routine name on hover.
@@ -2276,7 +2280,7 @@ const CAL_JS = `<script>(()=>{
 const e=t=>String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const S={ok:"ran",miss:"should have run, did not",next:"scheduled",unk:"no record either way"};
 function draw(){const box=document.getElementById("cal");if(!box)return;const src=box.querySelector(".cal-data");if(!src)return;const runs=JSON.parse(src.textContent),meta=JSON.parse((box.querySelector(".cal-meta")||{}).textContent||"{}");
-const T=window.hushTime,tz=T.TZ(),P=d=>T.parts(d,tz),DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const T=window.typevTime,tz=T.TZ(),P=d=>T.parts(d,tz),DS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const now=new Date(),pn=P(now),base=Date.UTC(+pn.year,+pn.month-1,+pn.day)-((DS.indexOf(pn.weekday)+6)%7)*864e5;
 const days=[...Array(7)].map((_,i)=>{const d=new Date(base+i*864e5);return{k:d.toISOString().slice(0,10),dow:DS[d.getUTCDay()],n:d.getUTCDate()}});
 const keyOf=d=>{const p=P(d);return p.year+"-"+p.month+"-"+p.day},todayK=pn.year+"-"+pn.month+"-"+pn.day,H=1.2,mins=d=>{const p=P(d);return +p.hour*60+ +p.minute};
@@ -2293,7 +2297,7 @@ const card=document.createElement("div");card.className="cal-card";card.hidden=t
 const ago=t=>{if(!t)return "never";const m=Math.round((Date.now()-Date.parse(t))/6e4);return m<60?m+" min ago":m<2880?Math.round(m/60)+" h ago":Math.round(m/1440)+" days ago"};
 const until=t=>{if(!t)return "";const m=Math.round((Date.parse(t)-Date.now())/6e4);return m<60?"in "+m+" min":m<2880?"in "+Math.round(m/60)+" h":"in "+Math.round(m/1440)+" days"};
 const tk=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?Math.round(n/1e3)+"k":String(n),hm=s=>s>=3600?Math.floor(s/3600)+" h "+Math.round(s%3600/60)+" min":Math.round(s/60)+" min";
-document.addEventListener("mouseover",ev=>{const b=ev.target.closest&&ev.target.closest(".cal-ev");if(!b){card.hidden=true;return}const box=document.getElementById("cal"),runs=JSON.parse(box.querySelector(".cal-data").textContent),meta=JSON.parse((box.querySelector(".cal-meta")||{}).textContent||"{}"),r=runs[+b.dataset.i];if(!r)return;const m=meta[r.n]||{},T=window.hushTime,p=T.parts(new Date(r.t));
+document.addEventListener("mouseover",ev=>{const b=ev.target.closest&&ev.target.closest(".cal-ev");if(!b){card.hidden=true;return}const box=document.getElementById("cal"),runs=JSON.parse(box.querySelector(".cal-data").textContent),meta=JSON.parse((box.querySelector(".cal-meta")||{}).textContent||"{}"),r=runs[+b.dataset.i];if(!r)return;const m=meta[r.n]||{},T=window.typevTime,p=T.parts(new Date(r.t));
 const row=(k,v)=>v?'<div><span>'+k+'</span><b>'+e(v)+'</b></div>':"";
 const bars=m.bars?'<div class="cc-bars">'+[...m.bars].map(c=>'<i data-s="'+({o:"ok",w:"warn",m:"miss"}[c]||"")+'"></i>').join("")+'</div><div class="cc-ax"><span>'+(m.weekly?"12 weeks":"30 days")+'</span><span>'+(m.weekly?"this week":"today")+'</span></div>':"";
 card.innerHTML='<div class="cc-h"><b>'+e(r.n)+'</b><span class="cc-s" data-s="'+r.s+'">'+S[r.s]+'</span></div><div class="cc-t">'+p.weekday+" "+p.day+"/"+p.month+" · "+p.hour+":"+p.minute+'</div>'+bars+
@@ -2301,7 +2305,7 @@ card.innerHTML='<div class="cc-h"><b>'+e(r.n)+'</b><span class="cc-s" data-s="'+
 '<div class="cc-kv">'+row(m.src==="GitHub Actions"?"Workflow":"Command",m.cmd?(m.src==="GitHub Actions"?m.cmd:"/"+m.cmd):"")+row("Model",m.model)+row("Last run",ago(m.last))+row("Next run",until(m.next))+row("On time",m.on==null?"":m.on+"% in 30 days")+row("Skills",m.skills?String(m.skills):"")+row("Cost, 30 days",m.usd30?"$"+m.usd30.toFixed(2):"")+'</div><div class="cc-f">Click for the routine</div>';
 card.hidden=false;const rc=b.getBoundingClientRect(),w=card.offsetWidth,h=card.offsetHeight;let x=rc.right+8,y=rc.top;if(x+w>innerWidth-8)x=rc.left-w-8;if(y+h>innerHeight-8)y=innerHeight-h-8;card.style.left=Math.max(8,x)+"px";card.style.top=Math.max(52,y)+"px"});
 addEventListener("scroll",()=>{card.hidden=true},{passive:true});
-draw();document.addEventListener("hush:swap",draw)})()</script>`;
+draw();document.addEventListener("typev:swap",draw)})()</script>`;
 const page = (title, body, { live, stale, app } = {}) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ICON}${FONTS}${app ? VIEW_HEAD : ""}<style>${CSS}${app ? VIEW_CSS : ""}${THEME}</style></head><body${stale ? ' data-stale="1"' : ""}><div class="wrap${app ? " app-wrap" : ""}">${body}</div>${live ? LIVE : ""}${live && body.includes('class="ci-live"') ? ACTIONS : ""}${app ? VIEW_JS + TIP_JS : ""}${body.includes('id="chat"') ? ASK_JS : ""}${body.includes('id="win-tpl"') ? WIN_JS : ""}${body.includes('id="tb-bell"') ? NOTIF_JS : ""}${body.includes('class="rule-form"') || body.includes('class="rule-nl"') ? RULES_JS : ""}${body.includes('class="rt-fire"') || body.includes('class="nr-form"') ? TRIG_JS : ""}${body.includes('id="svc-map"') ? MAP_JS : ""}${body.includes('id="cx') ? CX_JS : ""}${body.includes('id="cal"') ? CAL_JS : ""}${body.includes('class="sec-q"') || body.includes('class="sl-cb"') ? SEC_JS : ""}</body></html>`;
 
@@ -2312,9 +2316,9 @@ function skeletonPage(repo) {
   const stat = `<div class="stat"><span class="sk sk-t" style="width:56px;height:26px"></span><span class="sk sk-t" style="width:110px;margin-top:10px"></span><span class="sk sk-t" style="width:90px;margin-top:8px;height:8px"></span></div>`;
   // the real shell (top bar, sidebar, main column) so nothing jumps when the page arrives
   const nav = [64, 78, 92, 30, 96, 52, 46, 40, 62].map((w) => `<a><span class="sk sk-t" style="width:16px;height:14px"></span><span class="sk sk-t" style="width:${w}px"></span></a>`).join("");
-  return page(`${repo} · hush`, `<div class="app">
+  return page(`${repo} · Type V`, `<div class="app">
     <header class="topbar">
-      <a class="logo" href="/">${MARK()}<span>hush</span></a>
+      <a class="logo" href="/">${MARK()}<span>Type V</span></a>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Repositories</a><span>/</span><b>${esc(repo)}</b></nav>
       <span class="tb-right"><span class="updated">reading GitHub…</span></span>
     </header>
@@ -2350,17 +2354,18 @@ function heartbeatSetup(origin, key, waiting, st = null) {
     done
       ? `<li class="done">${DONE}<div><b>${title}</b><span>${summary}</span><details class="more"><summary>Show how</summary>${body}</details></div></li>`
       : `<li>${n(i)}<div><b>${title}</b>${optional ? " <small>optional</small>" : ""}${body}</div></li>`;
-  const installed = !!(st?.hush_sh && st?.hook);
+  const installed = !!(st?.typev_sh && st?.hook);
+  const legacy = installed && st.legacy; // installed before the rename to Type V: works, old file names
   const beats = (st?.skill_beats || 0) > 0;
   const providers = (st?.cost_sources || []).filter((x) => x !== "claude-code");
   const costsOn = providers.length > 0 || (st?.sessions || 0) > 0;
   return `<ol class="ob">
-    <li class="done">${DONE}<div><b>Hush can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue come from it.</span></div></li>
-    ${step(2, installed, "Install the heartbeat", false, `<code>.claude/hooks/hush.sh</code> and the SessionEnd hook are in the repo. Every cloud routine reports itself when it ends.`, `<span>At the repo root, then commit <code>.claude/</code> and push.</span>
+    <li class="done">${DONE}<div><b>Type V can read this repo</b><span>The GitHub App is installed. Monitors, routines, CI and the queue come from it.</span></div></li>
+    ${step(2, installed, "Install the heartbeat", false, legacy ? `The heartbeat from before the rename to Type V is in the repo and still reports. Run the installer again to update it.` : `<code>.claude/hooks/typev.sh</code> and the SessionEnd hook are in the repo. Every cloud routine reports itself when it ends.`, `<span>At the repo root, then commit <code>.claude/</code> and push.</span>
       <div class="cmd"><pre>curl -fsSL ${esc(origin)}/install.sh | sh -s -- ${esc(key)}</pre>${COPY}</div>
-      <span>It adds a SessionEnd hook, so every Claude Code routine that runs a slash command reports itself when it ends. No change to your skills.</span>${st && st.hush_sh && !st.hook ? `<span class="err">Found <code>hush.sh</code> but not the SessionEnd hook in <code>.claude/settings.json</code>. Run the installer again.</span>` : ""}`)}
+      <span>It adds a SessionEnd hook, so every Claude Code routine that runs a slash command reports itself when it ends. No change to your skills.</span>${st && st.typev_sh && !st.hook ? `<span class="err">Found <code>typev.sh</code> but not the SessionEnd hook in <code>.claude/settings.json</code>. Run the installer again.</span>` : ""}`)}
     ${step(3, beats, "Say how each run went", true, `${st?.skill_beats} monitor${st?.skill_beats === 1 ? "" : "s"} send their own status and volume.`, `<span>A skill ends with this to send its status and how much it read. A monitor that says ok after reading nothing gets flagged.</span>
-      <div class="cmd"><pre>.claude/hooks/hush.sh beat errors ok '{"swept":{"events":120}}'</pre>${COPY}</div>
+      <div class="cmd"><pre>.claude/hooks/typev.sh beat errors ok '{"swept":{"events":120}}'</pre>${COPY}</div>
       <details class="more"><summary>Declare your monitors and routines, or post from somewhere else</summary>
       <span>In <code>.claude/factory.json</code>. Routines show their next run and get marked late when they miss one.</span>
 <pre>{
@@ -2376,10 +2381,10 @@ function heartbeatSetup(origin, key, waiting, st = null) {
   -H "authorization: Bearer ${esc(key)}" \\
   -H "content-type: application/json" \\
   -d '{"monitor":"errors","status":"ok","swept":{"events":41233}}'</pre></details>`)}
-    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.hush_sh && !st.cost_cmd ? " Your <code>hush.sh</code> predates this: run the installer again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
-      <div class="cmd"><pre>.claude/hooks/hush.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"S3":0.4}}'</pre>${COPY}</div>
-      <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Hush never asks for billing credentials.</span>`)}
-    ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/hush.sh beat install-test ok</code></span></div></li>` : ""}
+    ${step(4, costsOn, "Report costs", true, [providers.length ? `Spend from ${providers.map((x) => ({ aws: "AWS", vercel: "Vercel", neon: "Neon", anthropic: "Anthropic API", openrouter: "OpenRouter", fly: "Fly", cloudflare: "Cloudflare" }[x] || esc(x))).join(", ")}.` : "", st?.sessions ? `Tokens from ${st.sessions} Claude Code session${st.sessions === 1 ? "" : "s"}.` : installed ? "Claude Code tokens arrive with the next cloud session." : ""].filter(Boolean).join(" "), `<span>Claude Code tokens arrive on their own: the same hook counts each cloud session's tokens by model.${st?.typev_sh && !st.cost_cmd ? " Your <code>typev.sh</code> predates this: run the installer again to update it." : ""} For provider spend, the job that already reads your bill ends with one line per day:</span>
+      <div class="cmd"><pre>.claude/hooks/typev.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"S3":0.4}}'</pre>${COPY}</div>
+      <span>Any provider works (<code>aws</code>, <code>vercel</code>, <code>neon</code>, <code>anthropic</code>…). Sending the same day again replaces it, so resend the last 3 days as charges settle. Type V never asks for billing credentials.</span>`)}
+    ${waiting ? `<li class="wait"><span class="live-dot" data-on="1"></span><div><b>Waiting for the first heartbeat</b><span>This page updates on its own when it arrives. Try it now: <code>.claude/hooks/typev.sh beat install-test ok</code></span></div></li>` : ""}
   </ol>`;
 }
 
@@ -2542,12 +2547,12 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       </div>
       ${bk.length ? `<div class="bars tall${A.weekly ? " wk" : ""}">${bk.map((x) => `<i data-s="${x.s}" title="${esc(tipB(x))}"></i>`).join("")}</div><div class="axis"><span>${A.weekly ? "12 weeks ago" : `${WINDOW} days ago`}</span><span class="rule"></span><span>${A.weekly ? "this week" : "today"}</span></div>` : ""}
       <p class="w-facts">${[A?.last_run_at ? `Last run ${ago(A.last_run_at)}` : "Never ran", r.next_run ? `next ${until(r.next_run)}` : ""].filter(Boolean).join(" · ")}</p>
-      ${r.source === "GitHub Actions" ? "" : `<h4>Run from Hush</h4><div class="rt-fire" data-routine="${esc(r.name)}"></div>`}
+      ${r.source === "GitHub Actions" ? "" : `<h4>Run from Type V</h4><div class="rt-fire" data-routine="${esc(r.name)}"></div>`}
       <h4>Runs</h4>
       ${A?.runs?.length ? `<div class="ar-list more5">${A.runs.map(runRow).join("")}${more(A.runs.length)}</div>` : `<p class="faint">No run recorded yet.</p>`}
       ${fed.length ? `<h4>Skills it runs</h4><div class="w-list">${fed.map((m) => { const [ps, l] = STATE[m.state] || ["none", m.state]; return `<div class="openable" data-open="monitor:${esc(m.id)}" role="button" tabindex="0"><code>${esc(m.id)}</code><span class="state" data-s="${ps}">${l}</span></div>`; }).join("")}</div>` : ""}` });
   }
-  // New routine: there is no API to create a routine, so Hush writes the /hush-setup command that does it
+  // New routine: there is no API to create a routine, so Type V writes the /typev-setup command that does it
   wins.push({ key: "new:routine", kind: "Automation", title: "New routine", body: `
       <form class="nr-form" onsubmit="return false">
         <label>Name<input name="name" placeholder="Logs sweep" maxlength="60"></label>
@@ -2555,7 +2560,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
         <label>When<select name="preset"><option value="0 13 * * *">Every day at 13:00 UTC</option><option value="0 13 * * 1-5">Weekdays at 13:00 UTC</option><option value="0 12 * * 1">Mondays at 12:00 UTC</option><option value="0 */6 * * *">Every 6 hours</option><option value="custom">Custom cron</option></select></label>
         <label data-cron hidden>Cron (UTC)<input name="cron" placeholder="0 13 * * *"></label>
         <label>Model<select name="model"><option>sonnet</option><option>opus</option><option>haiku</option></select></label>
-        <p class="faint">Paste this in Claude Code at the repo root. It adds a new <code>hush-*</code> skill and its roster entry in one PR, changing nothing else. After the merge, <code>/hush-setup routines</code> creates the routine in your Claude account.</p>
+        <p class="faint">Paste this in Claude Code at the repo root. It adds a new <code>typev-*</code> skill and its roster entry in one PR, changing nothing else. After the merge, <code>/typev-setup routines</code> creates the routine in your Claude account.</p>
         <div class="nr-cmd" data-cmd>Fill in a name and what it does.</div>
         <div><button class="btn-sm" type="button" data-nr-copy>Copy command</button></div>
       </form>` });
@@ -2652,7 +2657,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const dAgo = (d) => (d ? ago(d) : "never");
   const age = (d) => (d ? `${Math.round((Date.now() - Date.parse(d)) / 864e5)} d` : "–");
   const SEVL = { critical: ["bad", "Critical"], high: ["bad", "High"], medium: ["warn", "Medium"], low: ["none", "Low"] };
-  const secEmpty = `<div class="group"><div class="line"><span class="hint">No inventory yet. Run this where the AWS and Infisical CLIs are logged in (your laptop, or a routine), at the repo root:<br><code>node &lt;hush&gt;/status/scripts/security-inventory.mjs</code><br>It reads IAM users, roles and keys, and the names of your Infisical secrets, and sends only names and metadata.</span></div></div>`;
+  const secEmpty = `<div class="group"><div class="line"><span class="hint">No inventory yet. Run this where the AWS and Infisical CLIs are logged in (your laptop, or a routine), at the repo root:<br><code>node &lt;typev&gt;/status/scripts/security-inventory.mjs</code><br>It reads IAM users, roles and keys, and the names of your Infisical secrets, and sends only names and metadata.</span></div></div>`;
   let secSection = secEmpty;
   if (SEC) {
     const A = SEC.aws?.data, I = SEC.infisical?.data, F = SEC.findings;
@@ -2933,7 +2938,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       const [ps, label] = SK[r.state] || ["none", r.state], x = r.items[0], rt = s.routines.find((y) => y.name === r.routine);
       const read = x ? Object.entries(x.swept || {}).map(([k, v]) => `${typeof v === "number" ? v.toLocaleString("en-US") : esc(JSON.stringify(v))} ${esc(k)}`).join(" · ") : "";
       const body = x?.report ? `<details class="rp-body" open><summary>${esc(x.title || "This week's report")}</summary><div class="md"><p>${mdHtml(x.report)}</p></div></details>`
-        : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Hush. Add <code>"report"</code> with its text to the skill's heartbeat to read it here.</p>`;
+        : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Type V. Add <code>"report"</code> with its text to the skill's heartbeat to read it here.</p>`;
       const past = r.items.slice(1).map((y) => `<div class="line"><span class="name"><span>${new Date(y.ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}<span class="sub">${esc(y.title || y.note || Object.entries(y.swept || {}).map(([k, v]) => `${v} ${k}`).join(" · "))}</span></span></span><span class="meta"><span class="state" data-s="${y.status === "ok" ? "ok" : "warn"}">${y.status === "ok" ? "Delivered" : esc(y.status)}</span></span></div>`).join("");
       return `<section class="rp">
         <div class="rp-h"><span class="name"><b>${esc(r.id)}</b><small>${[rt ? `<span class="utc">${esc(when(rt))}</span>` : "", x ? `last ${ago(x.ts)}` : "never sent", read].filter(Boolean).join(" · ")}</small></span><span class="state" data-s="${ps}">${label === "Running" ? "Delivered" : label}</span></div>
@@ -2969,11 +2974,11 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     ], dayChart(pd.map((d) => d.d), [{ name: "Opened", color: "#5e6ad2", v: pd.map((d) => d.opened) }, { name: "Closed", color: "#4cb782", v: pd.map((d) => d.closed) }], (n) => plural(n, "issue"), { grouped: true }));
   }
 
-  const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/hush.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
+  const costsEmpty = `<div class="group"><div class="line"><span class="hint">No cost data yet. Claude Code sessions report their tokens through the heartbeat hook; provider spend comes from <code>.claude/hooks/typev.sh cost aws 31.50</code> or <code>POST /api/cost</code>. See <a href="#setup">Setup</a>.</span></div></div>`;
 
-  return page(`${s.repo} · hush`, `<div class="app" data-tz="${esc(tz)}">
+  return page(`${s.repo} · Type V`, `<div class="app" data-tz="${esc(tz)}">
     <header class="topbar">
-      <a class="logo" href="/">${MARK()}<span>hush</span></a>
+      <a class="logo" href="/">${MARK()}<span>Type V</span></a>
       <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
       <span class="tb-right"><span class="tb-actsw"><button type="button" class="tb-acts" data-acts-toggle aria-haspopup="true" aria-label="GitHub Actions"><span class="tb-ai"></span><span>Actions</span><span class="tb-n"></span></button><div class="acts-pop"><div class="ci-live" data-pop="1" aria-live="polite"></div></div></span><button type="button" class="tb-ask" data-ask-toggle aria-controls="chat" title="Ask about this repo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg><span>Ask</span></button>${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button>` : ""}</span>
     </header>
@@ -3005,7 +3010,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
       ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
       ${view("services", `${vh("Services", "The factory as an industrial park: every service it pays for is a hall, as big as what it cost in the last 30 days.")}${mapSection}`)}
-      ${view("setup", `${vh("Setup", setupState.hush_sh && setupState.hook ? "This repo reports to Hush. Each step shows what is in place." : "How this repo reports to Hush.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>
+      ${view("setup", `${vh("Setup", setupState.typev_sh && setupState.hook ? "This repo reports to Type V. Each step shows what is in place." : "How this repo reports to Type V.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>
         <section class="keybox"><h2>Ingest key</h2><p>Heartbeats and costs from this repo are sent with <code>${esc(repoRow.ingest_key.slice(0, 8))}…${esc(repoRow.ingest_key.slice(-4))}</code>. It can only write this repo's heartbeats and costs. If it leaked (committed to git, pasted somewhere), replace it: the old key keeps working for 24 hours so there is time to update wherever it is stored.</p><form method="post" action="/r/${esc(s.repo)}/key"><button type="submit" class="btn-quiet">Replace key</button></form></section>` : ""}
         <footer><span>${plural(s.counts.heartbeats, "heartbeat")} in ${WINDOW} days${s.notes.length ? ` · ${esc(s.notes.join(" · "))}` : ""}</span><span></span></footer>`)}
     </main>
@@ -3026,7 +3031,7 @@ async function refreshStars() {
   if (Date.now() - STARS.at < 36e5) return;
   STARS.at = Date.now();
   try {
-    const r = await fetch("https://api.github.com/repos/humanagent/hush", { headers: { accept: "application/vnd.github+json", "user-agent": "hush" }, signal: AbortSignal.timeout(5000) });
+    const r = await fetch("https://api.github.com/repos/humanagent/typev", { headers: { accept: "application/vnd.github+json", "user-agent": "typev" }, signal: AbortSignal.timeout(5000) });
     if (r.ok) STARS.n = (await r.json()).stargazers_count ?? null;
   } catch {}
 }
@@ -3034,7 +3039,7 @@ async function refreshStars() {
 function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
   const app = appConfig();
   if (!app) {
-    return page("hush", `<header class="top">${LOGO}</header>
+    return page("Type V", `<header class="top">${LOGO}</header>
       <div class="hero"><h1>A status page for your software factory.</h1><p>The GitHub App is not set up yet. Whoever runs this instance does it once, from <code>/setup</code>.</p></div>`);
   }
   const install = `https://github.com/apps/${app.slug}/installations/new`;
@@ -3055,13 +3060,13 @@ function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
       <span class="num">${C ? usdF(C.total_usd) : "–"}</span>
       <span class="go">Open →</span></a>`;
   };
-  return page("Repositories · hush", `<div class="app solo">
-    <header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><a class="tb-btn" href="/settings" style="text-decoration:none">Settings</a><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
+  return page("Repositories · Type V", `<div class="app solo">
+    <header class="topbar"><a class="logo" href="/">${MARK()}<span>Type V</span></a><nav class="crumbs"><b>Repositories</b></nav><span class="tb-right"><button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button><a class="tb-btn" href="/settings" style="text-decoration:none">Settings</a><form method="post" action="/logout" style="margin:0"><button class="tb-btn">Sign out</button></form></span></header>
     <main class="main">
-      <header class="vh"><h1>Repositories</h1><p>Every repo Hush is installed on that your GitHub account can see. Numbers are the last ${WINDOW} days.</p></header>
+      <header class="vh"><h1>Repositories</h1><p>Every repo Type V is installed on that your GitHub account can see. Numbers are the last ${WINDOW} days.</p></header>
       ${repos.length ? accounts.map((a) => `<h2>${esc(a.login)}</h2><div class="group repos-t">
         <div class="rrow2 head"><span>Repository</span><span class="num">Monitors ok</span><span class="num">PRs merged · agents</span><span class="num">CI passing</span><span class="num">Spend</span><span></span></div>
-        ${repos.filter((r) => r.account.login === a.login).map(row).join("")}</div>`).join("") : `<div class="group"><div class="line"><span class="hint">Hush is not installed on any of your repos yet.</span></div></div>`}
+        ${repos.filter((r) => r.account.login === a.login).map(row).join("")}</div>`).join("") : `<div class="group"><div class="line"><span class="hint">Type V is not installed on any of your repos yet.</span></div></div>`}
       <p><a class="btn" href="${install}">${repos.length ? "Add or remove repos" : "Install on your repos"}</a></p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </main></div>`, { app: true });
@@ -3069,7 +3074,7 @@ function homePage(user, repos = [], msg = "", snaps = {}, viewer = null) {
 
 function setupPage(origin, t) {
   const manifest = {
-    name: `Hush ${randomBytes(2).toString("hex")}`,
+    name: `Type V ${randomBytes(2).toString("hex")}`,
     url: origin,
     hook_attributes: { url: `${origin}/api/github/webhook`, active: false },
     redirect_url: `${origin}/setup/callback/${encodeURIComponent(t)}`,
@@ -3108,7 +3113,7 @@ const redirect = (res, to, headers = {}) => send(res, 303, "", { location: to, .
 // An ingest key resolves to its repo. A replaced key keeps working for 24 hours, so the
 // routines that carry it can be moved to the new one without losing heartbeats.
 const KEY_GRACE_H = 24;
-// The time zone a person reads Hush in ("" = whatever their browser says). Times are stored and
+// The time zone a person reads Type V in ("" = whatever their browser says). Times are stored and
 // computed in UTC; the page converts what it prints.
 const TZS = new Set(Intl.supportedValuesOf("timeZone"));
 const tzCache = new Map();
@@ -3179,7 +3184,7 @@ async function waitlistJoin(req, res, origin) {
     return redirect(res, `${path}?joined=${state}#${source === "install" ? "install" : "join"}`);
   };
   const site = req.headers["sec-fetch-site"];
-  if (site && site !== "same-origin" && site !== "none") return isForm ? redirect(res, "/") : json(res, 403, { error: "From the Hush page only." });
+  if (site && site !== "same-origin" && site !== "none") return isForm ? redirect(res, "/") : json(res, 403, { error: "From the Type V page only." });
   let b;
   try {
     const raw = await readBody(req, 8e3);
@@ -3264,7 +3269,7 @@ async function landingAdmin(user, origin) {
   const depthBy = Object.fromEntries(depth.map((d) => [d.label, d.u]));
   const steps = [["Viewed the landing", f.v], ["Clicked Start free", f.c]];
   const ago = (t) => { const m = Math.round((Date.now() - Date.parse(t)) / 6e4); return m < 60 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; };
-  return page("Landing · hush", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Landing</b></nav></header>
+  return page("Landing · Type V", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>Type V</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Landing</b></nav></header>
     <main class="main"><header class="vh"><h1>Landing</h1><p>The last 30 days of the public landing, from its own beacons (no cookies, anonymous ids). Start free installs the GitHub App; Run your own goes to the repo. For ${esc(user.login)}.</p></header>
     <div class="group"><div class="stats">
       <div class="stat"><b>${views}</b><span>Views</span></div>
@@ -3289,7 +3294,7 @@ async function landingAdmin(user, origin) {
 }
 
 // --- assistant ---------------------------------------------------------------------------
-// One question = one OpenRouter call with everything Hush knows about the repo in the system
+// One question = one OpenRouter call with everything Type V knows about the repo in the system
 // prompt: the snapshot, 30 days of heartbeats (with their notes and volumes), the cost rows,
 // and a one-line summary of every other repo the person can see. Answers stream back as text.
 const askLog = new Map();
@@ -3308,7 +3313,7 @@ async function askContext(row, snap, user, repos) {
   const snaps = ids.length ? await db.all(`SELECT repo_id, body FROM snapshots WHERE repo_id IN (${ids.map((_, i) => "$" + (i + 1)).join(",")})`, ...ids) : [];
   const brief = snaps.map((r) => { const o = JSON.parse(r.body); return `${o.repo}: ${o.overall}; monitors ${o.monitors.filter((m) => m.state === "alive").length}/${o.monitors.length} ok; PRs merged 30d ${o.metrics?.prs?.merged ?? "?"}; CI pass ${o.metrics?.ci?.pass_rate ?? "?"}%; spend 30d ${o.costs ? "$" + o.costs.total_usd.toFixed(2) : "n/a"}`; });
   const lean = { ...snap, skills: undefined, monitors: snap.monitors.map((m) => ({ ...m, buckets: m.buckets.map((b) => b.s || "-").join("") })), ci: (snap.ci || []).map((w) => ({ ...w, days: w.days.map((d) => d || "-").join(""), tips: undefined })) };
-  return `You are the assistant inside Hush, a status page for a software factory: a repo where AI agents (Claude Code routines) and GitHub Actions do scheduled work, and monitors report heartbeats.
+  return `You are the assistant inside Type V, a status page for a software factory: a repo where AI agents (Claude Code routines) and GitHub Actions do scheduled work, and monitors report heartbeats.
 You are answering ${user.login} about the repo ${row.full_name}. Now: ${new Date().toISOString()} (UTC).
 
 Rules:
@@ -3354,10 +3359,10 @@ async function runRuleTool(row, user, name, args) {
 // One answer: up to three rounds of tool calls, then the text. Plain text back, like askStream.
 async function askWithTools(res, system, messages, origin, row, user) {
   const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return send(res, 503, "The assistant is not configured on this Hush (OPENROUTER_API_KEY is missing).", { "content-type": "text/plain; charset=utf-8" });
+  if (!key) return send(res, 503, "The assistant is not configured on this Type V (OPENROUTER_API_KEY is missing).", { "content-type": "text/plain; charset=utf-8" });
   const convo = [{ role: "system", content: system }, ...messages];
   for (let round = 0; round < 4; round++) {
-    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "http-referer": origin, "x-title": "Hush" }, body: JSON.stringify({ model: ASK_MODEL, messages: convo, tools: RULE_TOOLS }) });
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "http-referer": origin, "x-title": "Type V" }, body: JSON.stringify({ model: ASK_MODEL, messages: convo, tools: RULE_TOOLS }) });
     if (!r.ok) return send(res, 502, `The model did not answer (${r.status}). ${(await r.text().catch(() => "")).slice(0, 300)}`, { "content-type": "text/plain; charset=utf-8" });
     const msg = (await r.json()).choices?.[0]?.message || {};
     if (!msg.tool_calls?.length || round === 3) return send(res, 200, msg.content || "", { "content-type": "text/plain; charset=utf-8" });
@@ -3372,10 +3377,10 @@ async function askWithTools(res, system, messages, origin, row, user) {
 }
 async function askStream(res, system, messages, origin) {
   const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return send(res, 503, "The assistant is not configured on this Hush (OPENROUTER_API_KEY is missing).", { "content-type": "text/plain; charset=utf-8" });
+  if (!key) return send(res, 503, "The assistant is not configured on this Type V (OPENROUTER_API_KEY is missing).", { "content-type": "text/plain; charset=utf-8" });
   const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "http-referer": origin, "x-title": "Hush" },
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "http-referer": origin, "x-title": "Type V" },
     body: JSON.stringify({ model: ASK_MODEL, stream: true, messages: [{ role: "system", content: system }, ...messages] }),
   });
   if (!r.ok || !r.body) return send(res, 502, `The model did not answer (${r.status}). ${(await r.text().catch(() => "")).slice(0, 300)}`, { "content-type": "text/plain; charset=utf-8" });
@@ -3445,10 +3450,10 @@ async function migrateLegacy() {
   console.log(`migrate: ${JSON.stringify(moved)}`);
 }
 
-// When the server moves to Postgres, bring over what the local SQLite (hush.db) collected in the
+// When the server moves to Postgres, bring over what the local SQLite (typev.db) collected in the
 // meantime. Same schema; newer cost rows win, everything else is insert-if-missing.
 async function migrateLocal() {
-  const file = join(DATA, "hush.db");
+  const file = liteFile(DATA);
   if (db.kind !== "postgres" || !existsSync(file) || (await db.one("SELECT v FROM settings WHERE k = $1", "migrated_local"))) return;
   const lite = new DatabaseSync(file, { readOnly: true });
   const all = (q) => lite.prepare(q).all();
@@ -3623,8 +3628,8 @@ createServer(async (req, res) => {
       }
       const tz = await userTz(user.login);
       const opts = [...TZS].sort().map((z) => `<option value="${esc(z)}"${z === tz ? " selected" : ""}>${esc(z.replace(/_/g, " "))}</option>`).join("");
-      return send(res, 200, page("Settings · hush", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>hush</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Settings</b></nav></header>
-        <main class="main"><header class="vh"><h1>Settings</h1><p>For ${esc(user.login)}. Hush stores everything in UTC and shows it in this time zone.</p></header>
+      return send(res, 200, page("Settings · Type V", `<div class="app solo"><header class="topbar"><a class="logo" href="/">${MARK()}<span>Type V</span></a><nav class="crumbs"><a href="/">Repositories</a><span>/</span><b>Settings</b></nav></header>
+        <main class="main"><header class="vh"><h1>Settings</h1><p>For ${esc(user.login)}. Type V stores everything in UTC and shows it in this time zone.</p></header>
         <form method="post" class="settings"><label><span>Time zone</span><select name="tz"><option value=""${tz ? "" : " selected"}>Use my browser's time zone</option>${opts}</select></label><button type="submit">Save</button>${url.searchParams.has("saved") ? `<span class="faint">Saved.</span>` : ""}</form>
         <p class="hint" id="tz-now"></p></main></div><script>(()=>{const b=Intl.DateTimeFormat().resolvedOptions().timeZone;document.getElementById("tz-now").textContent="Your browser says "+b+"."})()</script>`));
     }
@@ -3642,7 +3647,7 @@ createServer(async (req, res) => {
       const repos = await userRepos(user).catch(() => null);
       if (!repos) return redirect(res, "/auth/login");
       const seen = repos.find((r) => r.full_name.toLowerCase() === m[1].toLowerCase());
-      if (!seen) return send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">Hush is not installed on that repo, or your account cannot see it.</p>`));
+      if (!seen) return send(res, 404, page("Not found", `<header class="top">${LOGO}</header><p class="none">Type V is not installed on that repo, or your account cannot see it.</p>`));
       const row = await ensureRepo(seen, user);
       if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: (await db.one("SELECT COUNT(*)::int AS n FROM heartbeats WHERE repo_id = $1", row.id)).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
@@ -3674,7 +3679,7 @@ createServer(async (req, res) => {
         return redirect(res, `/r/${row.full_name}?key=new#setup`);
       }
       if (m[2] === "/triggers" || m[2] === "/fire") {
-        // Run a Claude Code routine from Hush. There is no API to create or edit routines, only to fire
+        // Run a Claude Code routine from Type V. There is no API to create or edit routines, only to fire
         // one that has an API trigger: the person pastes that trigger's URL and token here once. The token
         // is sealed at rest, never sent back to the page, and only ever posted to Anthropic's fire URL.
         if (req.method === "GET") {
@@ -3695,7 +3700,7 @@ createServer(async (req, res) => {
           return json(res, 200, { ok: true });
         }
         const t = await db.one("SELECT * FROM routine_triggers WHERE repo_id = $1 AND routine = $2", row.id, routine);
-        if (!t) return json(res, 404, { error: "This routine has no API trigger in Hush yet." });
+        if (!t) return json(res, 404, { error: "This routine has no API trigger in Type V yet." });
         if (t.last_fired_at && Date.now() - Date.parse(t.last_fired_at) < 20e3) return json(res, 429, { error: "It was started a few seconds ago. Give it a moment." });
         const text = typeof b.text === "string" ? b.text.slice(0, 65536) : "";
         let out, err = null;
@@ -3706,7 +3711,7 @@ createServer(async (req, res) => {
         } catch (e) { err = `Could not reach Anthropic: ${e.message}`; }
         const now = new Date().toISOString(), sessionUrl = !err ? String(out?.claude_code_session_url || "") : null;
         await db.run("UPDATE routine_triggers SET last_fired_at = $1, last_fired_by = $2, last_session_url = $3, last_error = $4 WHERE repo_id = $5 AND routine = $6", now, user.login, sessionUrl, err, row.id, routine);
-        await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", row.id, now, err ? "bad" : "ok", "routine", `${routine.replace(/^App: /, "")} ${err ? "could not start" : "started from Hush"}`, err || `by ${user.login}${text ? `: ${text.slice(0, 140)}` : ""}`, `routine:${encodeURIComponent(routine)}`, `fire:${routine}:${now}`);
+        await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", row.id, now, err ? "bad" : "ok", "routine", `${routine.replace(/^App: /, "")} ${err ? "could not start" : "started from Type V"}`, err || `by ${user.login}${text ? `: ${text.slice(0, 140)}` : ""}`, `routine:${encodeURIComponent(routine)}`, `fire:${routine}:${now}`);
         return err ? json(res, 502, { error: err }) : json(res, 200, { ok: true, session_url: sessionUrl });
       }
       if (m[2]?.startsWith("/rules")) {

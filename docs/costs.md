@@ -1,7 +1,7 @@
 # Costs
 
 What the factory spends, per day and per source, and how many tokens each Claude Code session
-burns. Hush holds no cloud or billing credentials: the repo pushes what it already knows, with the
+burns. Type V holds no cloud or billing credentials: the repo pushes what it already knows, with the
 same ingest key it uses for heartbeats.
 
 ## Claude Code sessions (automatic)
@@ -24,7 +24,7 @@ ends and posts its token usage by model:
 
 **Dollars are an estimate** at API list prices per million tokens: input, output, cache writes at
 1.25× input (5 min) or 2× (1 h), cache reads at 0.1× input. On a Claude subscription this is what
-the same tokens would cost on the API, not what you pay. Models Hush has no price for show tokens
+the same tokens would cost on the API, not what you pay. Models Type V has no price for show tokens
 only; set or override prices in `.claude/factory.json`:
 
 ```json
@@ -37,10 +37,10 @@ One row per source per day. Posting the same source and day again replaces it, s
 resend the last few days as late charges settle.
 
 ```sh
-.claude/hooks/hush.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"Bedrock":8,"S3":0.4}}'
-.claude/hooks/hush.sh cost vercel 4.20 '{"day":"2026-10-10"}'
-.claude/hooks/hush.sh cost neon 0.63  # a flat monthly plan, spread per day
-.claude/hooks/hush.sh cost openrouter 12.40 '{"day":"2026-10-10","breakdown":{"anthropic/claude-sonnet":9.1,"openai/gpt-5":3.3}}'  # agents on OpenRouter keys
+.claude/hooks/typev.sh cost aws 31.50 '{"day":"2026-10-10","breakdown":{"ECS":20,"Bedrock":8,"S3":0.4}}'
+.claude/hooks/typev.sh cost vercel 4.20 '{"day":"2026-10-10"}'
+.claude/hooks/typev.sh cost neon 0.63  # a flat monthly plan, spread per day
+.claude/hooks/typev.sh cost openrouter 12.40 '{"day":"2026-10-10","breakdown":{"anthropic/claude-sonnet":9.1,"openai/gpt-5":3.3}}'  # agents on OpenRouter keys
 ```
 
 Or the raw call:
@@ -62,7 +62,7 @@ authorization: Bearer <ingest-key>
 | `note` | Optional, one line. |
 
 The natural sender is the job that already reads the bill. For example, a daily cost monitor that
-queries AWS Cost Explorer ends by posting the last 3 days with `hush.sh cost aws`.
+queries AWS Cost Explorer ends by posting the last 3 days with `typev.sh cost aws`.
 
 ## Cost explorer
 

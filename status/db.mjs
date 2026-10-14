@@ -8,8 +8,16 @@
 // read without a repo_id that the request was authorized for.
 
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
+
+// The local SQLite file. Servers set up before the rename to Type V wrote it under the old name: move it
+// (with its WAL files) to the new name once, so their data stays.
+export function liteFile(dataDir) {
+  const file = join(dataDir, "typev.db"), old = join(dataDir, "hush.db");
+  if (!existsSync(file) && existsSync(old)) for (const x of ["", "-wal", "-shm"]) if (existsSync(old + x)) renameSync(old + x, file + x);
+  return file;
+}
 
 const SCHEMA = (pg) => `
   CREATE TABLE IF NOT EXISTS accounts (
@@ -92,7 +100,7 @@ export async function openDb({ url, dataDir }) {
     return db;
   }
   mkdirSync(dataDir, { recursive: true });
-  const lite = new DatabaseSync(join(dataDir, "hush.db"));
+  const lite = new DatabaseSync(liteFile(dataDir));
   lite.exec("PRAGMA journal_mode = WAL;" + SCHEMA(false));
   // $n -> ?n, and drop Postgres casts (::int) that SQLite does not need
   const conv = (q) => q.replace(/\$(\d+)/g, "?$1").replace(/::[a-z]+/g, "");

@@ -20,7 +20,7 @@ the obvious fixes to happen without them.
 
 ## Product Purpose
 
-Hush is a Claude Code plugin that watches production. Monitors read errors, logs, costs and LLM
+Type V is a Claude Code plugin that watches production. Monitors read errors, logs, costs and LLM
 traces on a schedule, stay silent when things are fine, and open a GitHub issue when something is
 really broken. A fixer takes the issues it can prove and opens a PR with a regression test. Success
 is a developer who stops opening dashboards because the important problems arrive as issues and
@@ -47,7 +47,7 @@ reads one source on demand; Heartbeat alerts on thresholds without filing or fix
 - GitHub is the queue: issues in, PRs out.
 - Setup writes a short `CHARTER.md` to the target repo: which sources exist, which paths stay the
   developer's.
-- Command names on the current mock (`/watch`, `/mend`, `/pulse`, `/hush setup`) are working names.
+- Command names on the current mock (`/watch`, `/mend`, `/pulse`, `/typev setup`) are working names.
 
 ## Capabilities and Constraints
 
@@ -55,7 +55,7 @@ reads one source on demand; Heartbeat alerts on thresholds without filing or fix
 - Fixer gates: a code defect in this repo, a mechanism with `file:line`, a bounded fix (no schema
   change, no new dependency, no refactor), a regression test that fails without the fix, nobody
   else on it.
-- **Open:** the name "Hush" is a placeholder, availability unchecked. The repo account
+- The name is Type V, after the Kardashev scale. **Open:** the repo account
   (`humanagent` proposed), license (MIT shown on the mock) and Codex support are undecided.
 - The plugin does not exist yet; only the landing does.
 

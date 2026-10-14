@@ -1,4 +1,4 @@
-# hush
+# Type V
 
 Observability for your software factory: whether every skill your agents run actually ran, and
 what it cost. Open source under the [MIT license](LICENSE). Use the hosted one at
@@ -39,21 +39,21 @@ zone), and **Repositories** (every repo you can see, by account, side by side).
   curl -fsSL https://factory-status.fly.dev/install.sh | sh -s -- <ingest-key>
   ```
 
-  It adds `.claude/hooks/hush.sh` and a `SessionEnd` hook, so every Claude Code cloud routine that
+  It adds `.claude/hooks/typev.sh` and a `SessionEnd` hook, so every Claude Code cloud routine that
   runs a slash command reports itself when it ends. A skill can also send its own status and
-  volume with `.claude/hooks/hush.sh beat <id> ok '{"swept":{"events":120}}'`. The post is
-  detached with a 5 s cap and never fails or slows the caller; `HUSH_DISABLED=1` turns it off.
+  volume with `.claude/hooks/typev.sh beat <id> ok '{"swept":{"events":120}}'`. The post is
+  detached with a 5 s cap and never fails or slows the caller; `TYPEV_DISABLED=1` turns it off.
 
 ## Docs
 
 - [Heartbeats](docs/heartbeats.md): the API, the installer, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
-- [`/hush-setup`](docs/setup.md): building the factory in one PR, as new hush-* skills, workflows and routines.
+- [`/typev-setup`](docs/setup.md): building the factory in one PR, as new typev-* skills, workflows and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
 - [Daily factory report](docs/report.md): one email with everything that happened in the factory that day.
 - [Automations](docs/automations.md): each scheduled job as one stored object, its runs, state and calendar.
-- [How Hush judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
+- [How Type V judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
 
 ## Layout

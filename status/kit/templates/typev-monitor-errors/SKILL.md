@@ -1,10 +1,10 @@
 ---
-name: hush-monitor-errors
-description: Daily sweep of production errors in Sentry. Files a GitHub issue for each new or regressed error worth a look, stays silent otherwise, and always ends with a Hush heartbeat. Runs on a Claude Code routine. Use for "check errors", "sentry sweep", "monitor errors".
-allowed-tools: Bash(curl *), Bash(jq *), Bash(gh *), Bash(date *), Bash(.claude/hooks/hush.sh *)
+name: typev-monitor-errors
+description: Daily sweep of production errors in Sentry. Files a GitHub issue for each new or regressed error worth a look, stays silent otherwise, and always ends with a Type V heartbeat. Runs on a Claude Code routine. Use for "check errors", "sentry sweep", "monitor errors".
+allowed-tools: Bash(curl *), Bash(jq *), Bash(gh *), Bash(date *), Bash(.claude/hooks/typev.sh *)
 ---
 
-# /hush-monitor-errors
+# /typev-monitor-errors
 
 Silence is the right output on a good day. Every message this sends must be worth reading.
 
@@ -18,7 +18,7 @@ Needs `SENTRY_AUTH_TOKEN` and `SENTRY_ORG` in the environment. If either is miss
 `skipped` and stop:
 
 ```bash
-.claude/hooks/hush.sh beat hush-monitor-errors skipped '{"note":"SENTRY_AUTH_TOKEN or SENTRY_ORG missing"}'
+.claude/hooks/typev.sh beat typev-monitor-errors skipped '{"note":"SENTRY_AUTH_TOKEN or SENTRY_ORG missing"}'
 ```
 
 ## 1. Sweep
@@ -44,7 +44,7 @@ in-app frames and the message.
 ## 3. Dedupe
 
 ```bash
-gh issue list --state open --label hush:errors --search "<SHORT-ID> in:title" --json number
+gh issue list --state open --label typev:errors --search "<SHORT-ID> in:title" --json number
 ```
 
 Already open: add a comment only if the count doubled since it was filed. Otherwise skip.
@@ -52,8 +52,8 @@ Already open: add a comment only if the count doubled since it was filed. Otherw
 ## 4. File
 
 ```bash
-gh label create hush:errors --color B60205 --description "Filed by Hush" 2>/dev/null || true
-gh issue create --label hush:errors --title "[hush-errors] <SHORT-ID>: <title>" --body "<culprit, events and users in 24 h, first and last seen, the Sentry link, the top in-app frames>"
+gh label create typev:errors --color B60205 --description "Filed by Type V" 2>/dev/null || true
+gh issue create --label typev:errors --title "[typev-errors] <SHORT-ID>: <title>" --body "<culprit, events and users in 24 h, first and last seen, the Sentry link, the top in-app frames>"
 ```
 
 No routine GitHub token with issue rights: do not fail the run. Send `degraded` with the
@@ -64,8 +64,8 @@ issues you would have filed in the note.
 Always, clean run or not:
 
 ```bash
-.claude/hooks/hush.sh beat hush-monitor-errors ok '{"swept":{"projects":<n>,"events":<n>},"suppressed":<n>,"filed":[<numbers>],"note":"<one line>"}'
+.claude/hooks/typev.sh beat typev-monitor-errors ok '{"swept":{"projects":<n>,"events":<n>},"suppressed":<n>,"filed":[<numbers>],"note":"<one line>"}'
 ```
 
 `degraded` when some project did not answer or filing failed. `projects` at 0 with `ok` is what
-Hush calls "said ok, read nothing": never send that, send `degraded`.
+Type V calls "said ok, read nothing": never send that, send `degraded`.

@@ -1,7 +1,7 @@
 # `.claude/factory.json`
 
-Optional. Declares the monitors Hush should expect heartbeats from and the Claude Code routines
-that run them. Without it, Hush still shows every monitor that sends a heartbeat (marked "not in
+Optional. Declares the monitors Type V should expect heartbeats from and the Claude Code routines
+that run them. Without it, Type V still shows every monitor that sends a heartbeat (marked "not in
 roster"), CI, scheduled Actions and the queue.
 
 ```json
@@ -43,7 +43,7 @@ source "GitHub Actions" and their last run as evidence.
 
 ## Older convention
 
-When `factory.json` is missing, Hush falls back to:
+When `factory.json` is missing, Type V falls back to:
 
 - monitors from `.claude/skills/monitor-meta/roster.json` (`{ "monitors": [...] }`, same fields), and
 - routines from the table in `.claude/skills/cloud-routine.md`: rows shaped

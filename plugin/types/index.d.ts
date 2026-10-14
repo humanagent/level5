@@ -1,4 +1,4 @@
-// What the mod keeps in $.state: the repo's last summary from Type V, and whether the band is hidden.
+// What the mod keeps in $.state: the repo's last summary from Level 5, and whether the band is hidden.
 
 export type Need = { skill: string; state: string }
 
@@ -15,6 +15,6 @@ export type Summary = {
 
 declare module 'claude-code' {
   interface PluginState {
-    typev: { summary: Summary | null; problem: string | null; isHidden: boolean }
+    level5: { summary: Summary | null; problem: string | null; isHidden: boolean }
   }
 }

@@ -6,17 +6,17 @@
  },
  {
   "id": "accel",
-  "text": "Software is accelerating. The tools around it have to keep up.",
+  "text": "Level zero: you watch every dashboard. Level five: the factory watches itself.",
   "min": 4.2
  },
  {
   "id": "mark",
-  "text": "Meet Type Five.",
+  "text": "Meet Level Five.",
   "min": 3.4
  },
  {
   "id": "status",
-  "text": "The monitor of the monitors. When a routine goes quiet, Type Five notices.",
+  "text": "The monitor of the monitors. When a routine goes quiet, Level Five notices.",
   "min": 5.0
  },
  {
@@ -46,7 +46,7 @@
  },
  {
   "id": "grow",
-  "text": "One developer. A factory. A city of them. A planet. A star. A galaxy. Every universe.",
+  "text": "One developer. A factory. A city of them. Every level, less of you watching. At level five, none.",
   "min": 9.4
  },
  {
@@ -61,7 +61,7 @@
  },
  {
   "id": "end",
-  "text": "Type Five. For a new class of developer. Accelerate.",
+  "text": "Level Five. Automation observability for your repositories.",
   "min": 4.4
  }
 ]

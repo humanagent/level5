@@ -172,7 +172,7 @@ td{padding:15px 0;border-top:1px solid #f0f1f6;text-align:right;font-variant-num
 </section>
 
 <div class="hud" id="hud">
-  <div class="tl"><small>KARDASHEV SCALE</small><b id="ktype">TYPE I</b><em id="kname">PLANETARY</em></div>
+  <div class="tl"><small>LEVEL OF AUTONOMY</small><b id="ktype">LEVEL 1</b><em id="kname">ASSISTED</em></div>
   <div class="tr"><small>PRs MERGED / DAY</small><b id="kprs">10<sup>2</sup></b></div>
   <div class="lv" id="lv"></div>
   <div class="br">EVERY ONE OF THEM, WATCHED</div>
@@ -187,12 +187,12 @@ td{padding:15px 0;border-top:1px solid #f0f1f6;text-align:right;font-variant-num
   <div class="cc-tag" id="cctag"><img src="https://cdn.simpleicons.org/claude/D97757" alt="">Works with Claude Code</div>
   <div class="h1" style="font-size:110px">Free. Open source.<br><em>Run your own.</em></div>
   <div class="wl"><div class="in" id="email" style="width:700px;font-family:var(--mono);font-size:30px"><span class="ph">factory-status.fly.dev</span></div><div class="pp pri" id="join">Start free</div></div>
-  <div class="ok" id="okmsg" style="color:var(--muted);font-family:var(--mono);font-size:26px">MIT · github.com/humanagent/typev</div>
+  <div class="ok" id="okmsg" style="color:var(--muted);font-family:var(--mono);font-size:26px">MIT · github.com/humanagent/level5</div>
 </div></section>
 
 <section class="s end" id="end"><div class="c">
   <div class="logo" id="endlogo" style="font-size:120px;justify-content:center;margin-bottom:44px"></div>
-  <div class="h1">For a new class of developer.<br><em id="accw">Accelerate.</em></div>
+  <div class="h1">Automation observability<br><em id="endw">for your repositories.</em></div>
   <div class="endrow"><span class="pp pri">Start free · factory-status.fly.dev</span><span class="pp alt"><img src="https://cdn.simpleicons.org/claude/D97757" alt="">Works with Claude Code</span></div>
 </div></section>
 
@@ -208,10 +208,10 @@ const S = Object.fromEntries(TL.map((s) => [s.id, s]));
 // a scene's local clock: u from its start, D its length, v its visibility (in .45s, out .35s)
 const L = (id, t) => { const s = S[id], u = t - s.a, D = s.b - s.a; return { u, D, v: out4(seg(u, 0, .45)) * (1 - io(seg(u, D - .35, D))) }; };
 
-// Type V: five rising bars, one per Kardashev type
+// Level 5: five rising bars, one per level of autonomy
 const BARS = (fill = "") => [0, 1, 2, 3, 4].map((i) => `<rect x="${2 + i * 7.6}" y="${36 - (8 + i * 6.5)}" width="5.4" height="${8 + i * 6.5}" rx="1.6" ${fill}/>`).join("");
 const MARK = () => `<svg class="mark" viewBox="0 0 40 40">${BARS()}</svg>`;
-$("mini").innerHTML = MARK() + `<span>Type <b>V</b></span>`; $("biglogo").innerHTML = MARK() + `<span id="wm">Type <b>V</b></span>`; $("endlogo").innerHTML = MARK() + `<span>Type <b>V</b></span>`;
+$("mini").innerHTML = MARK() + `<span>Level <b>5</b></span>`; $("biglogo").innerHTML = MARK() + `<span id="wm">Level <b>5</b></span>`; $("endlogo").innerHTML = MARK() + `<span>Level <b>5</b></span>`;
 $("repband").innerHTML = `<svg viewBox="0 0 40 40">${BARS('fill="#f2894a"')}</svg><b>Daily factory report</b>`;
 
 let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -233,7 +233,7 @@ const ditherImg = (() => {
   return c;
 })();
 
-const l1 = "Software is accelerating.".split(" "), l2 = "The tools around it have to keep up.".split(" ");
+const l1 = "Level 0: you watch every dashboard.".split(" "), l2 = "Level 5: the factory watches itself.".split(" ");
 $("q").innerHTML = l1.map((w) => `<span class="word">${w}</span>`).join(" ") + "<br><em>" + l2.map((w) => `<span class="word" data-l="2">${w}</span>`).join(" ") + "</em>";
 const words = [...document.querySelectorAll("#q .word")];
 
@@ -260,14 +260,14 @@ $("lv").innerHTML = [0, 1, 2, 3, 4].map((i) => `<i style="height:${26 + i * 18}p
 const F3 = Array.from({ length: 120 }, (_, i) => { const im = new Image(); im.src = `f3/${String(i).padStart(4, "0")}.png`; return im; });
 window.ready = Promise.all([...F3.map((i) => i.decode()), ...[...document.images].map((i) => i.decode().catch(() => {})), document.fonts.ready]);
 
-// cosmos: point fields per Kardashev level
+// cosmos: point fields, one per level of autonomy, pulling back from one factory
 seed = 3;
 const PLANET = Array.from({ length: 5200 }, () => { const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2; return [Math.sqrt(1 - u * u) * Math.cos(th), u, Math.sqrt(1 - u * u) * Math.sin(th), rnd()]; });
 const SWARM = Array.from({ length: 2600 }, () => [rnd() * Math.PI * 2, .9 + rnd() * .9, (rnd() - .5) * 1.2, rnd()]);
 const GAL = Array.from({ length: 9000 }, () => { const arm = Math.floor(rnd() * 3), r = Math.pow(rnd(), .7), a = arm * 2.094 + r * 5.5 + (rnd() - .5) * (.5 - r * .25); return [r, a, rnd()]; });
 const WEB = Array.from({ length: 900 }, () => [rnd() * 2 - 1, rnd() * 2 - 1, rnd()]);
 const BUB = Array.from({ length: 70 }, () => [rnd() * 2 - 1, rnd() * 2 - 1, .05 + rnd() * .13, rnd()]);
-const LEVELS = [["TYPE I", "PLANETARY"], ["TYPE II", "STELLAR"], ["TYPE III", "GALACTIC"], ["TYPE IV", "UNIVERSAL"], ["TYPE V", "MULTIVERSAL"]];
+const LEVELS = [["LEVEL 1", "ASSISTED"], ["LEVEL 2", "PARTIAL"], ["LEVEL 3", "CONDITIONAL"], ["LEVEL 4", "HIGH"], ["LEVEL 5", "FULL AUTONOMY"]];
 const dot = (g, x, y, r, c) => { g.fillStyle = c; g.fillRect(x - r / 2, y - r / 2, r, r); };
 
 function cosmos(g, u, D) {
@@ -355,13 +355,13 @@ window.render = (t) => {
   if (l.u > -.5 && t < S.grow.a + .1) { const g = $("f3c").getContext("2d"), fi = Math.max(0, Math.min(119, Math.floor(l.u / l.D * 120))); g.clearRect(0, 0, 2104, 1400); g.drawImage(F3[fi], 0, 0, 2104, 1400);
     $("f3c").style.transform = `translateY(${(1 - out4(seg(l.u, 0, .8))) * 80}px) scale(${.97 + .05 * seg(l.u, 0, l.D)})`; }
 
-  // grow: the factory scales up to a multiverse; the scene goes to night for it
+  // grow: one factory becomes many, a level at a time up to Level 5; the scene goes to night for it
   l = L("grow", t); const G = $("cosmos").getContext("2d");
   const night = t < S.grow.a ? 0 : out4(seg(l.u, .2, 1.4)) * (1 - io(seg(l.u, l.D - .5, l.D))); $("night").style.opacity = night; $("dither").style.opacity = 1 - night;
   if (l.u >= 0 && l.u <= l.D) { const K0 = cosmos(G, l.u, l.D); $("cosmos").style.opacity = 1 - io(seg(l.u, l.D - .45, l.D));
     $("hud").style.opacity = K0 >= 0 ? out4(seg(l.u, 1.5, 2)) * (1 - io(seg(l.u, l.D - .45, l.D))) : 0;
     const K = Math.max(0, K0); $("ktype").textContent = LEVELS[K][0]; $("kname").textContent = LEVELS[K][1];
-    $("kprs").innerHTML = `10<sup>${Math.round(lerp(2, 42, seg(l.u, 1.7, l.D - .9)))}</sup>`;
+    $("kprs").innerHTML = `10<sup>${Math.round(lerp(2, 6, seg(l.u, 1.7, l.D - .9)))}</sup>`;
     document.querySelectorAll("#lv i").forEach((b, i) => b.classList.toggle("on", i <= K));
     $("mini").style.color = "#fff";
   } else { G.clearRect(0, 0, 1920, 1080); $("hud").style.opacity = 0; $("mini").style.color = ""; }
@@ -378,6 +378,6 @@ window.render = (t) => {
   l = L("end", t); $("end").style.opacity = out4(seg(l.u, 0, .6));
   $("end").firstElementChild.style.transform = `translateY(${(1 - out4(seg(l.u, 0, .9))) * 30}px)`;
   document.querySelectorAll("#endlogo rect").forEach((r, i) => { const p = out4(seg(l.u, .1 + i * .08, .5 + i * .08)); r.style.transformBox = "fill-box"; r.style.transformOrigin = "bottom"; r.style.transform = `scaleY(${p})`; });
-  const ap2 = out4(seg(l.u, 1.6, 2.2)); $("accw").style.opacity = ap2; $("accw").style.letterSpacing = `${-.06 + (1 - ap2) * .1}em`;
+  const ap2 = out4(seg(l.u, 1.6, 2.2)); $("endw").style.opacity = ap2; $("endw").style.letterSpacing = `${-.06 + (1 - ap2) * .1}em`;
 };
 </script></body></html>

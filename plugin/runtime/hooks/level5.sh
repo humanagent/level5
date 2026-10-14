@@ -1,25 +1,25 @@
 #!/bin/sh
-# typev.sh: heartbeats for Type V.
+# level5.sh: heartbeats for Level 5.
 #
-#   typev.sh beat <monitor> <ok|degraded|skipped> ['{"swept":{"events":120},"filed":[42],"note":"..."}']
+#   level5.sh beat <monitor> <ok|degraded|skipped> ['{"swept":{"events":120},"filed":[42],"note":"..."}']
 #       A skill calls this as its last step, clean run or not.
-#   typev.sh cost <source> <usd> ['{"day":"2026-10-10","breakdown":{"ECS":4.1,"S3":0.3}}']
+#   level5.sh cost <source> <usd> ['{"day":"2026-10-10","breakdown":{"ECS":4.1,"S3":0.3}}']
 #       One provider's spend for one day (default today). Posting the same source and day again
 #       replaces it, so a daily job can resend the last few days safely.
-#   typev.sh session-end
+#   level5.sh session-end
 #       The SessionEnd hook. In a Claude Code cloud session (a routine) it posts the session's
 #       token usage by model, and one heartbeat named after the slash command the session ran.
 #       Local sessions send nothing.
 #
 # Never fails or slows the caller: the post runs in the background, detached, with a 5 s cap,
-# and no network, no key or no curl just exits 0. TYPEV_DISABLED=1 turns it off entirely.
-[ -z "${TYPEV_DISABLED:-}" ] || exit 0
+# and no network, no key or no curl just exits 0. LEVEL5_DISABLED=1 turns it off entirely.
+[ -z "${LEVEL5_DISABLED:-}" ] || exit 0
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CFG="$DIR/typev.json"
-# TYPEV_URL and TYPEV_KEY (a routine's environment) win over .claude/typev.json
+CFG="$DIR/level5.json"
+# LEVEL5_URL and LEVEL5_KEY (a routine's environment) win over .claude/level5.json
 cfg() { [ -f "$CFG" ] && sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" "$CFG"; }
-URL="${TYPEV_URL:-$(cfg url)}"
-KEY="${TYPEV_KEY:-$(cfg key)}"
+URL="${LEVEL5_URL:-$(cfg url)}"
+KEY="${LEVEL5_KEY:-$(cfg key)}"
 [ -n "$URL" ] && [ -n "$KEY" ] && command -v curl >/dev/null 2>&1 || exit 0
 
 post() {

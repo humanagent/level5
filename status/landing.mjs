@@ -1,6 +1,7 @@
-// The public landing at "/", for people who are not signed in. Type V, after the Kardashev
-// scale.
-const REPO = "https://github.com/humanagent/typev";
+// The public landing at "/", for people who are not signed in. Level 5, after the levels of
+// driving autonomy: at level 0 you watch every dashboard, at level 5 the repo's automations watch
+// themselves.
+const REPO = "https://github.com/humanagent/level5";
 // Every number in the preview is invented and labelled as an example.
 
 // 30 days per example monitor: o = ok, d = degraded, s = skipped, . = no run
@@ -57,7 +58,7 @@ const FACTORY = {
 // What it connects to today: the four platforms first, the rest in one line under them.
 const LOGO_GH = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="#fff" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
 const LOGO_VERCEL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M12 3l10 17.5H2z"/></svg>`;
-// The tools a factory's monitors read and Type V keeps track of, as a row of grey logos under the hero.
+// The tools a factory's monitors read and Level 5 keeps track of, as a row of grey logos under the hero.
 // Logos from simple-icons at the version that has each one; the two it lacks show their initial.
 const SI = (v, slug) => `https://cdn.jsdelivr.net/npm/simple-icons@${v}/icons/${slug}.svg`;
 const TOOLS = [
@@ -76,9 +77,9 @@ const INTEGRATIONS = [
 ];
 
 const GITHUB_I = `<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
-// The Type V mark: five rising rounded bars, one per Kardashev type, bottom-aligned.
+// The Level 5 mark: five rising rounded bars, one per level of autonomy, bottom-aligned.
 const MARKV = (size = 24) => `<svg class="mk" viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true">${[0, 1, 2, 3, 4].map((i) => `<rect x="${+(2 + i * 7.6).toFixed(1)}" y="${+(36 - (8 + i * 6.5)).toFixed(1)}" width="5.4" height="${+(8 + i * 6.5).toFixed(1)}" rx="1.6" fill="currentColor" opacity="${[0.42, 0.56, 0.7, 0.85, 1][i]}"/>`).join("")}</svg>`;
-const WORDMARK = (size = 24) => `${MARKV(size)}<span class="wm">Type <b>V</b></span>`;
+const WORDMARK = (size = 24) => `${MARKV(size)}<span class="wm">Level <b>5</b></span>`;
 const FAVICON = `<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='9' fill='#0b0c14'/><g transform='translate(4 4) scale(.8)' fill='#e8875f'>${[0, 1, 2, 3, 4].map((i) => `<rect x='${+(2 + i * 7.6).toFixed(1)}' y='${+(36 - (8 + i * 6.5)).toFixed(1)}' width='5.4' height='${+(8 + i * 6.5).toFixed(1)}' rx='1.6'/>`).join("")}</g></svg>`)}">`;
 const SITE = "https://factory-status.fly.dev";
 const COPY_I = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>`;
@@ -133,20 +134,20 @@ export function landingPage({ install, msg, esc, css, fonts, viewer = null }) {
   // section eyebrows, CLI style: a number, a dot, a lowercase word
   const ey = (n, w) => `<span class="ey"><b>${n}</b><i>·</i>${w}</span>`;
   const copyBtn = `<button class="cp" type="button" aria-label="Copy command" data-copy>${COPY_I}</button>`;
-  const title = "Type V · For a new class of developer. Accelerate.";
-  const desc = "Observability for the factory your agents run: which routines ran, which went silent, and what each one cost. Works with Claude Code. Free, open source (MIT), self-host it.";
+  const title = "Level 5 · Automation observability for your repositories";
+  const desc = "Automation observability for your repositories: which routines ran, which went silent, and what each one cost. A Claude Code plugin. Free, open source (MIT), self-host it.";
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <meta name="description" content="${desc}">
 <meta name="theme-color" content="#0b0c14">
 <link rel="canonical" href="${SITE}/">
-<meta property="og:type" content="website"><meta property="og:site_name" content="Type V"><meta property="og:url" content="${SITE}/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Level 5"><meta property="og:url" content="${SITE}/">
 <meta property="og:title" content="${title}"><meta property="og:description" content="${desc}">
 <meta name="twitter:card" content="summary"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${desc}">
 ${FAVICON}${fonts}<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
 <style>${css}
-/* Type V. Deep cool ink with a faint dot field, warm clay as the accent and indigo behind it, 1px
+/* Level 5. Deep cool ink with a faint dot field, warm clay as the accent and indigo behind it, 1px
    lines instead of glass, mono for every label and number. The product shots stay light: they
    read as screenshots on the dark ground. */
 :root{--f:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -413,7 +414,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script></head><body class="land">
 
-<nav class="lnav" id="lnav" aria-label="Main"><div class="lnav-in"><a class="logo" href="/" aria-label="Type V, home">${WORDMARK(24)}</a>
+<nav class="lnav" id="lnav" aria-label="Main"><div class="lnav-in"><a class="logo" href="/" aria-label="Level 5, home">${WORDMARK(24)}</a>
   <span class="lnav-r"><a class="t" href="#plugin">plugin</a><a class="t" href="#status">status</a><a class="t" href="#costs">costs</a><a class="t" href="#factory">factory</a><a class="t" href="#sources">sources</a><a class="t" href="#install">start</a><a class="t" href="${REPO}" target="_blank" rel="noopener" data-track="nav:github">github</a>
   ${viewer ? `<a class="lp alt" href="/landing">${esc(viewer)}</a><a class="lp pri" href="/">Enter <span aria-hidden="true">→</span></a>` : `<a class="lp alt" href="/auth/login" data-track="nav:signin">Sign in</a><a class="lp pri" href="${esc(install)}" data-track="cta:nav-start">Start free</a>`}</span>
 </div></nav>
@@ -422,30 +423,30 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
   <canvas id="stars" aria-hidden="true"></canvas>
   <div class="lhero-in">
     <div>
-      <p class="kick"><b>${MARKV(13)}Type V</b>a Claude Code plugin</p>
-      <h1>For a new class of developer. <em>Accelerate.</em></h1>
-      <p class="lede">A Claude Code plugin that watches the factory your agents run: which routines ran, which went silent, and what each one cost.</p>
-      <div class="cmdb hero-cmd"><span class="p">&gt;</span><span data-cmd>/plugin install typev --marketplace humanagent/typev</span>${copyBtn}</div>
+      <p class="kick"><b>${MARKV(13)}Level 5</b>a Claude Code plugin</p>
+      <h1>Automation observability <em>for your repositories.</em></h1>
+      <p class="lede">Level 0: you watch every dashboard. Level 5: the repo's automations watch themselves, and you hear only what is broken. Which routines ran, which went silent, what each one cost.</p>
+      <div class="cmdb hero-cmd"><span class="p">&gt;</span><span data-cmd>/plugin install level5 --marketplace humanagent/level5</span>${copyBtn}</div>
       ${cta("hero")}
       <div class="works"><span>Plugin for</span><span class="hn"><span class="lg" style="--u:url(${SI("16.32.0", "claude")})" aria-hidden="true"></span>Claude Code</span><span class="hn soon"><img src="${SI("13.21.0", "openai")}" alt="" width="16" height="16">Codex <em>soon</em></span></div>
       <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
-    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: the Type V plugin is installed, then /typev:setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
+    <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: the Level 5 plugin is installed, then /level5:setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
       <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~/acme/api</span><span>claude</span></div>
       <div class="ccw-body" aria-hidden="true">
         <div class="ccw-wel"><span class="sp">✳</span> <b>Welcome to Claude Code</b><br><span class="m">  cwd: ~/acme/api</span></div>
-        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/plugin install typev --marketplace humanagent/typev">/plugin install typev --marketplace humanagent/typev</span></div>
-        <div class="ccw-l" data-step data-wait="900"><span class="m">  ⎿  </span><span class="g">✓</span> Installed typev. Plugin is now active.</div>
-        <div class="ccw-l in" data-step data-wait="400"><span class="pr">&gt;</span> <span data-type="/typev:setup fsk_…">/typev:setup fsk_…</span></div>
+        <div class="ccw-l in"><span class="pr">&gt;</span> <span data-type="/plugin install level5 --marketplace humanagent/level5">/plugin install level5 --marketplace humanagent/level5</span></div>
+        <div class="ccw-l" data-step data-wait="900"><span class="m">  ⎿  </span><span class="g">✓</span> Installed level5. Plugin is now active.</div>
+        <div class="ccw-l in" data-step data-wait="400"><span class="pr">&gt;</span> <span data-type="/level5:setup fsk_…">/level5:setup fsk_…</span></div>
         <div class="ccw-l" data-step data-spin="Reading the repo" data-wait="1500"><span class="w">⏺</span> Read the repo</div>
         <div class="ccw-l" data-step data-wait="250"><span class="m">  ⎿  </span>Sentry in 2 apps · 12 skills · 6 workflows · <span class="c">no monitors</span></div>
         <div class="ccw-l" data-step data-spin="Choosing monitors" data-wait="1300"><span class="w">⏺</span> Monitors it will create</div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">  ⎿  </span><span class="w">typev-monitor-errors</span>  <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-monitor-logs</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-monitor-cost</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-report</span>          <span class="m">routine </span> <span class="ix">0 14 * * *</span></div>
-        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">typev-pulse</span>           <span class="m">workflow</span> <span class="ix">0 19 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">  ⎿  </span><span class="w">level5-monitor-errors</span>  <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">level5-monitor-logs</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">level5-monitor-cost</span>    <span class="m">routine </span> <span class="ix">0 13 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">level5-report</span>          <span class="m">routine </span> <span class="ix">0 14 * * *</span></div>
+        <div class="ccw-l" data-step data-wait="160"><span class="m">     </span><span class="w">level5-pulse</span>           <span class="m">workflow</span> <span class="ix">0 19 * * *</span></div>
         <div class="ccw-l" data-step data-spin="Writing skills and workflows" data-wait="1700"><span class="w">⏺</span> Opened <span class="c">PR #142</span> · 5 skills, 3 workflows</div>
         <div class="ccw-l ok" data-step data-wait="700">✓ Factory ready · 5 monitors watching acme/api</div>
       </div>
@@ -467,33 +468,33 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 <section class="lsec" id="plugin">
   <div class="lsec-head">
     <div>${ey("01", "claude code plugin")}<h2 class="lword">Plugin</h2></div>
-    <div class="r"><h3>It lives in Claude Code</h3><p>Type V is a Claude Code plugin, open source, installed in one line. It adds four things to your sessions, and writes the one hook your routines need into the repo, since a routine runs on a fresh clone.</p>
-      <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/plugin install typev --marketplace humanagent/typev</span>${copyBtn}</div></div>
+    <div class="r"><h3>It lives in Claude Code</h3><p>Level 5 is a Claude Code plugin, open source, installed in one line. It adds four things to your sessions, and writes the one hook your routines need into the repo, since a routine runs on a fresh clone.</p>
+      <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/plugin install level5 --marketplace humanagent/level5</span>${copyBtn}</div></div>
   </div>
   <div class="plug">
-    <div class="tile"><div class="tile-cap"><h4><code>/typev:setup</code> <small>skill</small></h4><p>Reads the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the merge it creates the routines.</p></div>
-      <div class="mini"><span class="m">&gt;</span> <span class="w">/typev:setup fsk_…</span>
+    <div class="tile"><div class="tile-cap"><h4><code>/level5:setup</code> <small>skill</small></h4><p>Reads the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the merge it creates the routines.</p></div>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/level5:setup fsk_…</span>
 <span class="w">⏺</span> Opened <span class="c">PR #142</span> · 5 skills, 3 workflows
 <span class="g">✓</span> Factory ready · 5 monitors watching acme/api</div></div>
-    <div class="tile"><div class="tile-cap"><h4>Above the prompt <small>mod</small></h4><p>What needs a look, where you already are. Silent when all is clear. <code>/typev</code> says the rest.</p></div>
-      <div class="mini"><span class="band"><b>Type V</b> <span class="warn">typev-report missed its last run</span> <span class="m">/typev</span> <span class="hide">Hide</span></span>
+    <div class="tile"><div class="tile-cap"><h4>Above the prompt <small>mod</small></h4><p>What needs a look, where you already are. Silent when all is clear. <code>/level5</code> says the rest.</p></div>
+      <div class="mini"><span class="band"><b>Level 5</b> <span class="warn">level5-report missed its last run</span> <span class="m">/level5</span> <span class="hide">Hide</span></span>
 <span class="inp"><span class="m">&gt;</span> <span class="caret"></span></span></div></div>
-    <div class="tile"><div class="tile-cap"><h4><code>/typev:sweep</code> <small>workflow</small></h4><p>Runs every monitor now. A finding becomes an issue only after two skeptics fail to refute it.</p></div>
-      <div class="mini"><span class="m">&gt;</span> <span class="w">/typev:sweep</span>
+    <div class="tile"><div class="tile-cap"><h4><code>/level5:sweep</code> <small>workflow</small></h4><p>Runs every monitor now. A finding becomes an issue only after two skeptics fail to refute it.</p></div>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/level5:sweep</span>
 <span class="w">⏺</span> 3 monitors · 4 findings · <span class="m">3 refuted</span>
 <span class="g">✓</span> Filed <span class="c">#311</span> · heartbeats sent</div></div>
-    <div class="tile"><div class="tile-cap"><h4><code>/typev:mend</code> <small>workflow</small></h4><p>The fixer. A test that fails first, the smallest fix, one PR per issue. It never merges.</p></div>
-      <div class="mini"><span class="m">&gt;</span> <span class="w">/typev:mend</span>
+    <div class="tile"><div class="tile-cap"><h4><code>/level5:mend</code> <small>workflow</small></h4><p>The fixer. A test that fails first, the smallest fix, one PR per issue. It never merges.</p></div>
+      <div class="mini"><span class="m">&gt;</span> <span class="w">/level5:mend</span>
 <span class="w">⏺</span> <span class="c">#311</span> → <span class="c">PR #312</span> · 1 test, 4 lines
 <span class="g">✓</span> Fails without the fix, passes with it</div></div>
   </div>
-  <p class="plug-more">Also <code>/typev:new-monitor</code>, a monitor for any source from one line. Every file is in <a href="${REPO}/tree/main/plugin" target="_blank" rel="noopener" data-track="plugin:source">plugin/</a> on GitHub.</p>
+  <p class="plug-more">Also <code>/level5:new-monitor</code>, a monitor for any source from one line. Every file is in <a href="${REPO}/tree/main/plugin" target="_blank" rel="noopener" data-track="plugin:source">plugin/</a> on GitHub.</p>
 </section>
 
 <section class="lsec" id="status">
   <div class="lsec-head">
     <div>${ey("02", "monitors")}<h2 class="lword">Status</h2></div>
-    <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Type V checks them against your roster.</p>${cta("status")}</div>
+    <div class="r"><h3>The monitor of the monitors</h3><p>A dead monitor and a healthy system both look like silence. Every routine leaves a heartbeat when it ends, and Level 5 checks them against your roster.</p>${cta("status")}</div>
   </div>
   <div class="bento">
     <div class="tile b-status paint a" aria-label="Example status page">
@@ -631,13 +632,13 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
       </div></li>
       <li><span class="n">2</span><div>
         <h3>Add the plugin to Claude Code</h3>
-        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/plugin install typev --marketplace humanagent/typev</span>${copyBtn}</div>
-        <p>Once per machine. It brings <code>/typev:setup</code>, what needs a look above the prompt, and <code>/typev:sweep</code> and <code>/typev:mend</code> for a sweep or a fix on demand.</p>
+        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/plugin install level5 --marketplace humanagent/level5</span>${copyBtn}</div>
+        <p>Once per machine. It brings <code>/level5:setup</code>, what needs a look above the prompt, and <code>/level5:sweep</code> and <code>/level5:mend</code> for a sweep or a fix on demand.</p>
       </div></li>
       <li><span class="n">3</span><div>
         <h3>Let it build the factory</h3>
-        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/typev:setup <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
-        <p>At the repo root, with the key you get once the repo is connected. It writes the heartbeat hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR with new <code>typev-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
+        <div class="cmdb"><span class="p">&gt;</span><span data-cmd>/level5:setup <span class="k">&lt;ingest-key&gt;</span></span>${copyBtn}</div>
+        <p>At the repo root, with the key you get once the repo is connected. It writes the heartbeat hook into <code>.claude/</code>, proposes monitors, a daily report and a pulse, and opens one PR with new <code>level5-*</code> skills and workflows. After the merge it creates the Claude Code routines and runs each once.</p>
       </div></li>
     </ol>
   </div>
@@ -649,7 +650,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
     </div>
     <div class="own-t" aria-label="Commands to run your own">
       <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~</span></div>
-      <pre data-own><span class="p">$</span> git clone ${REPO} &amp;&amp; cd typev/status
+      <pre data-own><span class="p">$</span> git clone ${REPO} &amp;&amp; cd level5/status
 <span class="p">$</span> npm install &amp;&amp; DATA_DIR=./data SECRET=dev SETUP_TOKEN=dev npm start
 <span class="m">  factory-status on :8080</span>
 <span class="p">$</span> fly launch <span class="m"># your own app, with a volume on /data</span>
@@ -661,24 +662,24 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 
 <section class="end" aria-label="Start">
   ${MARKV(48)}
-  <h2>For a new class of developer. <em>Accelerate.</em></h2>
+  <h2>Level 5. <em>The factory watches itself.</em></h2>
   <p>Know what your agents did today, what went silent and what it cost, before anyone asks.</p>
   ${cta("end")}
   <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
 </section>
 
-<footer class="lfoot"><span><a class="logo" href="/" aria-label="Type V, home">${WORDMARK(18)}</a></span><span>open source, MIT<i>·</i><a href="${REPO}" target="_blank" rel="noopener" data-track="foot:github">github.com/humanagent/typev</a><i>·</i>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login" data-track="foot:signin">Sign in</a>`}</span></footer>
+<footer class="lfoot"><span><a class="logo" href="/" aria-label="Level 5, home">${WORDMARK(18)}</a></span><span>open source, MIT<i>·</i><a href="${REPO}" target="_blank" rel="noopener" data-track="foot:github">github.com/humanagent/level5</a><i>·</i>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login" data-track="foot:signin">Sign in</a>`}</span></footer>
 </main>
 
 ${viewer ? "" : `<script>
 // First-party analytics, dogfooding: views, clicks and how far each section is read go to
 // /api/track as beacons. An anonymous random id in localStorage, no cookies, nothing personal.
 (() => {
-  let aid; try { aid = localStorage.getItem("typev_aid") || (localStorage.setItem("typev_aid", aid = crypto.randomUUID()), aid); } catch { aid = "nostore"; }
+  let aid; try { aid = localStorage.getItem("level5_aid") || (localStorage.setItem("level5_aid", aid = crypto.randomUUID()), aid); } catch { aid = "nostore"; }
   const q = new URLSearchParams(location.search), utm = {};
   for (const k of ["source", "medium", "campaign", "term", "content"]) if (q.get("utm_" + k)) utm[k] = q.get("utm_" + k).slice(0, 100);
   const sec = (el) => { const s = el && el.closest("section[id],header[id],nav[id],footer"); return s ? s.id || s.tagName.toLowerCase() : ""; };
-  const track = window.typevTrack = (type, o = {}) => {
+  const track = window.level5Track = (type, o = {}) => {
     const b = JSON.stringify({ aid, type, path: location.pathname, ref: document.referrer, utm, vw: innerWidth, ...o });
     try { navigator.sendBeacon ? navigator.sendBeacon("/api/track", new Blob([b], { type: "text/plain" })) : fetch("/api/track", { method: "POST", body: b, keepalive: true }); } catch {}
   };
@@ -711,7 +712,7 @@ ${viewer ? "" : `<script>
 // Nav gets its ink and hairline once the hero has scrolled a little.
 (() => { const n = document.getElementById("lnav"); const f = () => n.dataset.s = scrollY > 40 ? "1" : "0"; addEventListener("scroll", f, { passive: true }); f(); })();
 // The hero's sky: a sparse starfield, then the lit limb of a planet rising from the bottom edge,
-// ordered-dithered in indigo and clay like the launch film's cosmic sequence. Drawn once per size.
+// ordered-dithered in indigo and clay. Drawn once per size.
 (() => {
   const c = document.getElementById("stars"); if (!c) return;
   const B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);

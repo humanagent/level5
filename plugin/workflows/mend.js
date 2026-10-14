@@ -1,9 +1,9 @@
 export const meta = {
   name: 'mend',
-  description: 'Fix the Type V issues that can be proven: a failing regression test first, then a bounded fix, one PR each',
-  whenToUse: 'Turn open typev:* issues into PRs. Pass issue numbers to take only those. Never merges.',
+  description: 'Fix the Level 5 issues that can be proven: a failing regression test first, then a bounded fix, one PR each',
+  whenToUse: 'Turn open level5:* issues into PRs. Pass issue numbers to take only those. Never merges.',
   phases: [
-    { title: 'Queue', detail: 'open typev issues nobody is on' },
+    { title: 'Queue', detail: 'open level5 issues nobody is on' },
     { title: 'Gate', detail: 'is it a bounded code defect in this repo' },
     { title: 'Fix', detail: 'test that fails, fix, PR; each in its own worktree' },
     { title: 'Check', detail: 'a skeptic re-runs the test without the fix' },
@@ -62,8 +62,8 @@ const only = Array.isArray(args) ? args.map(Number) : typeof args === 'string' &
 const queue = await agent(
   only.length
     ? `Return GitHub issues ${only.join(', ')} of this repo (gh issue view), leaving out any that is closed.`
-    : `List the open GitHub issues of this repo with a typev:* label (gh issue list --state open --json number,title,labels,assignees,url --limit 100), ` +
-        `leaving out typev:report and typev:pulse (they are not code), any issue with an assignee, and any issue an open PR already references ` +
+    : `List the open GitHub issues of this repo with a level5:* label (gh issue list --state open --json number,title,labels,assignees,url --limit 100), ` +
+        `leaving out level5:report and level5:pulse (they are not code), any issue with an assignee, and any issue an open PR already references ` +
         `(gh pr list --state open --search "<number>").`,
   { schema: QUEUE, effort: 'low' },
 )
@@ -88,7 +88,7 @@ const results = await pipeline(
     if (!gate || !gate.fixable) return { issue: issue.number, declined: gate ? gate.reason : 'the gate agent did not answer' }
     return agent(
       `Fix issue #${issue.number}: ${issue.title}\n\nMechanism: ${gate.mechanism}\nPlan: ${gate.plan}\n\n` +
-        `Work on a new branch typev/mend-${issue.number} from the default branch. In this order: write the regression test; run it and see it fail ` +
+        `Work on a new branch level5/mend-${issue.number} from the default branch. In this order: write the regression test; run it and see it fail ` +
         `for the reason in the mechanism (if it passes, stop: opened=false, and say so); make the smallest change that makes it pass; run it again, ` +
         `then the repo's test suite. Stay inside the plan: no schema change, no new dependency, no refactor, no unrelated edit. ` +
         `Commit, push, and open a PR with gh whose body has "Fixes #${issue.number}", the mechanism, the test and its output before and after` +

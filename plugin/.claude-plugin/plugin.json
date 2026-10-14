@@ -1,11 +1,11 @@
 {
-  "name": "typev",
-  "displayName": "Type V",
+  "name": "level5",
+  "displayName": "Level 5",
   "version": "0.1.0",
-  "description": "Observability for your software factory: whether every skill your agents run actually ran, and what it cost.",
+  "description": "Automation observability for your repositories: whether every skill your agents run actually ran, and what it cost.",
   "author": { "name": "humanagent", "url": "https://github.com/humanagent" },
   "homepage": "https://factory-status.fly.dev",
-  "repository": "https://github.com/humanagent/typev",
+  "repository": "https://github.com/humanagent/level5",
   "license": "MIT",
   "keywords": ["monitoring", "observability", "routines", "heartbeats", "costs"],
   "types": "./types/index.d.ts",
@@ -20,7 +20,7 @@
     "key": {
       "type": "string",
       "title": "Ingest key",
-      "description": "Only when the repo does not commit .claude/typev.json. The key from the repo's page on Type V.",
+      "description": "Only when the repo does not commit .claude/level5.json. The key from the repo's page on Level 5.",
       "sensitive": true
     }
   }

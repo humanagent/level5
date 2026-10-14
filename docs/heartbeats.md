@@ -1,7 +1,7 @@
 # Heartbeats
 
 A heartbeat is the only proof that a scheduled job ran. Without one, a dead monitor and a healthy
-system look the same: both are silent. Type V stores every heartbeat a repo sends and judges each
+system look the same: both are silent. Level 5 stores every heartbeat a repo sends and judges each
 monitor from them (see [judging.md](judging.md)).
 
 ## The API
@@ -43,7 +43,7 @@ Replace it whenever it leaked: committed to git, pasted somewhere.
 In Claude Code, with the [plugin](../README.md#install) added, at the repo root:
 
 ```
-/typev:setup <ingest-key>
+/level5:setup <ingest-key>
 ```
 
 It writes these into the repo, in the PR it opens, and changes nothing else. They go in the repo
@@ -52,35 +52,35 @@ does not load plugins: only what is committed reaches them.
 
 | File | What |
 | --- | --- |
-| `.claude/typev.json` | `{ "url", "key" }`. `TYPEV_URL` and `TYPEV_KEY` env vars override it. |
-| `.claude/hooks/typev.sh` | The client: `beat`, `cost` and `session-end`. |
+| `.claude/level5.json` | `{ "url", "key" }`. `LEVEL5_URL` and `LEVEL5_KEY` env vars override it. |
+| `.claude/hooks/level5.sh` | The client: `beat`, `cost` and `session-end`. |
 | `.claude/settings.json` | Adds the `SessionEnd` hook. Existing content is kept; running twice adds it once. |
-| `.claude/skills/typev/SKILL.md` | Tells agents to end a routine skill with a heartbeat. |
+| `.claude/skills/level5/SKILL.md` | Tells agents to end a routine skill with a heartbeat. |
 | `.claude/factory.json` | The roster, created if missing, appended to otherwise. |
 
 The source of the first three is `plugin/runtime/` in this repo; a plugin update reaches a repo the
-next time `/typev:setup` runs there.
+next time `/level5:setup` runs there.
 
-**Connected before the rename to Type V?** That install keeps reporting, and the setup page says
-so. Run `/typev:setup` again to move it to the names above: it swaps the old `SessionEnd` hook for
+**Connected before the rename to Level 5?** That install keeps reporting, and the setup page says
+so. Run `/level5:setup` again to move it to the names above: it swaps the old `SessionEnd` hook for
 the new one, removes the old config and kit, and keeps the old hook file as a one-line forwarder to
-`typev.sh`, since skills copied from the old templates still call it.
+`level5.sh`, since skills copied from the old templates still call it.
 
-**Where the key lives.** Committing `.claude/typev.json` puts a live key in the repo's history: anyone
-with a clone can post fake heartbeats. In a repo that keeps secrets in a vault, set `TYPEV_URL` and
-`TYPEV_KEY` there instead, gitignore `.claude/typev.json`, and let the environment provide them:
+**Where the key lives.** Committing `.claude/level5.json` puts a live key in the repo's history: anyone
+with a clone can post fake heartbeats. In a repo that keeps secrets in a vault, set `LEVEL5_URL` and
+`LEVEL5_KEY` there instead, gitignore `.claude/level5.json`, and let the environment provide them:
 
 - **Claude Code cloud routines:** the variables a session-start hook exports into `$CLAUDE_ENV_FILE`
   reach the commands the session runs (so skill heartbeats work), but **not the `SessionEnd` hook**.
-  Have the session-start hook also write `.claude/typev.json` inside the container (not committed), so
-  `typev.sh session-end` finds the key.
-- **GitHub Actions:** pass both to the job that calls `typev.sh`, and make sure its checkout includes
-  `.claude/hooks/typev.sh` (a sparse checkout that leaves it out skips the copy silently).
+  Have the session-start hook also write `.claude/level5.json` inside the container (not committed), so
+  `level5.sh session-end` finds the key.
+- **GitHub Actions:** pass both to the job that calls `level5.sh`, and make sure its checkout includes
+  `.claude/hooks/level5.sh` (a sparse checkout that leaves it out skips the copy silently).
 
 ## Two ways a routine reports
 
 **Automatic: the `SessionEnd` hook.** When a Claude Code session ends in the cloud
-(`CLAUDE_CODE_REMOTE=true`), `typev.sh session-end` reads the transcript, takes the first slash
+(`CLAUDE_CODE_REMOTE=true`), `level5.sh session-end` reads the transcript, takes the first slash
 command the session ran (`/fix-issues`), and posts `{monitor: "fix-issues", status: "ok", source:
 "session"}`, and the session's token usage by model and its duration (see [costs.md](costs.md)).
 Local sessions send nothing. This proves the routine ran, not that it went well. A
@@ -88,13 +88,13 @@ session beat named after a declared routine counts as that routine's run and doe
 monitor row of its own. Routines whose prompt is free text, with no slash command, send nothing
 this way.
 
-**Explicit: `typev.sh beat`.** A skill ends with:
+**Explicit: `level5.sh beat`.** A skill ends with:
 
 ```sh
-.claude/hooks/typev.sh beat monitor-infra ok '{"swept":{"log_events":41233},"filed":[2634],"note":"one box without cameras"}'
+.claude/hooks/level5.sh beat monitor-infra ok '{"swept":{"log_events":41233},"filed":[2634],"note":"one box without cameras"}'
 ```
 
-This carries the status and the volume, so Type V can tell a monitor that read nothing from one that
+This carries the status and the volume, so Level 5 can tell a monitor that read nothing from one that
 read a lot and found nothing. Once a monitor sends its own beats, session beats with the same id
 are ignored for it.
 
@@ -102,16 +102,16 @@ From anywhere else (a Lambda, another CI, a cron box), post the JSON directly.
 
 ## Isolation guarantees
 
-`typev.sh` must never change how the repo it lives in behaves:
+`level5.sh` must never change how the repo it lives in behaves:
 
 - The post runs in the background, detached, with a 5 s cap. The caller's output, exit code and
   duration do not change.
-- No network, no curl, no `.claude/typev.json` or no key: it exits 0.
-- `TYPEV_DISABLED=1` turns it off entirely, before any network call.
+- No network, no curl, no `.claude/level5.json` or no key: it exits 0.
+- `LEVEL5_DISABLED=1` turns it off entirely, before any network call.
 - `session-end` does nothing outside a cloud session.
 
-Tested: with an unreachable server, a reachable one, `TYPEV_DISABLED=1`, and a local
+Tested: with an unreachable server, a reachable one, `LEVEL5_DISABLED=1`, and a local
 `session-end`, every case exits 0 in about 0.02 s.
 
-When a repo already has its own heartbeat store, call `typev.sh beat` as the **last** step, after
-the existing writes, so the copy to Type V can never affect them.
+When a repo already has its own heartbeat store, call `level5.sh beat` as the **last** step, after
+the existing writes, so the copy to Level 5 can never affect them.

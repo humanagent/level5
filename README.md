@@ -1,7 +1,8 @@
-# Type V
+# Level 5
 
-Observability for your software factory: whether every skill your agents run actually ran, and
-what it cost. Open source under the [MIT license](LICENSE). It installs as a Claude Code plugin. Use the hosted one at
+Automation observability for your repositories: whether every skill your agents run actually ran,
+and what it cost. Level 0 is watching every dashboard yourself. Level 5 is a repo whose automations
+watch themselves, and you hear only what is broken. Open source under the [MIT license](LICENSE). It installs as a Claude Code plugin. Use the hosted one at
 https://factory-status.fly.dev or [run your own](#run-and-deploy).
 
 ## What it shows per repo
@@ -34,23 +35,23 @@ zone), and **Repositories** (every repo you can see, by account, side by side).
 In Claude Code, once per machine:
 
 ```
-/plugin install typev --marketplace humanagent/typev
+/plugin install level5 --marketplace humanagent/level5
 ```
 
 Then sign in at https://factory-status.fly.dev, connect a repo, and run this at its root with the
 ingest key the repo's page gives you:
 
 ```
-/typev:setup <ingest-key>
+/level5:setup <ingest-key>
 ```
 
 It connects the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the
-merge, `/typev:setup routines` creates the Claude Code routines and runs each once. A self-hosted
+merge, `/level5:setup routines` creates the Claude Code routines and runs each once. A self-hosted
 instance adds `--url <its address>`.
 
 ## What it is made of
 
-Type V has three parts. The plugin is how it gets into Claude Code. The runtime is what the plugin
+Level 5 has three parts. The plugin is how it gets into Claude Code. The runtime is what the plugin
 writes into each repo, because routines run in cloud sessions on a fresh clone and a cloud session
 does not load plugins: only what is committed reaches them. The server stores the heartbeats and
 judges them.
@@ -61,29 +62,29 @@ judges them.
 | --- | --- | --- |
 | `.claude-plugin/plugin.json` | manifest | Name, version, MIT, and two settings (`userConfig`) |
 | `band` | setting | When the status shows above the prompt: `problems` (default), `always`, `off` |
-| `key` | setting, kept in the keychain | The ingest key, only for a repo that does not commit `.claude/typev.json` |
-| `skills/setup/` | skill | `/typev:setup`: connects the repo, proposes the factory, opens one PR, creates the routines after the merge |
-| `skills/new-monitor/` | skill | `/typev:new-monitor`: one more monitor (logs, costs, LLM traces, any source) from one line, in its own PR |
-| `hooks/register.tsx` | mod | A band above the prompt with the monitors that need a look (stopped, late, degraded, "said ok, read nothing"), silent when all is clear; a toast when a session starts with one; `/typev` prints the repo's state |
-| `workflows/sweep.js` | workflow | `/typev:sweep`: runs the repo's monitors now; two skeptics try to refute every finding before it is filed |
-| `workflows/mend.js` | workflow | `/typev:mend`: the fixer. Per open `typev:*` issue: the five gates, a regression test that fails, the smallest fix, one PR, and a skeptic who reruns the test without the fix. Never merges |
-| `templates/` | files | The monitor, report and pulse `/typev:setup` copies into a repo |
-| `runtime/` | files | The heartbeat hook and skill `/typev:setup` copies into a repo |
+| `key` | setting, kept in the keychain | The ingest key, only for a repo that does not commit `.claude/level5.json` |
+| `skills/setup/` | skill | `/level5:setup`: connects the repo, proposes the factory, opens one PR, creates the routines after the merge |
+| `skills/new-monitor/` | skill | `/level5:new-monitor`: one more monitor (logs, costs, LLM traces, any source) from one line, in its own PR |
+| `hooks/register.tsx` | mod | A band above the prompt with the monitors that need a look (stopped, late, degraded, "said ok, read nothing"), silent when all is clear; a toast when a session starts with one; `/level5` prints the repo's state |
+| `workflows/sweep.js` | workflow | `/level5:sweep`: runs the repo's monitors now; two skeptics try to refute every finding before it is filed |
+| `workflows/mend.js` | workflow | `/level5:mend`: the fixer. Per open `level5:*` issue: the five gates, a regression test that fails, the smallest fix, one PR, and a skeptic who reruns the test without the fix. Never merges |
+| `templates/` | files | The monitor, report and pulse `/level5:setup` copies into a repo |
+| `runtime/` | files | The heartbeat hook and skill `/level5:setup` copies into a repo |
 
-`.claude-plugin/marketplace.json` at the repo root makes this repo the `typev` marketplace.
+`.claude-plugin/marketplace.json` at the repo root makes this repo the `level5` marketplace.
 
-### The runtime (in each repo, written by `/typev:setup`)
+### The runtime (in each repo, written by `/level5:setup`)
 
 | Component | Kind | What it does |
 | --- | --- | --- |
-| `.claude/hooks/typev.sh` | script | `beat`, `cost` and `session-end`. Detached, 5 s cap, never fails the caller; `TYPEV_DISABLED=1` turns it off |
+| `.claude/hooks/level5.sh` | script | `beat`, `cost` and `session-end`. Detached, 5 s cap, never fails the caller; `LEVEL5_DISABLED=1` turns it off |
 | `SessionEnd` in `.claude/settings.json` | hook | When a routine ends: its tokens by model, and a heartbeat named after the command it ran |
-| `.claude/typev.json` | config | `{ "url", "key" }`. The key only posts this repo's heartbeats and costs and reads its daily summary. `TYPEV_URL` and `TYPEV_KEY` override it |
+| `.claude/level5.json` | config | `{ "url", "key" }`. The key only posts this repo's heartbeats and costs and reads its daily summary. `LEVEL5_URL` and `LEVEL5_KEY` override it |
 | `.claude/factory.json` | config | The roster: each monitor and routine, with its schedule ([docs](docs/factory-json.md)) |
-| `.claude/skills/typev/` | skill | Teaches any skill to end with its heartbeat: `typev.sh beat <id> ok '{"swept":{"events":120}}'` |
-| `.claude/skills/typev-monitor-errors/` | skill on a routine | Sentry: an issue per new or regressed error worth a look |
-| `.claude/skills/typev-report/` | skill on a routine | The day as one GitHub issue, closing the one before |
-| `.github/workflows/typev-pulse.yml` | GitHub Action | The monitor of the monitors: an issue per monitor that stopped, ran late or said ok after reading nothing. It runs apart from the routines on purpose |
+| `.claude/skills/level5/` | skill | Teaches any skill to end with its heartbeat: `level5.sh beat <id> ok '{"swept":{"events":120}}'` |
+| `.claude/skills/level5-monitor-errors/` | skill on a routine | Sentry: an issue per new or regressed error worth a look |
+| `.claude/skills/level5-report/` | skill on a routine | The day as one GitHub issue, closing the one before |
+| `.github/workflows/level5-pulse.yml` | GitHub Action | The monitor of the monitors: an issue per monitor that stopped, ran late or said ok after reading nothing. It runs apart from the routines on purpose |
 
 ### The server (`status/`, https://factory-status.fly.dev)
 
@@ -93,7 +94,7 @@ judges them.
 | `status/db.mjs` | Storage: Postgres (Neon) with `DATABASE_URL`, local SQLite otherwise. Multi-tenant schema. |
 | `status/landing.mjs` | The public landing at `/`. |
 | `status/report.mjs` | The daily factory report, as an email and as data. |
-| `status/install.sh` | Served at `/install.sh`: says Type V installs as a plugin, and how. |
+| `status/install.sh` | Served at `/install.sh`: says Level 5 installs as a plugin, and how. |
 | `status/Dockerfile`, `status/fly.toml` | Fly app `factory-status`, region `gru`, volume `factory_data` on `/data`. |
 | `index.html`, `PRODUCT.md`, `.impeccable/` | The earlier landing prototype (a claude.ai artifact) and its product brief. |
 
@@ -104,12 +105,12 @@ metadata). Users sign in with the app's OAuth and see only the repos their insta
 
 - [Heartbeats](docs/heartbeats.md): the API, connecting a repo, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
-- [`/typev:setup`](docs/setup.md): building the factory in one PR, as new typev-* skills, workflows and routines.
+- [`/level5:setup`](docs/setup.md): building the factory in one PR, as new level5-* skills, workflows and routines.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
 - [Daily factory report](docs/report.md): one email with everything that happened in the factory that day.
 - [Automations](docs/automations.md): each scheduled job as one stored object, its runs, state and calendar.
-- [How Type V judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
+- [How Level 5 judges](docs/judging.md): schedules, skill bars, monitor states, Status, Reports, CI, promotions.
 - [Architecture](docs/architecture.md): storage, page loading, routes, security model, operations, known gaps.
 
 ## Plugin dev

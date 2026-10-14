@@ -1,7 +1,7 @@
 ---
 name: setup
 description: Connect a repo to Level 5 and build the factory it watches, from nothing or on top of what the repo already has. Writes the heartbeat hook, reads the repo, proposes monitors, a pulse and a daily report, adds them as new level5-* skills and workflows, opens one PR, and creates the Claude Code routines once it is merged. Never edits code it did not write. Use for "level 5 setup", "connect this repo to level 5", "set up my factory", "install monitors", "create my routines".
-argument-hint: "<ingest-key> [--url <url>] [--dry] | routines"
+argument-hint: "[<ingest-key>] [--url <url>] [--dry] | routines"
 allowed-tools: Bash(git *), Bash(gh *), Bash(ls *), Bash(cat *), Bash(cp *), Bash(mkdir *), Bash(chmod *), Bash(grep *), Bash(jq *), Bash(node *), Bash(curl *), Bash(.claude/hooks/level5.sh *), Read, Write, Edit, Glob, Grep, Skill
 ---
 
@@ -49,10 +49,27 @@ git status --porcelain          # must be clean
 A dirty tree: stop, and say so. Otherwise `git switch -c level5/setup` (or switch to it if it
 exists).
 
-The key is the first argument (`fsk_...`), from the repo's page on Level 5. The URL is `--url`,
-else the `url` in an existing `.claude/level5.json`, else `https://factory-status.fly.dev`. No key
-and no `.claude/level5.json`: ask for the key, and say where it is (the repo's page on Level 5,
-under Set up). Check it before writing anything:
+The URL is `--url`, else the `url` in an existing `.claude/level5.json`, else
+`https://factory-status.fly.dev`. The key, in this order:
+
+1. A first argument (`fsk_...`) or the `key` in an existing `.claude/level5.json`.
+2. Otherwise ask Level 5 for it with the person's GitHub login. The repo is `owner/name` from
+   `gh repo view --json nameWithOwner -q .nameWithOwner`. The token goes straight from `gh` into the
+   header: never print it, echo it or put it in a file.
+
+```bash
+curl -s -m 20 -X POST "<url>/api/connect" \
+  -H "authorization: Bearer $(gh auth token)" -H "content-type: application/json" \
+  -d '{"repo":"<owner/name>"}'
+```
+
+It answers `{ "repo", "key", "page" }` when the person can push to the repo and the Level 5 GitHub
+App is installed on it. Otherwise it answers `{ "error" }`, and with `"install"` when the app is
+missing: give the person that link, say to pick this repo there, and run `/level5:setup` again
+after. `gh` not signed in (`gh auth status` fails): ask them to run `! gh auth login`, or to paste
+the key from the repo's page on Level 5, under Setup.
+
+Check the key before writing anything:
 
 ```bash
 curl -sf -m 10 -H "authorization: Bearer <key>" "<url>/api/report" | jq -r .repo

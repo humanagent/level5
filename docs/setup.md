@@ -9,8 +9,9 @@ The skill and the templates it adds come with the [plugin](../README.md#install)
 (`plugin/skills/setup/`, `plugin/templates/`). Run it in Claude Code at the repo root:
 
 ```
-/level5:setup <ingest-key>        connect the repo, read it, propose, add the pieces, open one PR
-/level5:setup <ingest-key> --dry  connect and propose only
+/level5:setup                     connect the repo, read it, propose, add the pieces, open one PR
+/level5:setup --dry               connect and propose only
+/level5:setup <ingest-key>        the same, with the key from the repo's page instead of gh
 /level5:setup routines            after the PR is merged: create the routines, run each once
 /level5:new-monitor "<name>" --cron "<cron>" --model <model> -- <what it does>
                                  one more monitor, in its own PR

@@ -38,12 +38,15 @@ In Claude Code, once per machine:
 /plugin install level5 --marketplace humanagent/level5
 ```
 
-Then sign in at https://factory-status.fly.dev, connect a repo, and run this at its root with the
-ingest key the repo's page gives you:
+Then install the Level 5 GitHub App on the repo (sign in at https://factory-status.fly.dev, or
+let setup give you the link), and run this at its root:
 
 ```
-/level5:setup <ingest-key>
+/level5:setup
 ```
+
+It gets the repo's ingest key from Level 5 with your GitHub login (`gh auth token`, used for two
+reads and never stored). Without `gh`, pass the key from the repo's page: `/level5:setup <ingest-key>`.
 
 It connects the repo, proposes monitors, a daily report and a pulse, and opens one PR. After the
 merge, `/level5:setup routines` creates the Claude Code routines and runs each once. A self-hosted

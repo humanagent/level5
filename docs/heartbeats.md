@@ -34,6 +34,22 @@ The **ingest key** is created the first time someone opens the repo's page, and 
 onboarding card (and at `/r/<owner>/<repo>/setup` afterwards). It can only post heartbeats and costs
 for that one repo, and read that repo's daily report ([report.md](report.md)).
 
+**Getting the key from Claude Code.** `/level5:setup` with no key asks for it:
+
+```
+POST /api/connect
+authorization: Bearer <a GitHub token: gh auth token>
+content-type: application/json
+
+{ "repo": "owner/name" }
+```
+
+Level 5 reads `GET /user` and `GET /repos/<owner>/<name>` with that token, and the repo's app
+installation with the app's own token. The answer is `200 {"repo","key","url","page"}` when the
+person can push to the repo and the app is installed on it; `401` for a token GitHub refuses, `403`
+without push access, `404` when the repo is not visible or the app is not installed (with
+`"install"`, the link to install it). The GitHub token is used for those reads and never stored.
+
 **Replacing the key.** Setup has a "Replace key" button. The new key works at once and the old one
 keeps working for 24 hours, so there is time to update wherever it is stored before heartbeats stop.
 Replace it whenever it leaked: committed to git, pasted somewhere.
@@ -43,10 +59,11 @@ Replace it whenever it leaked: committed to git, pasted somewhere.
 In Claude Code, with the [plugin](../README.md#install) added, at the repo root:
 
 ```
-/level5:setup <ingest-key>
+/level5:setup
 ```
 
-It writes these into the repo, in the PR it opens, and changes nothing else. They go in the repo
+It asks Level 5 for the repo's key with the person's GitHub login (`POST /api/connect`, below), or
+takes the key as its argument. It writes these into the repo, in the PR it opens, and changes nothing else. They go in the repo
 and not in the plugin because routines run in cloud sessions on a fresh clone, and a cloud session
 does not load plugins: only what is committed reaches them.
 

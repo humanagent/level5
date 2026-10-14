@@ -109,10 +109,8 @@ export function landingPage({ install, msg, esc, css, fonts, viewer = null }) {
   const liveRows = LIVE.map(([n, w, step, d, k, s]) => `<li class="lj" data-st="run"><span class="lj-i">${SPIN}</span><span class="lj-n"><b>${n}</b><small>${w}</small></span><span class="lj-s">${step} <em>${d}/${k}</em></span><span class="lj-t">${dur(s)}</span><span class="lj-bar"><i style="width:${Math.round((d / k) * 100)}%"></i></span></li>`).join("");
 
   // Every way in: Start free installs the GitHub App (or, signed in, goes to the repos);
-  // Run your own goes to the repo. `where` names the spot for the click beacons.
   const start = (where, label = "Start free") => viewer ? `<a class="lp pri" href="/">Open your repos <span aria-hidden="true">→</span></a>` : `<a class="lp pri" href="${esc(install)}" data-track="cta:${where}-start">${label}</a>`;
-  const own = (where) => `<a class="lp alt" href="${REPO}" target="_blank" rel="noopener" data-track="cta:${where}-selfhost">${GITHUB_I}<span>Run your own</span></a>`;
-  const cta = (where) => `<div class="lcta">${start(where)}${own(where)}</div>`;
+  const cta = (where) => `<div class="lcta">${start(where)}</div>`;
 
   // Line icons for the pillars and the feature heads.
   const ICONS = {
@@ -135,7 +133,7 @@ export function landingPage({ install, msg, esc, css, fonts, viewer = null }) {
   const ey = (n, w) => `<span class="ey"><b>${n}</b><i>·</i>${w}</span>`;
   const copyBtn = `<button class="cp" type="button" aria-label="Copy command" data-copy>${COPY_I}</button>`;
   const title = "Level 5 · Automation observability for your repositories";
-  const desc = "Automation observability for your repositories: which routines ran, which went silent, and what each one cost. A Claude Code plugin. Free, open source (MIT), self-host it.";
+  const desc = "Automation observability for your repositories: which routines ran, which went silent, and what each one cost. A Claude Code plugin. Free and open source (MIT).";
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
@@ -301,7 +299,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 .sheet .line{padding:13px 20px}.sheet .line .meta{white-space:normal;text-align:right;max-width:58%}.sheet .line code{font:12.5px var(--mono)}
 .int-more{margin:20px 0 0;color:var(--v-mut);font-size:14px;line-height:1.55}
 
-/* start: the title on the left, three numbered steps on the right, then the self-host path */
+/* start: the title on the left, three numbered steps on the right */
 .inst{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,660px);gap:56px;align-items:start}
 .inst-l h2{margin:0 0 16px;font-size:52px;font-weight:600;letter-spacing:-.05em;line-height:1;color:var(--v-tx)}.inst-l p{margin:0;color:var(--v-mut);font-size:15.5px;line-height:1.6;max-width:36ch}
 .inst-l .free{margin-top:22px;font-size:13px}
@@ -310,30 +308,16 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 .steps .n{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;border:1px solid rgba(232,135,95,.45);color:var(--v-clay2);font:500 12.5px var(--mono)}
 .steps h3{margin:3px 0 8px;font-size:18px;font-weight:600;letter-spacing:-.4px}
 .steps p{margin:0 0 12px;color:var(--v-mut);font-size:14.5px;line-height:1.55}.steps p:last-child{margin-bottom:0}
-.land .steps code,.land .own code{font:12.5px var(--mono);color:var(--v-tx);background:rgba(255,255,255,.06);border:1px solid var(--v-ln);border-radius:5px;padding:1px 5px}
+.land .steps code{font:12.5px var(--mono);color:var(--v-tx);background:rgba(255,255,255,.06);border:1px solid var(--v-ln);border-radius:5px;padding:1px 5px}
 .steps .lcta{align-items:center;margin-bottom:12px}.steps .lcta .lp{min-height:40px;padding:0 18px;font-size:14px}
 .steps .alt-link{font:400 13px var(--mono);color:var(--v-mut);text-underline-offset:3px}.steps .alt-link:hover{color:var(--v-tx)}
 .cmdb{position:relative;display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:13px 48px 13px 14px;border-radius:10px;background:#07080e;border:1px solid var(--v-ln);color:#e9e8f0;font:12.5px/1.5 var(--mono);overflow-x:auto;white-space:nowrap}
 .cmdb .p{color:var(--v-faint)}.cmdb .h{color:var(--v-clay)}.cmdb .k{color:var(--v-indigo2)}
-.cmdb .cp,.own-t .cp{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:rgba(255,255,255,.06);color:#c4c7d4;cursor:pointer}.cmdb .cp:hover,.own-t .cp:hover{background:rgba(255,255,255,.12)}.cmdb .cp svg,.own-t .cp svg{width:14px;height:14px}
-.cmdb .cp[data-done],.own-t .cp[data-done]{color:var(--v-ok)}.cmdb[hidden]{display:none}
-/* run your own */
-.own{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,660px);gap:56px;align-items:center;margin-top:28px;padding:28px;border:1px dashed var(--v-ln2);border-radius:16px}
-.own h3{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:22px;font-weight:600;letter-spacing:-.6px;color:var(--v-tx)}.own h3 svg{width:20px;height:20px;flex:none}
-.own p{margin:0 0 18px;color:var(--v-mut);font-size:14.5px;line-height:1.6;max-width:42ch}
-.own-t{position:relative;border:1px solid var(--v-ln);border-radius:12px;background:#07080e;overflow:hidden}
-.own-t .ccw-bar{padding:9px 12px}
-.own-t pre{margin:0;padding:14px 16px 16px;font:12.5px/1.75 var(--mono);color:#d9d8e3;background:none;border:0;white-space:pre;overflow-x:auto}
-.own-t pre .p{color:var(--v-faint)}.own-t pre .m{color:var(--v-faint)}.own-t pre .c{color:var(--v-clay2)}
-.own-t .cp{top:6px;transform:none;width:26px;height:26px}
-@media(max-width:980px){.inst,.own{grid-template-columns:minmax(0,1fr);gap:28px}.inst-l h2{font-size:40px}}
+.cmdb .cp{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:rgba(255,255,255,.06);color:#c4c7d4;cursor:pointer}.cmdb .cp:hover,.own-t .cp:hover{background:rgba(255,255,255,.12)}.cmdb .cp svg,.own-t .cp svg{width:14px;height:14px}
+.cmdb .cp[data-done]{color:var(--v-ok)}.cmdb[hidden]{display:none}
+@media(max-width:980px){.inst{grid-template-columns:minmax(0,1fr);gap:28px}.inst-l h2{font-size:40px}}
 
 /* closing */
-.end{max-width:1140px;margin:136px auto 0;padding:0 24px;text-align:center}
-.end .mk{width:48px;height:48px;margin:0 auto 22px;display:block}
-.end h2{margin:0;color:var(--v-tx);font-size:clamp(44px,7vw,88px);font-weight:600;letter-spacing:-.06em;line-height:.95}.end h2 em{font-style:normal;color:var(--v-clay)}
-.end p{margin:20px auto 30px;color:var(--v-mut);font-size:16px;max-width:46ch}
-.end .lcta{justify-content:center}.end .free{justify-content:center;margin-top:22px}
 .lfoot{max-width:1140px;margin:112px auto 0;padding:22px 24px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;color:var(--v-faint);font:400 12.5px var(--mono);border-top:1px solid var(--v-ln)}
 .lfoot .logo{display:inline-flex;align-items:center;gap:8px;color:var(--v-tx);font:600 15px var(--f);text-decoration:none}
 .lfoot a{color:var(--v-mut);text-underline-offset:3px}.lfoot a:hover{color:var(--v-tx)}.lfoot i{font-style:normal;margin:0 8px}
@@ -356,7 +340,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 .pillars{grid-template-columns:minmax(0,1fr);margin:0 16px}.pillar,.pillar:nth-child(even){border-left:0;border-top:1px solid var(--v-ln)}.pillar:first-child{border-top:0}.pillar:nth-child(2){border-top:1px solid var(--v-ln)}.pillar{padding:18px 4px}
 .lsec{padding:96px 16px 0}.cost-shot{grid-template-columns:minmax(0,1fr)}.cost-chart,.cost-runs{padding:18px 16px}.cost-cols{height:110px;gap:2px}
 .sheet{padding:16px 14px 4px}.sheet .line{flex-direction:column;gap:2px}.sheet .line .meta{text-align:left;max-width:none}.int-grid{grid-template-columns:minmax(0,1fr)}
-.steps>li{grid-template-columns:minmax(0,1fr);gap:10px;padding:20px 16px}.own{padding:18px 14px}.lcta .lp{flex:1 1 auto}.end{margin-top:96px;padding:0 16px}.lfoot{margin-top:80px;padding:20px 16px 0}}
+.steps>li{grid-template-columns:minmax(0,1fr);gap:10px;padding:20px 16px}.lcta .lp{flex:1 1 auto}.lfoot{margin-top:80px;padding:20px 16px 0}}
 
 /* bento: the status page big, and around it what's running, the monitors, the code merged and the report */
 .bento{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
@@ -429,7 +413,7 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
       <div class="cmdb hero-cmd"><span class="p">&gt;</span><span data-cmd>/plugin install level5 --marketplace humanagent/level5</span>${copyBtn}</div>
       ${cta("hero")}
       <div class="works"><span>Plugin for</span><span class="hn"><span class="lg" style="--u:url(${SI("16.32.0", "claude")})" aria-hidden="true"></span>Claude Code</span><span class="hn soon"><img src="${SI("13.21.0", "openai")}" alt="" width="16" height="16">Codex <em>soon</em></span></div>
-      <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
+      <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)</p>
       ${msg ? `<p class="err">${esc(msg)}</p>` : ""}
     </div>
     <div class="ccw" id="ccw" role="img" aria-label="An example Claude Code session: the Level 5 plugin is installed, then /level5:setup reads the repo, lists the monitors it will create, opens PR #142 with 5 skills and 3 workflows, and ends with a green check.">
@@ -622,8 +606,8 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
 
 <section class="lsec" id="install">
   <div class="inst">
-    <div class="inst-l">${ey("06", "start")}<h2>Start in a minute</h2><p>Connect GitHub on the hosted instance and let Claude Code build the factory it will watch. Or run the whole thing yourself: same code, MIT.</p>
-      <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p></div>
+    <div class="inst-l">${ey("06", "start")}<h2>Start in a minute</h2><p>Connect GitHub and let Claude Code build the factory it will watch.</p>
+      <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)</p></div>
     <ol class="steps">
       <li><span class="n">1</span><div>
         <h3>Connect GitHub</h3>
@@ -642,30 +626,6 @@ background:radial-gradient(70% 55% at 78% 30%,rgba(91,77,255,.16),transparent 70
       </div></li>
     </ol>
   </div>
-  <div class="own" id="self-host">
-    <div>
-      <h3>${GITHUB_I} Run your own</h3>
-      <p>One Node server and a database: SQLite on a volume, or Postgres. No license key, nothing phones home. Deploy it on Fly, then create your own GitHub App from <code>/setup</code>.</p>
-      <div class="lcta">${own("install")}</div>
-    </div>
-    <div class="own-t" aria-label="Commands to run your own">
-      <div class="ccw-bar" aria-hidden="true"><i></i><i></i><i></i><span>~</span></div>
-      <pre data-own><span class="p">$</span> git clone ${REPO} &amp;&amp; cd level5/status
-<span class="p">$</span> npm install &amp;&amp; DATA_DIR=./data SECRET=dev SETUP_TOKEN=dev npm start
-<span class="m">  factory-status on :8080</span>
-<span class="p">$</span> fly launch <span class="m"># your own app, with a volume on /data</span>
-<span class="p">$</span> open https://&lt;your-app&gt;.fly.dev/setup?t=<span class="c">$SETUP_TOKEN</span></pre>
-      <button class="cp" type="button" aria-label="Copy commands" data-copy-own>${COPY_I}</button>
-    </div>
-  </div>
-</section>
-
-<section class="end" aria-label="Start">
-  ${MARKV(48)}
-  <h2>Level 5. <em>The factory watches itself.</em></h2>
-  <p>Know what your agents did today, what went silent and what it cost, before anyone asks.</p>
-  ${cta("end")}
-  <p class="free"><span class="ck" aria-hidden="true">✓</span><b>Free</b><i aria-hidden="true">·</i><b>Open source</b> (MIT)<i aria-hidden="true">·</i><b>Self-host it</b></p>
 </section>
 
 <footer class="lfoot"><span><a class="logo" href="/" aria-label="Level 5, home">${WORDMARK(18)}</a></span><span>open source, MIT<i>·</i><a href="${REPO}" target="_blank" rel="noopener" data-track="foot:github">github.com/humanagent/level5</a><i>·</i>${viewer ? `<a href="/">Enter as ${esc(viewer)}</a>` : `<a href="/auth/login" data-track="foot:signin">Sign in</a>`}</span></footer>
@@ -703,10 +663,6 @@ ${viewer ? "" : `<script>
   document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
     const box = b.closest(".cmdb");
     try { await navigator.clipboard.writeText(box.querySelector("[data-cmd]").textContent); done(b); } catch {}
-  }));
-  document.querySelectorAll("[data-copy-own]").forEach((b) => b.addEventListener("click", async () => {
-    const lines = b.parentElement.querySelector("[data-own]").textContent.split("\\n").filter((l) => l.startsWith("$ ")).map((l) => l.slice(2).replace(/\\s+#.*$/, ""));
-    try { await navigator.clipboard.writeText(lines.join("\\n")); done(b); } catch {}
   }));
 })();
 // Nav gets its ink and hairline once the hero has scrolled a little.

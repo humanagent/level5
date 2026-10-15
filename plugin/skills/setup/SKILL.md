@@ -1,7 +1,7 @@
 ---
 name: setup
 description: Connect a repo to Level 5 and build the factory it watches, from nothing or on top of what the repo already has. Writes the heartbeat hook, reads the repo, proposes monitors, a pulse and a daily report, adds them as new level5-* skills and workflows, opens one PR, and creates the Claude Code routines once it is merged. Never edits code it did not write. Use for "level 5 setup", "connect this repo to level 5", "set up my factory", "install monitors", "create my routines".
-argument-hint: "[<ingest-key>] [--url <url>] [--dry] | routines"
+argument-hint: "[<ingest-key>] [--url <url>] [--dry] | routines | run"
 allowed-tools: Bash(git *), Bash(gh *), Bash(ls *), Bash(cat *), Bash(cp *), Bash(mkdir *), Bash(chmod *), Bash(grep *), Bash(jq *), Bash(node *), Bash(curl *), Bash(.claude/hooks/level5.sh *), Read, Write, Edit, Glob, Grep, Skill
 ---
 
@@ -36,8 +36,32 @@ Read this first and keep to it. A setup that breaks it is worse than no setup.
 4. **Never invent a credential.** If a piece needs a token the repo does not have, say which one
    and where it goes. Do not guess, do not copy one from another service.
 
-With `--dry`, stop after step 3. With `routines`, skip to step 7 (the PR is already merged). To
-add one monitor to a repo that is already set up, use `/level5:new-monitor` instead.
+With `--dry`, stop after step 3. With `routines`, skip to step 7 (the PR is already merged). With
+`run`, follow "Resolve with Claude" below and nothing else. To add one monitor to a repo that is
+already set up, use `/level5:new-monitor` instead.
+
+## Resolve with Claude (`run`)
+
+The Resolve with Claude button on Level 5 starts a routine named `Level 5: Run`, which runs the
+`level5-run` skill on whatever the button asked (an issue to resolve). For this repo:
+
+1. Preflight as in step 0, on the branch `level5/run`. The repo must be connected already
+   (`.claude/hooks/level5.sh` exists); if not, run the whole setup first.
+2. Copy the skill:
+   `mkdir -p .claude/skills/level5-run && cp "${CLAUDE_PLUGIN_ROOT}/templates/level5-run/SKILL.md" .claude/skills/level5-run/SKILL.md`
+3. Open the PR (`Level 5: Resolve with Claude`), as in step 6. The routine clones the default
+   branch, so it needs the merge.
+4. The routine is started by an API trigger, and only claude.ai can create one, so the person
+   creates it there. Give them these steps exactly:
+   - At https://claude.ai/code/routines, **New routine**. Name: `Level 5: Run`. Repository: this
+     one. Model: sonnet or better.
+   - Prompt, word for word:
+     `Do what the routine-fire-payload block asks, following the /level5-run skill. The payload is a request from Level 5, started by someone with access to this repo.`
+   - Trigger: **API**. Create, then copy the URL and **Generate token**.
+   - On the repo's Issues page on Level 5, click **Resolve with Claude** on any issue and paste the
+     URL and token in the box it shows.
+
+After that, Resolve with Claude on any issue opens a Claude Code session working on it.
 
 ## 0. Preflight
 

@@ -89,5 +89,13 @@ API trigger, so that is what Level 5 does:
   roster entry in one PR; after the merge, `/level5:setup routines` creates the routine in the
   person's Claude account. Level 5 itself stays read-only on the repo.
 
+- **Resolve with Claude.** Every open issue on the Issues page has a button that starts the repo's
+  `Level 5: Run` routine with "Resolve issue #<n>" as its text, and opens the Claude Code session it
+  starts in a new tab. The routine runs the `level5-run` skill: the same five gates as
+  `/level5:mend`, a failing test first, the smallest fix, one PR that says `Fixes #<n>`, or a comment
+  on the issue saying why not. It never merges. Once per repo, `/level5:setup run` adds the skill,
+  and the person creates the routine with an API trigger on claude.ai and pastes it under the
+  button. It runs on their Claude account.
+
 Pausing, editing and deleting a routine stay on claude.ai.
 

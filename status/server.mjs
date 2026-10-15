@@ -2448,7 +2448,9 @@ function heartbeatPage(origin, repoRow) {
 function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const repoUrl = s.meta.url;
   const banner = s.overall === "ok" ? "All systems operational" : s.overall === "degraded" ? "Degraded performance" : "Monitors need attention";
-  const monRows = s.monitors.map((m) => {
+  // A skill that sends a report is shown under Reports, not Monitors
+  const RPT = new Set((s.status?.reports || []).map((r) => r.id)), MON = s.monitors.filter((m) => !RPT.has(m.id));
+  const monRows = MON.map((m) => {
     const [ps, label] = STATE[m.state] || ["none", m.state];
     const ran = m.buckets.filter((b) => b.s).length;
     const pct = ran ? Math.round((m.buckets.filter((b) => b.s === "ok").length / ran) * 1000) / 10 : 0;
@@ -2788,8 +2790,8 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     setup: `<circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>`,
   };
   const ico = (k) => `<svg class="ni" viewBox="0 0 16 16" aria-hidden="true">${NAV_ICON[k]}</svg>`;
-  const badMon = s.monitors.filter((m) => ["dead", "lying", "degraded"].includes(m.state)).length;
-  const warnMon = s.monitors.filter((m) => m.state === "warn").length;
+  const badMon = MON.filter((m) => ["dead", "lying", "degraded"].includes(m.state)).length;
+  const warnMon = MON.filter((m) => m.state === "warn").length;
   const lateN = s.routines.filter(isLate).length;
   const failingCi = (s.ci || []).filter((w) => w.last?.status === "completed" && w.last.conclusion === "failure").length;
   const badge = (n, tone) => (n ? `<span class="nb" data-t="${tone}">${n}</span>` : "");
@@ -2797,7 +2799,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const needsN = ((s.status?.groups) || []).flatMap((g) => g.rows).filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state)).length;
   const NAV = [
     ["status", "Status", needsN ? badge(needsN, "bad") : ""],
-    ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(s.monitors.length)],
+    ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(MON.length)],
     ["automations", "Automations", lateN ? badge(lateN, "bad") : count(s.routines.length)],
     ["ci", "CI", failingCi ? badge(failingCi, "bad") : count((s.ci || []).length)],
     ["prs", "Pull requests", count(s.queue.prs.length)],
@@ -2907,7 +2909,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   }
 
   // Monitors: skill runs per day, by how they went
-  const dailyRows = (s.status?.groups || []).flatMap((g) => g.rows).filter((r) => !r.weekly && r.buckets.length === WINDOW);
+  const dailyRows = (s.status?.groups || []).flatMap((g) => g.rows).filter((r) => !r.weekly && !RPT.has(r.id) && r.buckets.length === WINDOW);
   const mDates = s.status?.daily?.dates || [];
   let monHead = "";
   if (dailyRows.length && mDates.length) {
@@ -3074,7 +3076,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       ${winTemplates}
       ${view("status", statusView)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
-        ${s.monitors.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
+        ${MON.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}<div class="vh-act"><button type="button" class="btn-quiet" data-open="new:routine">New routine</button></div>${weekGrid || `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
       ${view("ci", `${vh("CI", "Minutes spent per day, every workflow over the last 30 days, and what goes to production.")}
         ${ciMinutes}

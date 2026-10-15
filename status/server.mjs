@@ -1329,6 +1329,11 @@ button,.btn{font:600 15px var(--f);padding:10px 16px;border-radius:999px;border:
 .line.pr .meta{display:flex;align-items:center;gap:8px}
 .agent-tag{font:500 11px var(--f);color:#fff;background:var(--ink);border-radius:6px;padding:1px 6px}
 @media(max-width:520px){.line.pr .meta code.branch{display:none}}
+.rz{position:relative;border-top:1px solid var(--line)}.rz:first-child{border-top:0}.rz>.line{border-top:0;padding-right:200px}
+.rz-btn{position:absolute;right:16px;top:50%;transform:translateY(-50%);white-space:nowrap}
+.rz-setup{margin:0 0 20px;padding:16px 20px;border:1px solid var(--line);border-radius:10px;background:#fafafb}.rz-setup[hidden]{display:none}
+.rz-setup h3{margin:0 0 6px;font-size:15px}.rz-setup p,.rz-setup li{font-size:13.5px;color:var(--muted);line-height:1.5}.rz-setup ol{margin:8px 0 4px;padding-left:20px}
+@media(max-width:640px){.rz>.line{padding-right:20px;padding-bottom:52px}.rz-btn{top:auto;bottom:12px;transform:none;right:auto;left:20px}}
 .cx.cx-mini{display:block;margin:0;background:none;border-radius:0;box-shadow:none}.cx-mini .cx-chart{min-height:260px}.cx-mini .cx-loading{padding:110px 0}.cx-mini .cx-legend{margin-top:6px}.group a.line{text-decoration:none;color:inherit}.group a.line:hover{background:rgba(15,16,20,.03)}.cols i.stack{display:flex;flex-direction:column-reverse;overflow:hidden;background:transparent}.cols i.stack em{display:block;min-height:1px;border-radius:0}
 .costs-fold{margin:-16px 0 32px}.cost-note{color:var(--faint);font-size:12px;margin-top:8px}.costs-fold .line .meta b{color:var(--ink);font-weight:600}
 .ci-live{margin-bottom:32px}
@@ -1858,7 +1863,8 @@ const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just 
 async function load(force){if(!force&&cache&&Date.now()-at<15e3)return cache;const r=await fetch(base()+"/triggers",{credentials:"same-origin"});cache=r.ok?await r.json():{};at=Date.now();return cache}
 async function post(path,body){const r=await fetch(base()+path,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
 function draw(box,t){
-if(!t){box.innerHTML='<p class="rt-hint">Give this routine an API trigger on claude.ai (open the routine, add a trigger, choose API), then paste its URL and token here. Level 5 keeps the token sealed and only uses it to start the routine.</p><form class="rt-form"><input name="url" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" required><input name="token" type="password" placeholder="sk-ant-…" required autocomplete="off"><div class="rt-row"><button class="btn-sm" type="submit">Save trigger</button><span class="rt-msg"></span></div></form>';return}
+if(box.dataset.mini&&t){box.innerHTML='<p class="rt-hint">Connected. <b>Resolve with Claude</b> on any issue starts a session on your Claude account. <button class="btn-plain danger" type="button" data-rt-remove>Remove trigger</button></p>';return}
+if(!t){box.innerHTML=(box.dataset.mini?'':'<p class="rt-hint">Give this routine an API trigger on claude.ai (open the routine, add a trigger, choose API), then paste its URL and token here. Level 5 keeps the token sealed and only uses it to start the routine.</p>')+'<form class="rt-form"><input name="url" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" required><input name="token" type="password" placeholder="sk-ant-…" required autocomplete="off"><div class="rt-row"><button class="btn-sm" type="submit">Save trigger</button><span class="rt-msg"></span></div></form>';return}
 const last=t.last_fired_at?(t.last_error?"Last try "+ago(t.last_fired_at)+": "+e(t.last_error):"Last started "+ago(t.last_fired_at)+" by "+e(t.last_fired_by)+(t.last_session_url?' · <a href="'+e(t.last_session_url)+'" target="_blank" rel="noopener">open the session</a>':"")):"Trigger saved "+ago(t.created_at)+" by "+e(t.created_by);
 box.innerHTML='<form class="rt-run"><textarea name="text" rows="2" placeholder="Optional: what this run should look at (an issue, a PR, an alert)"></textarea><div class="rt-row"><button class="btn-sm" type="submit">Run now</button><span class="rt-msg">'+last+'</span><button class="btn-plain danger" type="button" data-rt-remove>Remove trigger</button></div></form>'}
 async function sync(force){const boxes=[...document.querySelectorAll(".rt-fire")].filter(b=>force||!b.dataset.ready);if(!boxes.length)return;boxes.forEach(b=>b.dataset.ready=1);const all=await load(force).catch(()=>({}));boxes.forEach(b=>draw(b,all[b.dataset.routine]))}
@@ -1867,6 +1873,13 @@ document.addEventListener("submit",async ev=>{const f=ev.target,box=f.closest&&f
 try{if(f.classList.contains("rt-form")){msg.textContent="Saving…";await post("/triggers",{routine:box.dataset.routine,url:f.elements.url.value,token:f.elements.token.value})}else{msg.textContent="Starting…";await post("/fire",{routine:box.dataset.routine,text:f.elements.text.value})}
 await sync(true)}catch(x){msg.textContent=x.message;btn.disabled=false}});
 document.addEventListener("click",async ev=>{const b=ev.target.closest&&ev.target.closest("[data-rt-remove]");if(!b)return;if(!b.dataset.sure){b.dataset.sure=1;b.textContent="Click again to remove";return}const box=b.closest(".rt-fire");await post("/triggers",{routine:box.dataset.routine,remove:true}).catch(()=>{});sync(true)});
+const RUN="Level 5: Run";
+function setup(){const p=document.getElementById("rz-setup");if(!p)return;p.hidden=false;sync(true);p.scrollIntoView({behavior:"smooth",block:"center"})}
+document.addEventListener("click",ev=>{const b=ev.target.closest&&ev.target.closest("[data-resolve]");if(!b)return;ev.preventDefault();ev.stopPropagation();
+if(cache&&!cache[RUN]){setup();return}
+const w=window.open("","_blank");if(w)w.document.write('<title>Starting Claude</title><p style="font:15px system-ui;padding:24px">Starting a Claude Code session on issue #'+e(b.dataset.resolve)+'…</p>');
+const old=b.textContent;b.disabled=true;b.textContent="Starting…";
+post("/fire",{routine:RUN,text:"Resolve issue #"+b.dataset.resolve+": "+b.dataset.title+"\\n"+b.dataset.url}).then(j=>{b.textContent="Started";cache=null;if(j.session_url){if(w)w.location=j.session_url;else window.open(j.session_url,"_blank")}else if(w)w.close()}).catch(x=>{if(w)w.close();if(/no API trigger/.test(x.message))setup();b.textContent=/no API trigger/.test(x.message)?old:x.message}).finally(()=>setTimeout(()=>{b.disabled=false;b.textContent=old},5000))});
 const q=s=>'"'+String(s).replace(/["\\\\]/g,"")+'"';
 function cmd(f){const v=n=>f.elements[n].value.trim(),custom=v("preset")==="custom",cron=custom?v("cron"):v("preset");f.querySelector("[data-cron]").hidden=!custom;
 f.querySelector("[data-cmd]").textContent=v("name")&&v("what")?"/level5:new-monitor "+q(v("name"))+" --cron "+q(cron||"0 13 * * *")+" --model "+v("model")+" -- "+v("what").replace(/\\s+/g," "):"Fill in a name and what it does."}
@@ -2596,7 +2609,8 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   for (const p of (s.queue.closed || []).slice(0, 15)) prWin(p, "closed");
   for (const i of s.queue.issues) wins.push({ key: `issue:${i.number}`, kind: "Issue", title: `#${i.number} ${i.title}`, href: i.url, body: `
       <p class="w-title">${esc(i.title)}</p>
-      ${kv([["Labels", i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("") || "none"], ["Opened", when2(i.created_at)]])}` });
+      ${kv([["Labels", i.labels.map((l) => `<span class="tag ${l === "risky" ? "risky" : ""}">${esc(l)}</span>`).join("") || "none"], ["Opened", when2(i.created_at)]])}
+      <p><button type="button" class="btn-sm" data-resolve="${i.number}" data-title="${esc(i.title)}" data-url="${esc(i.url)}">Resolve with Claude</button></p>` });
   // price rules: a form per rule (and one blank) as window contents
   const RULES = s.rules || [];
   const knownSources = [...new Set(["aws", "vercel", "neon", "anthropic", "claude-code", ...((C?.sources) || [])])];
@@ -2704,8 +2718,11 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
 
   // issues, in the same rows as pull requests: icon, title, number and age, labels on the right
   const ISSUE_ICON = `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="#1a7f37" stroke-width="1.5"/><circle cx="8" cy="8" r="1.5" fill="#1a7f37"/></svg>`;
+  // Resolve with Claude: starts the repo's "Level 5: Run" routine on the issue and opens its session
+  const resolveBtn = (i) => `<button type="button" class="btn-sm rz-btn" data-resolve="${i.number}" data-title="${esc(i.title)}" data-url="${esc(i.url)}">Resolve with Claude</button>`;
+  const resolveSetup = `<div class="rz-setup" id="rz-setup" hidden><h3>Resolve issues with Claude</h3><p>One click starts a Claude Code session on your Claude account that fixes the issue with a failing test first and opens a PR. It never merges. Once per repo:</p><ol><li>In Claude Code at the repo root, run <code>/level5:setup run</code> and merge its PR. It adds the skill the session runs and gives you the routine to create.</li><li>On claude.ai, create the routine <b>Level 5: Run</b> with an API trigger, as it says.</li><li>Paste the trigger's URL and token here.</li></ol><div class="rt-fire" data-routine="Level 5: Run" data-mini="1"></div></div>`;
   const incidents = s.queue.issues.length
-    ? `<div class="group more5">${s.queue.issues.map((i) => `<a class="line pr" href="${esc(i.url)}" target="_blank" rel="noopener" data-open="issue:${i.number}"><span class="name">${ISSUE_ICON}<span><span class="pr-title">${esc(i.title)}</span><span class="sub">#${i.number} · opened ${ago(i.created_at)}</span></span></span><span class="meta">${i.labels.map((l) => `<span class="tag${l === "risky" ? " risky" : ""}">${esc(l)}</span>`).join("")}</span></a>`).join("")}${more(s.queue.issues.length)}</div>`
+    ? `<div class="group more5">${s.queue.issues.map((i) => `<div class="rz"><a class="line pr" href="${esc(i.url)}" target="_blank" rel="noopener" data-open="issue:${i.number}"><span class="name">${ISSUE_ICON}<span><span class="pr-title">${esc(i.title)}</span><span class="sub">#${i.number} · opened ${ago(i.created_at)}</span></span></span><span class="meta">${i.labels.map((l) => `<span class="tag${l === "risky" ? " risky" : ""}">${esc(l)}</span>`).join("")}</span></a>${resolveBtn(i)}</div>`).join("")}${more(s.queue.issues.length)}</div>`
     : `<div class="group"><div class="line"><span class="hint">No open issues.</span></div></div>`;
 
   const M = s.metrics;
@@ -3022,7 +3039,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
         ${ci ? `<h2>Workflows</h2><div class="group grid3">${ci}</div>` : ""}
         ${promoSection}`)}
       ${view("prs", `${vh("Pull requests", "Code merged per day, open PRs with their CI, and the latest merged and closed.")}${prHead}${prSection}`)}
-      ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${incidents}`)}
+      ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${resolveSetup}${incidents}`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
       ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
       ${view("services", `${vh("Services", "The factory as an industrial park: every service it pays for is a hall, as big as what it cost in the last 30 days.")}${mapSection}`)}

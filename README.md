@@ -87,6 +87,7 @@ judges them.
 | `.claude/skills/level5/` | skill | Teaches any skill to end with its heartbeat: `level5.sh beat <id> ok '{"swept":{"events":120}}'` |
 | `.claude/skills/level5-monitor-errors/` | skill on a routine | Sentry: an issue per new or regressed error worth a look |
 | `.claude/skills/level5-report/` | skill on a routine | The day as one GitHub issue, closing the one before |
+| `.claude/skills/level5-run/` | skill on a routine | What the Resolve with Claude button asks: an issue fixed test first, in one PR, or a comment saying why not (`/level5:setup run`) |
 | `.github/workflows/level5-pulse.yml` | GitHub Action | The monitor of the monitors: an issue per monitor that stopped, ran late or said ok after reading nothing. It runs apart from the routines on purpose |
 
 ### The server (`status/`, https://factory-status.fly.dev)

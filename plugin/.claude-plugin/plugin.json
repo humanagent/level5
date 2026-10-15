@@ -1,7 +1,7 @@
 {
   "name": "level5",
   "displayName": "Level 5",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Automation observability for your repositories: whether every skill your agents run actually ran, and what it cost.",
   "author": { "name": "humanagent", "url": "https://github.com/humanagent" },
   "homepage": "https://factory-status.fly.dev",

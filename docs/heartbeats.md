@@ -30,6 +30,26 @@ The body is one heartbeat or an array of them.
 Responses: `200 {"ok":true,"stored":n}`, `401` for an unknown key, `400` for a missing monitor or
 status.
 
+**A report's body.** A report that goes out as an email posts the HTML it sent, and Reports links
+the last one (served sandboxed, so nothing in it runs). `level5.sh body <report> <file.html> [title]`
+does this from a skill.
+
+```
+POST /api/report-body
+{ "monitor": "marketing-ads", "title": "Ads · 8-14 Oct", "html": "<!doctype html>…" }
+```
+
+**Marketing.** Spend, leads, impressions and clicks per campaign per day, with the ad account's
+state. A repo that posts these gets a Marketing view: the last 30 days against the 30 before, per
+campaign. Posting a day again replaces it, so a skill can resend the last days, which ad platforms
+keep revising.
+
+```
+POST /api/marketing
+{ "source": "meta", "account": { "name", "status", "currency", "amount_spent", "spend_cap", "balance" },
+  "rows": [{ "day": "2026-10-14", "campaign": "Socios · 2026-10", "spend": 25.3, "impressions": 8708, "clicks": 27, "leads": 5 }] }
+```
+
 The **ingest key** is created the first time someone opens the repo's page, and shown in its
 onboarding card (and at `/r/<owner>/<repo>/setup` afterwards). It can only post heartbeats and costs
 for that one repo, and read that repo's daily report ([report.md](report.md)).

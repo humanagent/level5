@@ -714,6 +714,7 @@ function routineState(r, monitors, merged, sessions = {}) {
 // grey when nothing was expected (no schedule, or before the skill's first heartbeat).
 // Rows are grouped by the routine that runs them, so a routine's schedule and token cost show once.
 const fireOn = (cron, a, b) => { const t = nextRun(cron, new Date(a - 6e4)); return !!t && Date.parse(t) < b; };
+const REPORT_NAME = /report|digest|newsletter|growth|marketing/i, REPORT_NOTE = /^(sent|enviado|enviada|mandado) (to|a) /i;
 async function readSkills(factory, repoId, monitors, routines, prices) {
   const WEEKS = 12, H = 36e5, GRACE = 6 * H, now = Date.now();
   const since = new Date(now - WEEKS * 7 * 864e5).toISOString();
@@ -815,11 +816,14 @@ async function readSkills(factory, repoId, monitors, routines, prices) {
     const on = (d) => sess.filter((x) => x.name === cmd && x.day === d);
     return { name: r.name.replace(/^App: /, ""), cron: r.cron, tokens: dates.map((d) => on(d).reduce((a, x) => a + x.tok, 0)), usd: dates.map((d) => on(d).reduce((a, x) => a + (x.usd || 0), 0)), secs: dates.map((d) => on(d).reduce((a, x) => a + x.secs, 0)), runs: dates.map((d) => { const today = mine.filter((b) => b.ts.slice(0, 10) === d); return Math.max(today.filter((b) => b.source === "session").length, today.length ? 1 : 0); }) };
   }) };
-  // Reports: every weekly skill (and anything that sent a report), its runs newest first
-  const reportIds = [...new Set([...rows.filter((x) => x.weekly).map((x) => x.id), ...beats.filter((b) => b.report).map((b) => b.monitor)])];
+  // Reports: a skill that sends one. Its name says so, it posted a report or its email (the body),
+  // or its heartbeat says it sent it. A weekly audit or monitor is not a report. Runs newest first.
+  const bodies = Object.fromEntries((await db.all("SELECT monitor, at, title FROM report_bodies WHERE repo_id = $1", repoId)).map((x) => [x.monitor, { at: x.at, title: x.title }]));
+  const sentOne = (id) => REPORT_NAME.test(id) || bodies[id] || beats.some((b) => b.monitor === id && (b.report || REPORT_NOTE.test(b.note || "")));
+  const reportIds = [...new Set([...rows.map((x) => x.id), ...beats.map((b) => b.monitor), ...Object.keys(bodies)])].filter(sentOne);
   const reports = reportIds.map((id) => {
     const r = rows.find((x) => x.id === id), mine = beats.filter((b) => b.monitor === id && b.source !== "session").sort((a, b) => (a.ts < b.ts ? 1 : -1));
-    return { id, routine: r?.routine || "", state: r?.state || "alive", buckets: r?.buckets || [], items: mine.slice(0, 12).map((b) => ({ ts: b.ts, status: b.status, note: b.note || "", swept: b.swept || {}, filed: b.filed || [], title: b.title || "", report: b.report || "" })) };
+    return { id, routine: r?.routine || "", state: r?.state || "alive", buckets: r?.weekly ? r.buckets || [] : [], body: bodies[id] || null, items: mine.slice(0, 12).map((b) => ({ ts: b.ts, status: b.status, note: b.note || "", swept: b.swept || {}, filed: b.filed || [], title: b.title || "", report: b.report || "" })) };
   });
   return { routines: hist, daily, reports, groups, usd_30d: sess.filter((x) => x.usd != null && Date.parse(x.day + "T12:00:00Z") >= now - WINDOW * 864e5).reduce((a, x) => a + x.usd, 0), sessions_30d: sess.length };
 }
@@ -927,6 +931,7 @@ async function snapshot(repoRow) {
     metrics,
     costs: await readCosts(repoRow.id, factory.prices),
     security: await readSecurity(repoRow.id),
+    marketing: await readMarketing(repoRow.id),
     promotions,
     rules: await evalRules(repoRow.id, { fire: true, prices: factory.prices }),
     setup: { ...(factory.client || {}), skill_beats: monitors.filter((m) => m.last && m.last.source !== "session").length },
@@ -1188,6 +1193,23 @@ function securityFindings(awsInv, inf) {
   }
   return out.sort((a, b) => SEV[a.sev] - SEV[b.sev]);
 }
+// Marketing: spend, leads, impressions and clicks per campaign per day, posted by the repo's own
+// ads skill (POST /api/marketing), with the ad account's state. Last 30 days against the 30 before.
+async function readMarketing(repoId) {
+  const since = new Date(Date.now() - 2 * WINDOW * 864e5).toISOString().slice(0, 10);
+  const rows = await db.all("SELECT source, day, campaign, spend, impressions, clicks, leads FROM marketing WHERE repo_id = $1 AND day >= $2", repoId, since);
+  if (!rows.length) return null;
+  const cut = new Date(Date.now() - WINDOW * 864e5).toISOString().slice(0, 10);
+  const sum = (list) => list.reduce((a, r) => ({ spend: a.spend + Number(r.spend), impressions: a.impressions + Number(r.impressions), clicks: a.clicks + Number(r.clicks), leads: a.leads + Number(r.leads) }), { spend: 0, impressions: 0, clicks: 0, leads: 0 });
+  const now = rows.filter((r) => r.day > cut), before = rows.filter((r) => r.day <= cut);
+  const names = [...new Set(now.map((r) => r.campaign))];
+  const campaigns = names.map((name) => ({ name, source: now.find((r) => r.campaign === name).source, ...sum(now.filter((r) => r.campaign === name)), before: sum(before.filter((r) => r.campaign === name)), last: now.filter((r) => r.campaign === name).map((r) => r.day).sort().pop() })).sort((a, b) => b.spend - a.spend);
+  const dates = [...Array(WINDOW)].map((_, i) => new Date(Date.now() - (WINDOW - 1 - i) * 864e5).toISOString().slice(0, 10));
+  const daily = campaigns.map((c) => ({ name: c.name, spend: dates.map((d) => now.filter((r) => r.campaign === c.name && r.day === d).reduce((a, r) => a + Number(r.spend), 0)), leads: dates.map((d) => now.filter((r) => r.campaign === c.name && r.day === d).reduce((a, r) => a + Number(r.leads), 0)) }));
+  const accounts = [];
+  for (const src of [...new Set(rows.map((r) => r.source))]) { const a = await db.one("SELECT v FROM settings WHERE k = $1", `mkt:${repoId}:${src}`); if (a) accounts.push({ source: src, ...JSON.parse(a.v) }); }
+  return { total: sum(now), before: sum(before), campaigns, dates, daily, accounts };
+}
 async function readSecurity(repoId) {
   const rows = await db.all("SELECT kind, at, body FROM inventories WHERE repo_id = $1", repoId);
   if (!rows.length) return null;
@@ -1208,7 +1230,7 @@ async function backgroundRefresh() {
 }
 setInterval(() => backgroundRefresh().catch(() => {}), 10 * 60e3);
 // Bump when the snapshot's shape changes, so a page never renders one saved by older code.
-const SNAP_V = 18;
+const SNAP_V = 20;
 
 // --- HTML -------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1680,7 +1702,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .more5:not(.all)>:nth-child(n+6):not(.more-btn){display:none}.more-btn{display:block;width:100%;padding:10px 16px;border:0;border-top:1px solid var(--line);background:none;color:var(--muted);font:500 12.5px inherit;text-align:left;cursor:pointer}.more-btn:hover{color:var(--ink);background:rgba(15,16,20,.025)}
 .rps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}@media(max-width:1000px){.rps{grid-template-columns:minmax(0,1fr)}}
 .rp{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}.rp-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.rp-h .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rp-h .name b{font:600 14px var(--mono)}.rp-h small{color:var(--faint);font-size:12px}
-.rp .bars{margin:10px 0 4px}.rp-none{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rp-none code{font-size:11.5px}
+.rp .bars{margin:10px 0 4px}.rp-none{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rp-none code{font-size:11.5px}.mk td small{display:block;color:var(--muted);font-size:11.5px}.mk .dl{display:inline;font-size:11px;margin-left:4px}.mk .dl[data-s=ok],.stat .dl[data-s=ok]{color:#2f8f5b}.mk .dl[data-s=bad],.stat .dl[data-s=bad]{color:#d14343}.stat .dl{font-size:12px;margin-left:6px;font-weight:500}.mk-acct{font-size:12.5px;color:var(--muted);margin:10px 2px}.rp-open{display:block;margin:10px 0 0;font-size:13px;font-weight:500;color:var(--text);text-decoration:none}.rp-open:hover{text-decoration:underline}
 .rp-body{margin-top:10px}.rp-body summary{cursor:pointer;font-weight:600;font-size:13px}.rp-body .md{margin-top:6px;font-size:13px;line-height:1.55;color:var(--ink2);max-height:420px;overflow:auto}.rp-body .md h3,.rp-body .md h4,.rp-body .md h5{margin:10px 0 4px;font-size:13.5px}.rp-body .md ul{padding-left:18px;margin:4px 0}
 .rp-past{margin:12px 0 0;box-shadow:none;border:1px solid var(--line)}.rp-past .line{padding:8px 12px}
 .keybox{margin-top:28px}.keybox p{font-size:13.5px;color:var(--muted);max-width:720px;line-height:1.5}.keybox form{margin-top:10px}.btn-quiet{height:32px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px inherit;cursor:pointer}.btn-quiet:hover{background:rgba(15,16,20,.04)}
@@ -1763,7 +1785,7 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("level5:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "reports", "services", "setup"];
+const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "marketing", "reports", "services", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:var(--sel);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--link)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
@@ -2493,7 +2515,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     merged: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#8250df" d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z"/></svg>`,
     closed: `<svg class="gi" viewBox="0 0 16 16" aria-hidden="true"><path fill="#cf222e" d="M3.25 1A2.25 2.25 0 0 1 4 5.372v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.251 2.251 0 0 1 3.25 1Zm9.5 5.5a.75.75 0 0 1 .75.75v3.378a2.251 2.251 0 1 1-1.5 0V7.25a.75.75 0 0 1 .75-.75Zm-2.03-5.273a.75.75 0 0 1 1.06 0l.97.97.97-.97a.748.748 0 0 1 1.265.332.75.75 0 0 1-.205.729l-.97.97.97.97a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-.97-.97-.97.97a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l.97-.97-.97-.97a.75.75 0 0 1 0-1.06ZM2.5 3.25a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0ZM3.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm9.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>`,
   };
-  const prLine = (p, kind, when, right = "") => `<a class="line pr" href="${esc(p.url)}" target="_blank" rel="noopener" data-open="pr:${p.number}"><span class="name">${PR_ICON[kind]}<span><span class="pr-title">${esc(p.title)}</span><span class="sub">#${p.number}${p.author ? ` · ${esc(p.author)}` : ""} · ${when}</span></span></span><span class="meta"><code class="branch">${esc(p.branch)}</code>${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}${right}</span></a>`;
+  const prLine = (p, kind, when, right = "") => `<a class="line pr" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="name">${PR_ICON[kind]}<span><span class="pr-title">${esc(p.title)}</span><span class="sub">#${p.number}${p.author ? ` · ${esc(p.author)}` : ""} · ${when}</span></span></span><span class="meta"><code class="branch">${esc(p.branch)}</code>${AGENT_BRANCH.test(p.branch || "") ? `<span class="agent-tag">agent</span>` : ""}${right}</span></a>`;
   const ciTag = (p) => `<span class="state" data-s="${p.ci === "green" ? "ok" : p.ci === "red" ? "bad" : p.ci === "running" ? "warn" : "none"}"${p.ci === "running" ? " data-run" : ""}>${{ green: "Passing", red: "Failing", running: "Running", none: "No CI" }[p.ci]}</span>`;
   const C = s.costs;
   const SRC_COLOR = ["#14161c", "#5b6cff", "#2fb36b", "#f0a92c", "#e5484d", "#8250df", "#0ea5b7", "#9a9ea5"];
@@ -2673,10 +2695,10 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const ciTxt = { green: "Passing", red: "Failing", running: "Running", none: "No CI" };
   const promoSection = !P ? "" : !P.enabled ? `<h2>Promotions</h2><div class="group"><div class="line"><span class="hint">No promotion flow found: this repo ships from one branch${P.default_branch ? ` (<code>${esc(P.default_branch)}</code>)` : ""}. If it promotes between two, set <code>"promotion": {"from": "staging", "to": "main"}</code> in <code>.claude/factory.json</code>.</span></div></div>` : `
     <div class="promo-h"><h2>Promotions</h2><span class="flow"><code class="branch">${esc(P.from)}</code><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg><code class="branch prod">${esc(P.to)}</code></span></div>
-    ${P.open ? `<div class="group promo-open openable" data-open="pr:${P.open.number}" role="button" tabindex="0"><div class="line"><span class="name">${PR_ICON.open}<span><b>Promotion in progress: #${P.open.number}</b><span class="sub">${esc(P.open.title)} · opened ${ago(P.open.created_at)} by ${esc(P.open.author)} · <code class="branch">${esc(P.open.head)}</code> → <code class="branch prod">${esc(P.to)}</code></span></span></span><span class="meta"><span class="state" data-s="${P.open.ci === "green" ? "ok" : P.open.ci === "red" ? "bad" : P.open.ci === "running" ? "warn" : "none"}"${P.open.ci === "running" ? " data-run" : ""}>${ciTxt[P.open.ci] || ""}</span></span></div></div>` : ""}
+    ${P.open ? `<a class="group promo-open" href="${esc(P.open.url)}" target="_blank" rel="noopener"><div class="line"><span class="name">${PR_ICON.open}<span><b>Promotion in progress: #${P.open.number}</b><span class="sub">${esc(P.open.title)} · opened ${ago(P.open.created_at)} by ${esc(P.open.author)} · <code class="branch">${esc(P.open.head)}</code> → <code class="branch prod">${esc(P.to)}</code></span></span></span><span class="meta"><span class="state" data-s="${P.open.ci === "green" ? "ok" : P.open.ci === "red" ? "bad" : P.open.ci === "running" ? "warn" : "none"}"${P.open.ci === "running" ? " data-run" : ""}>${ciTxt[P.open.ci] || ""}</span></span></div></a>` : ""}
     <div class="promo-cols">
       <div><h2>Waiting for ${esc(P.to)} <span class="faint">${P.ahead ?? 0}</span></h2><div class="group promo-list more5">${P.waiting.length ? P.waiting.slice(0, 25).map((w) => `<a class="line" href="${esc(w.pr ? `${repoUrl}/pull/${w.pr}` : w.url)}" target="_blank" rel="noopener"><span class="name"><span><span class="pm">${esc(w.message.replace(/\s*\(#\d+\)\s*$/, ""))}</span><span class="sub">${w.pr ? `#${w.pr} · ` : ""}<code>${esc(w.sha)}</code> · ${esc(w.author)} · ${ago(w.at)}</span></span></span></a>`).join("") + (P.waiting.length > 25 ? `<div class="line"><span class="hint">and ${P.waiting.length - 25} more</span></div>` : "") : `<div class="line"><span class="hint">Nothing waiting: ${esc(P.to)} has everything in ${esc(P.from)}.</span></div>`}${more(Math.min(P.waiting.length, 26))}</div></div>
-      <div><h2>Recent promotions</h2><div class="group promo-list more5">${P.history.length ? P.history.map((p) => `<a class="line" href="${esc(p.url)}" target="_blank" rel="noopener" data-open="pr:${p.number}"><span class="name">${PR_ICON.merged}<span><span class="pm">#${p.number} ${esc(p.title)}</span><span class="sub">merged ${ago(p.merged_at)} · open ${hrs((Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5)}${p.author ? ` · ${esc(p.author)}` : ""}</span></span></span></a>`).join("") : `<div class="line"><span class="hint">No promotion merged yet.</span></div>`}${more(P.history.length)}</div>
+      <div><h2>Recent promotions</h2><div class="group promo-list more5">${P.history.length ? P.history.map((p) => `<a class="line" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="name">${PR_ICON.merged}<span><span class="pm">#${p.number} ${esc(p.title)}</span><span class="sub">merged ${ago(p.merged_at)} · open ${hrs((Date.parse(p.merged_at) - Date.parse(p.created_at)) / 36e5)}${p.author ? ` · ${esc(p.author)}` : ""}</span></span></span></a>`).join("") : `<div class="line"><span class="hint">No promotion merged yet.</span></div>`}${more(P.history.length)}</div>
 </div>
     </div>`;
   if (P?.enabled) for (const p of [P.open, ...P.history].filter(Boolean)) if (!wins.some((w) => w.key === `pr:${p.number}`)) wins.push({ key: `pr:${p.number}`, kind: "Promotion", title: `#${p.number} ${p.title}`, href: p.url, body: `
@@ -2750,6 +2772,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
 
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
   const NAV_ICON = {
+    marketing: `<path d="M2 6.5v3h2.5l5 3v-9l-5 3z"/><path d="M12 6a2.5 2.5 0 0 1 0 4"/>`,
     security: `<path d="M8 1.8l5 2v4c0 3.2-2.2 5.5-5 6.4-2.8-.9-5-3.2-5-6.4v-4z"/><path d="M5.8 8.2l1.6 1.6 3-3.2"/>`,
     reports: `<path d="M4 1.8h5.5l3 3v9.4H4z"/><path d="M9.5 1.8v3h3M6 8h5M6 10.5h5M6 13h3"/>`,
     services: `<path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z"/><path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2"/>`,
@@ -2780,6 +2803,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     ["prs", "Pull requests", count(s.queue.prs.length)],
     ["issues", "Issues", count(s.queue.issues.length)],
     ["costs", "Costs", C ? `<span class="nc">${usd(C.total_usd)}</span>` : ""],
+    ...(s.marketing ? [["marketing", "Marketing", `<span class="nc">${s.marketing.total.leads} leads</span>`]] : []),
     ["reports", "Reports", (() => { const n = (s.status?.reports || []).filter((r) => ["dead", "late", "warn", "degraded", "lying"].includes(r.state)).length; return n ? badge(n, "bad") : count((s.status?.reports || []).length); })()],
     ["services", "Services", ""],
   ];
@@ -2970,8 +2994,9 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     const card = (r) => {
       const [ps, label] = SK[r.state] || ["none", r.state], x = r.items[0], rt = s.routines.find((y) => y.name === r.routine);
       const read = x ? Object.entries(x.swept || {}).map(([k, v]) => `${typeof v === "number" ? v.toLocaleString("en-US") : esc(JSON.stringify(v))} ${esc(k)}`).join(" · ") : "";
-      const body = x?.report ? `<details class="rp-body" open><summary>${esc(x.title || "This week's report")}</summary><div class="md"><p>${mdHtml(x.report)}</p></div></details>`
-        : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Level 5. Add <code>"report"</code> with its text to the skill's heartbeat to read it here.</p>`;
+      const link = r.body ? `<a class="rp-open" href="/r/${esc(s.repo)}/body/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">${esc(r.body.title || "The last one sent")} <span class="faint">· ${ago(r.body.at)}</span> ↗</a>` : "";
+      const body = link && !x?.report ? link : x?.report ? link + `<details class="rp-body" open><summary>${esc(x.title || "This week's report")}</summary><div class="md"><p>${mdHtml(x.report)}</p></div></details>`
+        : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Level 5 yet: its skill posts it with <code>level5.sh body</code>.</p>`;
       const past = r.items.slice(1).map((y) => `<div class="line"><span class="name"><span>${new Date(y.ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}<span class="sub">${esc(y.title || y.note || Object.entries(y.swept || {}).map(([k, v]) => `${v} ${k}`).join(" · "))}</span></span></span><span class="meta"><span class="state" data-s="${y.status === "ok" ? "ok" : "warn"}">${y.status === "ok" ? "Delivered" : esc(y.status)}</span></span></div>`).join("");
       return `<section class="rp">
         <div class="rp-h"><span class="name"><b>${esc(r.id)}</b><small>${[rt ? `<span class="utc">${esc(when(rt))}</span>` : "", x ? `last ${ago(x.ts)}` : "never sent", read].filter(Boolean).join(" · ")}</small></span><span class="state" data-s="${ps}">${label === "Running" ? "Delivered" : label}</span></div>
@@ -2981,6 +3006,23 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       </section>`;
     };
     reportsView = head2 + `<div class="rps">${RP.map(card).join("")}</div>`;
+  }
+
+  // Marketing: per campaign, the last 30 days against the 30 before
+  let marketingView = "";
+  if (s.marketing) {
+    const K = s.marketing, money = (v) => "US$ " + (v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const cpl = (x) => (x.leads ? money(x.spend / x.leads) : "–"), ctr = (x) => (x.impressions ? ((x.clicks / x.impressions) * 100).toFixed(2) + "%" : "–");
+    const delta = (a, b, invert) => { if (!b) return ""; const p = Math.round(((a - b) / b) * 100); return p ? ` <small class="dl" data-s="${(p > 0) !== !!invert ? "ok" : "bad"}">${p > 0 ? "+" : ""}${p}%</small>` : ""; };
+    const COLORS = ["#5b4dff", "#4cb782", "#f2994a", "#eb5757", "#2d9cdb", "#bb6bd9", "#9b9b9b"];
+    marketingView = head([
+      tile(money(K.total.spend) + delta(K.total.spend, K.before.spend, true), "Spend", `${WINDOW} days`),
+      tile(num(K.total.leads) + delta(K.total.leads, K.before.leads), "Leads", `${cpl(K.total)} per lead`),
+      tile(kn(K.total.impressions) + delta(K.total.impressions, K.before.impressions), "Impressions", `${kn(K.total.clicks)} clicks · ${ctr(K.total)} CTR`),
+      tile(num(K.campaigns.length), "Campaigns", "with spend in the window"),
+    ], dayChart(K.dates, K.daily.map((c, i) => ({ name: c.name, color: COLORS[i % COLORS.length], v: c.spend })), (v) => money(v), { extra: (i) => `${K.daily.reduce((a, c) => a + c.leads[i], 0)} leads` }))
+      + `<h2>Campaigns</h2><div class="group"><table class="tbl mk"><thead><tr><th>Campaign</th><th>Spend</th><th>Leads</th><th>Per lead</th><th>Impressions</th><th>Clicks</th><th>CTR</th></tr></thead><tbody>${K.campaigns.map((c) => `<tr><td><b>${esc(c.name)}</b><small>last data ${esc(c.last)}</small></td><td>${money(c.spend)}${delta(c.spend, c.before.spend, true)}</td><td>${num(c.leads)}${delta(c.leads, c.before.leads)}</td><td>${cpl(c)}</td><td>${num(c.impressions)}</td><td>${num(c.clicks)}</td><td>${ctr(c)}</td></tr>`).join("")}</tbody></table></div>`
+      + K.accounts.map((a) => `<p class="mk-acct">${esc(a.name || a.source)}: ${esc(a.status)} · spent ${money(a.spent)}${a.cap != null ? ` of ${money(a.cap)}` : ""} · balance ${money(a.balance)} <span class="faint">· ${ago(a.at)}</span></p>`).join("");
   }
 
   // Pull requests: lines added and removed per day, side by side
@@ -3041,7 +3083,8 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       ${view("prs", `${vh("Pull requests", "Code merged per day, open PRs with their CI, and the latest merged and closed.")}${prHead}${prSection}`)}
       ${view("issues", `${vh("Issues", "Opened and closed per day, and what is open now.")}${issueHead}<h2>Open <span class="faint">${s.queue.issues.length}</span></h2>${resolveSetup}${incidents}`)}
       ${view("costs", `${vh("Costs", "What the factory spends per day and per provider, and the tokens every Claude Code session burns.")}${costs || costsEmpty}`)}
-      ${view("reports", `${vh("Reports", "What the weekly routines delivered, week by week, and the latest report.")}${reportsView}`)}
+      ${s.marketing ? view("marketing", `${vh("Marketing", "Spend, leads and impressions per campaign over the last 30 days, posted by the repo's ads skill.")}${marketingView}`) : ""}
+      ${view("reports", `${vh("Reports", "What each report sent, week by week, and the last one as it went out.")}${reportsView}`)}
       ${view("services", `${vh("Services", "The factory as an industrial park: every service it pays for is a hall, as big as what it cost in the last 30 days.")}${mapSection}`)}
       ${view("setup", `${vh("Setup", setupState.level5_sh && setupState.hook ? "This repo reports to Level 5. Each step shows what is in place." : "How this repo reports to Level 5.")}${repoRow ? `<section class="onboard">${heartbeatSetup(origin, repoRow.ingest_key, onboarding, setupState)}</section>
         <section class="keybox"><h2>Ingest key</h2><p>Heartbeats and costs from this repo are sent with <code>${esc(repoRow.ingest_key.slice(0, 8))}…${esc(repoRow.ingest_key.slice(-4))}</code>. It can only write this repo's heartbeats and costs. If it leaked (committed to git, pasted somewhere), replace it: the old key keeps working for 24 hours so there is time to update wherever it is stored.</p><form method="post" action="/r/${esc(s.repo)}/key"><button type="submit" class="btn-quiet">Replace key</button></form></section>` : ""}
@@ -3579,6 +3622,34 @@ createServer(async (req, res) => {
       const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("day") || "") ? url.searchParams.get("day") : undefined;
       return json(res, 200, reportData(snap, { origin, day }));
     }
+    // Marketing: one row per campaign per day ({ source, account?, rows: [{ day, campaign, spend,
+    // impressions, clicks, leads }] }). Posting a day again replaces it, so a skill can resend the
+    // last few days, which ad platforms keep revising.
+    if (url.pathname === "/api/marketing" && req.method === "POST") {
+      const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      const repo = await repoForKey(key);
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
+      const b = JSON.parse((await readBody(req)) || "{}");
+      const source = str(b.source || "ads", 40), rows = Array.isArray(b.rows) ? b.rows : [];
+      if (rows.length > 5000) return json(res, 413, { error: "at most 5000 rows per request" });
+      const at = new Date().toISOString(), n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      for (const r of rows) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(r.day || "") || !r.campaign) continue;
+        await db.run("INSERT INTO marketing (repo_id, source, day, campaign, spend, impressions, clicks, leads, at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (repo_id, source, day, campaign) DO UPDATE SET spend = excluded.spend, impressions = excluded.impressions, clicks = excluded.clicks, leads = excluded.leads, at = excluded.at", repo.id, source, r.day, str(r.campaign, 200), n(r.spend), Math.round(n(r.impressions)), Math.round(n(r.clicks)), Math.round(n(r.leads)), at);
+      }
+      if (b.account) await setSetting(`mkt:${repo.id}:${source}`, JSON.stringify({ name: str(b.account.name, 120), status: str(b.account.status, 60), currency: str(b.account.currency, 8), spent: n(b.account.amount_spent), cap: b.account.spend_cap == null ? null : n(b.account.spend_cap), balance: n(b.account.balance), at }));
+      return json(res, 200, { ok: true, stored: rows.length });
+    }
+    // A report's body (the email as sent), latest only per skill, read on the Reports view.
+    if (url.pathname === "/api/report-body" && req.method === "POST") {
+      const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      const repo = await repoForKey(key);
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
+      const b = JSON.parse((await readBody(req, 3e6)) || "{}");
+      if (!b.monitor || !b.html) return json(res, 400, { error: "monitor and html are required" });
+      await db.run("INSERT INTO report_bodies (repo_id, monitor, at, title, html) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (repo_id, monitor) DO UPDATE SET at = excluded.at, title = excluded.title, html = excluded.html", repo.id, String(b.monitor).slice(0, 80), new Date().toISOString(), String(b.title || "").slice(0, 200), String(b.html));
+      return json(res, 200, { ok: true });
+    }
     if (url.pathname === "/api/heartbeat" && req.method === "POST") {
       const key = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
       const repo = await repoForKey(key);
@@ -3697,7 +3768,7 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/triggers|\/fire|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/triggers|\/fire|\/body\/[\w.:-]+|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
     if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2] === "/key" || m[2] === "/triggers" || m[2] === "/fire" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
@@ -3707,6 +3778,12 @@ createServer(async (req, res) => {
       const row = await ensureRepo(seen, user);
       if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: (await db.one("SELECT COUNT(*)::int AS n FROM heartbeats WHERE repo_id = $1", row.id)).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
+      if (m[2]?.startsWith("/body/")) {
+        // the last report a skill sent, as its email; sandboxed, so nothing in it runs
+        const b = await db.one("SELECT html FROM report_bodies WHERE repo_id = $1 AND monitor = $2", row.id, decodeURIComponent(m[2].slice(6)));
+        if (!b) return send(res, 404, "No report body yet", { "content-type": "text/plain" });
+        return send(res, 200, b.html, { "content-type": "text/html; charset=utf-8", "content-security-policy": "sandbox allow-popups allow-popups-to-escape-sandbox; default-src 'none'; img-src * data:; style-src 'unsafe-inline' *; font-src * data:", "x-frame-options": "DENY" });
+      }
       if (m[2] === "/costs") {
         // every cost row of the last 120 days, one [day, provider, service, usd] per breakdown key
         const since = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);

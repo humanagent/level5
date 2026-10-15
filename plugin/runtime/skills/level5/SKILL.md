@@ -26,3 +26,10 @@ flagged as "said ok, read nothing".
 A skill that writes a report (a weekly summary, an email, a digest) also sends the report
 itself, so it can be read in Level 5 under Reports: add `"title"` and `"report"` (markdown, up to
 60,000 characters) to the same JSON.
+
+A report that goes out as an email (HTML) sends that instead, and Level 5 shows the last one as it
+was sent:
+
+```bash
+.claude/hooks/level5.sh body <report-id> /tmp/report.html "<subject>"
+```

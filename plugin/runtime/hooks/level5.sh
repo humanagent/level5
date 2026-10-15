@@ -8,6 +8,9 @@
 #       replaces it, so a daily job can resend the last few days safely.
 #   level5.sh body <report> <file.html> [title]
 #       The report as it was sent (its email's HTML), so Level 5 shows the last one on Reports.
+#   level5.sh otel-headers
+#       otelHeadersHelper for Claude Code's telemetry (the Live view): prints the key as an
+#       x-level5-key header, so the key comes from the repo's config, not the environment.
 #   level5.sh session-end
 #       The SessionEnd hook. In a Claude Code cloud session (a routine) it posts the session's
 #       token usage by model, and one heartbeat named after the slash command the session ran.
@@ -22,6 +25,14 @@ CFG="$DIR/level5.json"
 cfg() { [ -f "$CFG" ] && sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" "$CFG"; }
 URL="${LEVEL5_URL:-$(cfg url)}"
 KEY="${LEVEL5_KEY:-$(cfg key)}"
+# Claude Code may run the headers helper before a SessionStart hook writes the config: wait for it
+if [ "${1:-}" = "otel-headers" ]; then
+  i=0
+  while [ -z "$KEY" ] && [ $i -lt 15 ]; do sleep 1; i=$((i + 1)); KEY="${LEVEL5_KEY:-$(cfg key)}"; done
+  [ -n "$KEY" ] || exit 1
+  printf '{"x-level5-key": "%s"}\n' "$KEY"
+  exit 0
+fi
 [ -n "$URL" ] && [ -n "$KEY" ] && command -v curl >/dev/null 2>&1 || exit 0
 
 post() {

@@ -124,7 +124,9 @@ committing it is the default. If the person would rather not commit it, add `.cl
 to `.gitignore` and say that each routine then needs `LEVEL5_URL` and `LEVEL5_KEY` in its
 environment.
 
-Add the SessionEnd hook to `.claude/settings.json`, keeping everything already there:
+Add the SessionEnd hook to `.claude/settings.json`, and the headers helper the Live view uses
+(it hands Claude Code's telemetry the key, so the key never goes in the claude.ai environment),
+keeping everything already there:
 
 ```bash
 node -e '
@@ -133,6 +135,7 @@ const s = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
 s.hooks ??= {}; s.hooks.SessionEnd ??= [];
 if (!JSON.stringify(s.hooks.SessionEnd).includes("level5.sh"))
   s.hooks.SessionEnd.push({ hooks: [{ type: "command", command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/level5.sh session-end" }] });
+s.otelHeadersHelper ??= ".claude/hooks/level5.sh otel-headers";
 fs.writeFileSync(p, JSON.stringify(s, null, 2) + "\n");'
 ```
 

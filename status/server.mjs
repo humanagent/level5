@@ -3031,12 +3031,13 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   // Live: runs drawn in the browser from /r/<repo>/runs, every 5 s while the view is open
   const otelEnv = repoRow ? [
     "CLAUDE_CODE_ENABLE_TELEMETRY=1", "OTEL_LOGS_EXPORTER=otlp", "OTEL_METRICS_EXPORTER=none", "OTEL_EXPORTER_OTLP_PROTOCOL=http/json",
-    `OTEL_EXPORTER_OTLP_ENDPOINT=${origin}`, `OTEL_EXPORTER_OTLP_HEADERS=x-level5-key=${repoRow.ingest_key}`, "OTEL_LOG_TOOL_DETAILS=1", "OTEL_LOGS_EXPORT_INTERVAL=5000",
+    `OTEL_EXPORTER_OTLP_ENDPOINT=${origin}`, "OTEL_LOG_TOOL_DETAILS=1", "OTEL_LOGS_EXPORT_INTERVAL=5000", "CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS=60000",
   ].join("\n") : "";
   const liveView = `<div id="lv" data-repo="${esc(s.repo)}"><p class="hint lv-wait">Loading…</p></div>
     <details class="group lv-setup"${repoRow ? "" : " hidden"}><summary>Connect a routine or an agent</summary><div class="lv-how">
       <p><b>Claude Code routines.</b> On claude.ai, open the environment your routines run in, and add these to its environment variables. Every session in it then reports here while it runs. Nothing from prompts or outputs is sent.</p>
       <pre>${esc(otelEnv)}</pre>
+      <p><b>The key</b> stays out of the environment: the repo hands it over. In <code>.claude/settings.json</code>, <code>"otelHeadersHelper": ".claude/hooks/level5.sh otel-headers"</code>, which reads it from <code>LEVEL5_KEY</code> or <code>.claude/level5.json</code>, wherever your vault puts it. Without that, add <code>OTEL_EXPORTER_OTLP_HEADERS=x-level5-key=&lt;this repo's key&gt;</code> to the list instead.</p>
       <p><b>Managed Agents and the Messages API.</b> In the Claude Console, OpenTelemetry settings, add a destination: Custom, endpoint <code>${esc(origin)}</code>, header <code>x-level5-key</code> with this repo's key, content mode Metadata only. Each agent session shows here as a run.</p>
     </div></details>${LIVE_RUNS}`;
 

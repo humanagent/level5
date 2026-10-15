@@ -23,6 +23,8 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { landingPage } from "./landing.mjs";
 import { dailyReport, reportData } from "./report.mjs";
+import { decode } from "./otlp.mjs";
+import { ingest as ingestRuns, readRuns } from "./live.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 // Local dev (npm run dev): signed in as DEV_USER, GitHub read with your own `gh` session instead of
@@ -1702,7 +1704,7 @@ code.branch.admin{background:#fdecec;color:var(--bad)}
 .more5:not(.all)>:nth-child(n+6):not(.more-btn){display:none}.more-btn{display:block;width:100%;padding:10px 16px;border:0;border-top:1px solid var(--line);background:none;color:var(--muted);font:500 12.5px inherit;text-align:left;cursor:pointer}.more-btn:hover{color:var(--ink);background:rgba(15,16,20,.025)}
 .rps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}@media(max-width:1000px){.rps{grid-template-columns:minmax(0,1fr)}}
 .rp{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}.rp-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.rp-h .name{display:flex;flex-direction:column;gap:3px;min-width:0}.rp-h .name b{font:600 14px var(--mono)}.rp-h small{color:var(--faint);font-size:12px}
-.rp .bars{margin:10px 0 4px}.rp-none{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rp-none code{font-size:11.5px}.mk td small{display:block;color:var(--muted);font-size:11.5px}.mk .dl{display:inline;font-size:11px;margin-left:4px}.mk .dl[data-s=ok],.stat .dl[data-s=ok]{color:#2f8f5b}.mk .dl[data-s=bad],.stat .dl[data-s=bad]{color:#d14343}.stat .dl{font-size:12px;margin-left:6px;font-weight:500}.mk-acct{font-size:12.5px;color:var(--muted);margin:10px 2px}.rp-open{display:block;margin:10px 0 0;font-size:13px;font-weight:500;color:var(--text);text-decoration:none}.rp-open:hover{text-decoration:underline}
+.rp .bars{margin:10px 0 4px}.rp-none{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45}.rp-none code{font-size:11.5px}.mk td small{display:block;color:var(--muted);font-size:11.5px}.mk .dl{display:inline;font-size:11px;margin-left:4px}.mk .dl[data-s=ok],.stat .dl[data-s=ok]{color:#2f8f5b}.mk .dl[data-s=bad],.stat .dl[data-s=bad]{color:#d14343}.stat .dl{font-size:12px;margin-left:6px;font-weight:500}.mk-acct{font-size:12.5px;color:var(--muted);margin:10px 2px}.lv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}.lv-run{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.lv-run.stuck{border-color:#eb5757}.lv-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.lv-run>small,.lv-row small{display:block;color:var(--muted);font-size:12px;margin-top:3px}.lv-flag{margin:10px 0 0;font-size:13px;color:#d14343}.lv-now{margin:10px 0 0;font-size:13px}.lv-now small{color:var(--muted)}.lv-run details,.lv-row{margin-top:8px}.lv-run summary,.lv-row summary{cursor:pointer;font-size:12.5px;color:var(--muted)}.lv-row{padding:10px 16px;margin:0;border-bottom:1px solid var(--line)}.lv-row:last-child{border-bottom:0}.lv-row summary{display:flex;justify-content:space-between;gap:10px;color:var(--text);font-size:13px}.lv-steps{margin-top:8px;font-size:12.5px}.lv-step{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-top:1px dashed var(--line)}.lv-step span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lv-step small{color:var(--muted);white-space:nowrap}.lv-step.bad span{color:#d14343}.lv-errs{margin-top:8px;font-size:12.5px;color:#d14343}.lv-errs span{font-weight:600}.lv-setup{margin-top:16px;padding:12px 16px}.lv-setup summary{cursor:pointer;font-weight:500}.lv-how{font-size:13px;line-height:1.5}.lv-how pre{white-space:pre-wrap;word-break:break-all;font-size:12px;background:var(--canvas);padding:10px;border-radius:8px}.rp-click{cursor:pointer;transition:border-color .15s}.rp-click:hover{border-color:var(--muted)}.rp-open{display:block;margin:10px 0 0;font-size:13px;font-weight:500;color:var(--text);text-decoration:none}.rp-open:hover{text-decoration:underline}
 .rp-body{margin-top:10px}.rp-body summary{cursor:pointer;font-weight:600;font-size:13px}.rp-body .md{margin-top:6px;font-size:13px;line-height:1.55;color:var(--ink2);max-height:420px;overflow:auto}.rp-body .md h3,.rp-body .md h4,.rp-body .md h5{margin:10px 0 4px;font-size:13.5px}.rp-body .md ul{padding-left:18px;margin:4px 0}
 .rp-past{margin:12px 0 0;box-shadow:none;border:1px solid var(--line)}.rp-past .line{padding:8px 12px}
 .keybox{margin-top:28px}.keybox p{font-size:13.5px;color:var(--muted);max-width:720px;line-height:1.5}.keybox form{margin-top:10px}.btn-quiet{height:32px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:500 13px inherit;cursor:pointer}.btn-quiet:hover{background:rgba(15,16,20,.04)}
@@ -1785,7 +1787,21 @@ async function poll(){clearTimeout(timer);if(!document.hidden){try{const r=await
 timer=setTimeout(poll,data&&data.active.length||document.getElementById("onboard")?8e3:3e4)}
 setInterval(()=>{document.querySelectorAll(".ci-live [data-since]").forEach(x=>x.textContent=dur(Date.now()-new Date(x.dataset.since)));document.querySelectorAll(".ci-live [data-ago]").forEach(x=>x.textContent=ago(x.dataset.ago))},1e3);
 document.addEventListener("level5:swap",render);document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll()});poll()})()</script>`;
-const VIEWS = ["status", "monitors", "automations", "ci", "prs", "issues", "costs", "marketing", "reports", "services", "setup"];
+const LIVE_RUNS = `<script>(()=>{const box=()=>document.getElementById("lv");let timer,last=null;
+const e=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const dur=ms=>{const m=Math.round(ms/6e4);return m<1?Math.round(ms/1e3)+" s":m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min"};
+const kt=n=>n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?Math.round(n/1e3)+"k":String(n);
+const ago=t=>dur(Date.now()-t)+" ago";
+const FL={loop:"Repeating itself",long:"Running long",burn:"Burning tokens",errors:"Errors piling up"};
+const steps=r=>'<div class="lv-steps">'+r.steps.slice().reverse().map(x=>'<div class="lv-step'+(x.ok===false?" bad":"")+'"><span>'+e(x.what)+'</span><small>'+(x.ms?dur(x.ms):"")+" · "+ago(x.t)+"</small></div>").join("")+"</div>"+(r.errs.length?'<div class="lv-errs"><b>Errors</b>'+r.errs.slice().reverse().map(x=>'<div><span>'+e(x.what)+"</span> "+e(x.error)+"</div>").join("")+"</div>":"");
+const meta=r=>[r.place,r.tool_calls+" tool calls",kt(r.tokens)+" tokens",r.usd?"US$ "+r.usd.toFixed(2):"",r.errors?r.errors+" errors":"",r.model].filter(Boolean).map(e).join(" · ");
+const card=r=>{const st=r.steps[r.steps.length-1];return '<section class="lv-run'+(r.flags.length?" stuck":"")+'"><div class="lv-h"><b>'+e(r.name)+'</b><span class="state" data-s="'+(r.flags.length?"bad":"ok")+'" data-run>'+(r.flags.length?"Looks stuck":"Running")+" · "+dur(r.last_at-r.started_at)+(Date.now()-r.last_at>12e4?" · quiet "+dur(Date.now()-r.last_at):"")+'</span></div><small>'+meta(r)+"</small>"+(r.flags.length?'<p class="lv-flag">'+r.flags.map(f=>"<b>"+e(FL[f.kind]||f.kind)+"</b>: "+e(f.detail)).join("<br>")+"</p>":"")+(st?'<p class="lv-now">Now: '+e(st.what)+" <small>"+ago(st.t)+"</small></p>":"")+"<details><summary>Steps</summary>"+steps(r)+"</details></section>"};
+const row=r=>'<details class="lv-row"><summary><span class="name"><b>'+e(r.name)+'</b><small>'+meta(r)+'</small></span><span class="meta">'+(r.flags.length?'<span class="state" data-s="bad">'+e(FL[r.flags[0].kind]||"Stuck")+"</span> ":"")+dur(r.last_at-r.started_at)+" · ended "+ago(r.last_at)+"</span></summary>"+steps(r)+"</details>";
+function draw(d){const b=box();if(!b)return;const n=document.getElementById("lv-n");if(n)n.textContent=d.running.length?d.running.length+" running":"";
+b.innerHTML=(d.running.length?'<h2>Running now</h2><div class="lv-grid">'+d.running.map(card).join("")+"</div>":'<div class="group"><div class="line"><span class="hint">Nothing running right now.'+(d.recent.length?"":" Once a routine or an agent reports here, it shows while it runs.")+"</span></div></div>")+(d.recent.length?'<h2>Last 24 hours <span class="faint">'+d.recent.length+'</span></h2><div class="group lv-recent">'+d.recent.map(row).join("")+"</div>":"")}
+async function pull(){clearTimeout(timer);const b=box();if(!b)return;const on=document.documentElement.dataset.view==="live";if(on||!last){try{const r=await fetch("/r/"+b.dataset.repo+"/runs",{credentials:"same-origin"});if(r.ok){last=await r.json();const open=[...b.querySelectorAll("details")].map(x=>x.open);draw(last);b.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true})}}catch(x){}}timer=setTimeout(pull,on?5e3:6e4)}
+document.addEventListener("level5:swap",()=>{if(last)draw(last);pull()});addEventListener("hashchange",pull);pull()})()</script>`;
+const VIEWS = ["status", "live", "monitors", "automations", "ci", "prs", "issues", "costs", "marketing", "reports", "services", "setup"];
 const VIEW_HEAD = `<script>(()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=${JSON.stringify(VIEWS)}.includes(v)?v:"status"})()</script>`;
 const VIEW_CSS = `.view{display:none}` + VIEWS.map((v) => `html[data-view=${v}] .view[data-view=${v}]{display:block}html[data-view=${v}] [data-nav=${v}]{background:var(--sel);color:var(--ink);font-weight:500}html[data-view=${v}] [data-nav=${v}] .ni{color:var(--link)}`).join("");
 const VIEW_JS = `<script>(()=>{const V=${JSON.stringify(VIEWS)};const set=()=>{const v=location.hash.slice(1);document.documentElement.dataset.view=V.includes(v)?v:"status"};
@@ -1862,7 +1878,7 @@ window.level5Open=k=>open(k);if(!W.started){W.started=true;(new URL(location.hre
 const NOTIF_JS = `<script>(()=>{const N=window.level5Notif||(window.level5Notif={data:null});
 const e=t=>String(t??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ago=t=>{const m=Math.round((Date.now()-new Date(t))/6e4);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"};
-const VIEW={monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"status"};
+const VIEW={run:"live",monitor:"monitors",routine:"automations",workflow:"ci",pr:"prs",issue:"issues",cost:"costs",rule:"costs",promotion:"ci",security:"status"};
 function badge(){const b=document.querySelector("#tb-bell .tb-count");if(!b)return;const n=N.data?N.data.unread:0;b.hidden=!n;b.textContent=n>9?"9+":n}
 function panel(){let p=document.getElementById("notif-panel");if(!p){p=document.createElement("div");p.id="notif-panel";p.className="notif";p.hidden=true;document.body.appendChild(p)}return p}
 function draw(){const p=panel(),d=N.data;p.innerHTML='<div class="notif-h"><b>Notifications</b>'+(d&&d.unread?'<button type="button" class="notif-all">Mark all as read</button>':'<span class="faint">'+(d&&d.items.length?"All caught up":"")+"</span>")+"</div>"+(d&&d.items.length?'<div class="notif-list">'+d.items.map(x=>'<a class="notif-i'+(x.unread?" unread":"")+'" data-id="'+x.id+'" data-lvl="'+e(x.level)+'" href="/r/'+e(x.repo)+(x.entity?"?w="+encodeURIComponent(x.entity):"")+"#"+(VIEW[x.kind]||"status")+'" data-repo="'+e(x.repo)+'" data-entity="'+e(x.entity)+'"><i></i><span><b>'+e(x.title)+"</b>"+(x.detail?'<span class="nd">'+e(x.detail)+"</span>":"")+'<span class="nm">'+e(x.repo)+" · "+ago(x.at)+"</span></span></a>").join("")+"</div>":'<div class="notif-empty">Nothing yet. An entry appears when a monitor changes state, a routine runs late, CI breaks or recovers, a PR is opened or merged, an issue opens, or spend jumps.</div>')}
@@ -2774,6 +2790,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
 
   // --- left-nav app: one page, one view per section, switched by the URL hash ---------------
   const NAV_ICON = {
+    live: `<circle cx="8" cy="8" r="2.2"/><path d="M4.2 4.2a5.4 5.4 0 0 0 0 7.6M11.8 4.2a5.4 5.4 0 0 1 0 7.6M2.3 2.3a8 8 0 0 0 0 11.4M13.7 2.3a8 8 0 0 1 0 11.4"/>`,
     marketing: `<path d="M2 6.5v3h2.5l5 3v-9l-5 3z"/><path d="M12 6a2.5 2.5 0 0 1 0 4"/>`,
     security: `<path d="M8 1.8l5 2v4c0 3.2-2.2 5.5-5 6.4-2.8-.9-5-3.2-5-6.4v-4z"/><path d="M5.8 8.2l1.6 1.6 3-3.2"/>`,
     reports: `<path d="M4 1.8h5.5l3 3v9.4H4z"/><path d="M9.5 1.8v3h3M6 8h5M6 10.5h5M6 13h3"/>`,
@@ -2799,6 +2816,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
   const needsN = ((s.status?.groups) || []).flatMap((g) => g.rows).filter((r) => ["dead", "degraded", "lying", "warn", "late"].includes(r.state)).length;
   const NAV = [
     ["status", "Status", needsN ? badge(needsN, "bad") : ""],
+    ["live", "Live", `<span class="nc" id="lv-n"></span>`],
     ["monitors", "Monitors", badMon ? badge(badMon, "bad") : warnMon ? badge(warnMon, "warn") : count(MON.length)],
     ["automations", "Automations", lateN ? badge(lateN, "bad") : count(s.routines.length)],
     ["ci", "CI", failingCi ? badge(failingCi, "bad") : count((s.ci || []).length)],
@@ -3000,15 +3018,27 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
       const body = link && !x?.report ? link : x?.report ? link + `<details class="rp-body" open><summary>${esc(x.title || "This week's report")}</summary><div class="md"><p>${mdHtml(x.report)}</p></div></details>`
         : `<p class="rp-none">${x?.note ? esc(x.note) + ". " : ""}The report itself is not in Level 5 yet: its skill posts it with <code>level5.sh body</code>.</p>`;
       const past = r.items.slice(1).map((y) => `<div class="line"><span class="name"><span>${new Date(y.ts).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}<span class="sub">${esc(y.title || y.note || Object.entries(y.swept || {}).map(([k, v]) => `${v} ${k}`).join(" · "))}</span></span></span><span class="meta"><span class="state" data-s="${y.status === "ok" ? "ok" : "warn"}">${y.status === "ok" ? "Delivered" : esc(y.status)}</span></span></div>`).join("");
-      return `<section class="rp">
+      return `<section class="rp${r.body ? " rp-click" : ""}"${r.body ? ` data-body="/r/${esc(s.repo)}/body/${encodeURIComponent(r.id)}" title="Open the last report as it was sent"` : ""}>
         <div class="rp-h"><span class="name"><b>${esc(r.id)}</b><small>${[rt ? `<span class="utc">${esc(when(rt))}</span>` : "", x ? `last ${ago(x.ts)}` : "never sent", read].filter(Boolean).join(" · ")}</small></span><span class="state" data-s="${ps}">${label === "Running" ? "Delivered" : label}</span></div>
         ${r.buckets.length ? `<div class="bars wk">${r.buckets.map((b) => `<i data-s="${b.s === "empty" ? "warn" : b.s}" title="${esc(barTip(r, b))}"></i>`).join("")}</div>` : ""}
         ${body}
         ${past ? `<div class="group more5 rp-past">${past}${more(r.items.length - 1)}</div>` : ""}
       </section>`;
     };
-    reportsView = head2 + `<div class="rps">${RP.map(card).join("")}</div>`;
+    reportsView = head2 + `<div class="rps">${RP.map(card).join("")}</div><script>if(!window.level5Rp){window.level5Rp=1;document.addEventListener("click",ev=>{const c=ev.target.closest(".rp-click");if(!c||ev.target.closest("a,summary,details .line"))return;window.open(c.dataset.body,"_blank","noopener")})}</script>`;
   }
+
+  // Live: runs drawn in the browser from /r/<repo>/runs, every 5 s while the view is open
+  const otelEnv = repoRow ? [
+    "CLAUDE_CODE_ENABLE_TELEMETRY=1", "OTEL_LOGS_EXPORTER=otlp", "OTEL_METRICS_EXPORTER=none", "OTEL_EXPORTER_OTLP_PROTOCOL=http/json",
+    `OTEL_EXPORTER_OTLP_ENDPOINT=${origin}`, `OTEL_EXPORTER_OTLP_HEADERS=x-level5-key=${repoRow.ingest_key}`, "OTEL_LOG_TOOL_DETAILS=1", "OTEL_LOGS_EXPORT_INTERVAL=5000",
+  ].join("\n") : "";
+  const liveView = `<div id="lv" data-repo="${esc(s.repo)}"><p class="hint lv-wait">Loading…</p></div>
+    <details class="group lv-setup"${repoRow ? "" : " hidden"}><summary>Connect a routine or an agent</summary><div class="lv-how">
+      <p><b>Claude Code routines.</b> On claude.ai, open the environment your routines run in, and add these to its environment variables. Every session in it then reports here while it runs. Nothing from prompts or outputs is sent.</p>
+      <pre>${esc(otelEnv)}</pre>
+      <p><b>Managed Agents and the Messages API.</b> In the Claude Console, OpenTelemetry settings, add a destination: Custom, endpoint <code>${esc(origin)}</code>, header <code>x-level5-key</code> with this repo's key, content mode Metadata only. Each agent session shows here as a run.</p>
+    </div></details>${LIVE_RUNS}`;
 
   // Marketing: per campaign, the last 30 days against the 30 before
   let marketingView = "";
@@ -3075,6 +3105,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     <main class="main">
       ${winTemplates}
       ${view("status", statusView)}
+      ${view("live", `${vh("Live", "Every Claude Code routine and agent session while it runs: what it is doing, what it costs, and whether it looks stuck.")}${liveView}`)}
       ${view("monitors", `${vh("Monitors", "Skills that run on a schedule and report a heartbeat. A silent monitor is a dead monitor.")}${monHead}
         ${MON.length ? `<div class="group grid3">${monRows}</div>` : `<div class="group"><div class="line"><span class="hint">No heartbeat yet. <a href="#setup">Install the heartbeat</a>.</span></div></div>`}`)}
       ${view("automations", `${vh("Automations", "The scheduled jobs, week by week: what runs when, what ran, and what it took. Whether each run was any good is in Monitors.")}<div class="vh-act"><button type="button" class="btn-quiet" data-open="new:routine">New routine</button></div>${weekGrid || `<div class="group"><div class="line"><span class="hint">No routines found. Declare them in <code>.claude/factory.json</code>.</span></div></div>`}`)}
@@ -3178,6 +3209,14 @@ const readBody = (req, limit = 2e6) =>
       else chunks.push(c);
     });
     req.on("end", () => res(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", rej);
+  });
+const readRaw = (req, limit = 8e6) =>
+  new Promise((res, rej) => {
+    let size = 0;
+    const chunks = [];
+    req.on("data", (c) => { size += c.length; if (size > limit) rej(new Error("body too large")); else chunks.push(c); });
+    req.on("end", () => res(Buffer.concat(chunks)));
     req.on("error", rej);
   });
 const form = async (req) => Object.fromEntries(new URLSearchParams(await readBody(req)));
@@ -3624,6 +3663,25 @@ createServer(async (req, res) => {
       const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("day") || "") ? url.searchParams.get("day") : undefined;
       return json(res, 200, reportData(snap, { origin, day }));
     }
+    // OpenTelemetry in (OTLP/HTTP, JSON or protobuf, gzip or not): Claude Code's logs and the Claude
+    // Platform's traces become live runs. The ingest key comes as a bearer token or as x-level5-key.
+    // Metrics are accepted and dropped: the logs already carry tokens and cost per request.
+    const otlp = url.pathname.match(/^\/v1\/(logs|traces|metrics)$/);
+    if (otlp && req.method === "POST") {
+      const key = String(req.headers["x-level5-key"] || (req.headers.authorization || "").replace(/^Bearer\s+/i, "")).trim();
+      const repo = await repoForKey(key);
+      if (!repo) return json(res, 401, { error: "invalid ingest key" });
+      const raw = await readRaw(req);
+      const isJson = /json/.test(String(req.headers["content-type"] || ""));
+      if (otlp[1] !== "metrics") {
+        let records;
+        try { records = decode(otlp[1], raw, req.headers); } catch (e) { return json(res, 400, { error: `could not read OTLP ${otlp[1]}: ${e.message}` }); }
+        const raised = await ingestRuns(db, repo.id, records);
+        for (const { run, flag } of raised) await db.run("INSERT INTO events (repo_id, at, level, kind, title, detail, entity, dedupe) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (repo_id, dedupe) DO NOTHING", repo.id, new Date().toISOString(), "bad", "run", `${run.name} looks stuck`.slice(0, 200), flag.detail.slice(0, 400), `run:${run.run_id}`, `run-${flag.kind}:${run.run_id}`);
+        if (Math.random() < 0.01) db.run("DELETE FROM live_runs WHERE last_at < $1", Date.now() - WINDOW * 864e5).catch(() => {});
+      }
+      return send(res, 200, isJson ? "{}" : "", { "content-type": isJson ? "application/json" : "application/x-protobuf" });
+    }
     // Marketing: one row per campaign per day ({ source, account?, rows: [{ day, campaign, spend,
     // impressions, clicks, leads }] }). Posting a day again replaces it, so a skill can resend the
     // last few days, which ad platforms keep revising.
@@ -3770,7 +3828,7 @@ createServer(async (req, res) => {
     }
     if (url.pathname === "/logout" && req.method === "POST") return redirect(res, "/", { "set-cookie": "fs=; Path=/; Max-Age=0" });
 
-    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/triggers|\/fire|\/body\/[\w.:-]+|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
+    const m = url.pathname.match(/^\/r\/([\w.-]+\/[\w.-]+?)(\.json|\/live|\/setup|\/ask|\/costs|\/key|\/report|\/triggers|\/fire|\/runs|\/body\/[\w.:-]+|\/rules(?:\/\d+(?:\/(?:delete|toggle))?)?)?$/);
     if (m && (req.method === "GET" || (req.method === "POST" && (m[2] === "/ask" || m[2] === "/key" || m[2] === "/triggers" || m[2] === "/fire" || m[2]?.startsWith("/rules"))))) {
       if (!user) return redirect(res, "/auth/login");
       const repos = await userRepos(user).catch(() => null);
@@ -3780,6 +3838,7 @@ createServer(async (req, res) => {
       const row = await ensureRepo(seen, user);
       if (m[2] === "/live") return json(res, 200, { ...(await readLive(await installationToken(row.installation_id), row.full_name)), beats: (await db.one("SELECT COUNT(*)::int AS n FROM heartbeats WHERE repo_id = $1", row.id)).n });
       if (m[2] === "/setup") return send(res, 200, heartbeatPage(origin, row));
+      if (m[2] === "/runs") return json(res, 200, await readRuns(db, row.id));
       if (m[2]?.startsWith("/body/")) {
         // the last report a skill sent, as its email; sandboxed, so nothing in it runs
         const b = await db.one("SELECT html FROM report_bodies WHERE repo_id = $1 AND monitor = $2", row.id, decodeURIComponent(m[2].slice(6)));

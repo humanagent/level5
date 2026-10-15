@@ -110,6 +110,7 @@ metadata). Users sign in with the app's OAuth and see only the repos their insta
 - [Heartbeats](docs/heartbeats.md): the API, connecting a repo, the `SessionEnd` hook, isolation guarantees.
 - [`.claude/factory.json`](docs/factory-json.md): declaring monitors and routines.
 - [`/level5:setup`](docs/setup.md): building the factory in one PR, as new level5-* skills, workflows and routines.
+- [Live runs](docs/live.md): Claude Code and Managed Agents sessions while they run, over OpenTelemetry, and when one looks stuck.
 - [Costs](docs/costs.md): tokens per Claude Code session, daily spend per provider.
 - [Security](docs/security.md): AWS IAM and Infisical secret names, and the findings.
 - [Daily factory report](docs/report.md): one email with everything that happened in the factory that day.

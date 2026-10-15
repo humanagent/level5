@@ -52,6 +52,12 @@ const SCHEMA = (pg) => `
   CREATE TABLE IF NOT EXISTS snapshots (
     repo_id BIGINT PRIMARY KEY, at BIGINT NOT NULL, body TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS live_runs (
+    repo_id BIGINT NOT NULL, run_id TEXT NOT NULL, source TEXT NOT NULL, name TEXT NOT NULL, place TEXT NOT NULL,
+    started_at BIGINT NOT NULL, last_at BIGINT NOT NULL, tool_calls INTEGER NOT NULL, errors INTEGER NOT NULL,
+    tokens BIGINT NOT NULL, usd DOUBLE PRECISION NOT NULL, flags TEXT NOT NULL, body TEXT NOT NULL,
+    PRIMARY KEY (repo_id, run_id));
+  CREATE INDEX IF NOT EXISTS live_runs_last ON live_runs(repo_id, last_at);
   CREATE TABLE IF NOT EXISTS marketing (
     repo_id BIGINT NOT NULL, source TEXT NOT NULL, day TEXT NOT NULL, campaign TEXT NOT NULL,
     spend DOUBLE PRECISION NOT NULL, impressions BIGINT NOT NULL, clicks BIGINT NOT NULL, leads BIGINT NOT NULL, at TEXT NOT NULL,

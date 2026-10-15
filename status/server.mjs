@@ -1587,7 +1587,7 @@ h2{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:0;margin-b
 .topbar{grid-column:1/-1;position:sticky;top:0;z-index:6;height:44px;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bg);color:var(--ink);border-bottom:1px solid var(--line);font-size:13px}
 .topbar .logo{color:var(--ink);font-size:14px;font-weight:600;gap:7px}.topbar .logo svg{color:#f2702c;width:18px;height:18px}
 .crumbs{display:flex;align-items:center;gap:6px;min-width:0}.crumbs a{color:var(--muted);text-decoration:none}.crumbs a:hover{color:var(--ink)}.crumbs span{color:var(--faint)}.crumbs b{color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}.tb-user{color:var(--muted);font-size:12.5px}.tb-btn{background:none;border:0;color:var(--muted);font:inherit;padding:0;cursor:pointer}.tb-btn:hover{color:var(--ink);background:none}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}.tb-refresh{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:7px;background:none;color:var(--muted);cursor:pointer}.tb-refresh:hover{background:var(--sel);color:var(--ink)}.tb-refresh svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.wrap[data-loading="1"] .tb-refresh svg{animation:spin 1s linear infinite}.tb-user{color:var(--muted);font-size:12.5px}.tb-btn{background:none;border:0;color:var(--muted);font:inherit;padding:0;cursor:pointer}.tb-btn:hover{color:var(--ink);background:none}
 .tb-bell{position:relative;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;background:none;border:0;padding:0;color:var(--muted);cursor:pointer}.tb-bell:hover,.tb-bell[aria-expanded=true]{background:var(--sel);color:var(--ink)}
 .tb-bell svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
 .tb-count{position:absolute;top:1px;right:0;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:var(--link);color:#fff;font:600 10px/15px var(--f);text-align:center}
@@ -1750,12 +1750,13 @@ const ICON = `<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w
 // A live page swaps its .wrap for a fresh render: now when it was served stale or as a
 // skeleton, then every two minutes. Open <details> stay open across swaps.
 const LIVE = `<script>(()=>{const u=location.pathname+"?partial=1";let busy=0;
-const pull=async()=>{if(busy)return;busy=1;const w=document.querySelector(".wrap");w.dataset.loading="1";
-try{const r=await fetch(u,{credentials:"same-origin"});if(r.status===401){location.href="/auth/login";return}
+const pull=async(force)=>{if(busy)return;busy=1;const w=document.querySelector(".wrap");w.dataset.loading="1";
+try{const r=await fetch(force===true?u+"&force=1":u,{credentials:"same-origin"});if(r.status===401){location.href="/auth/login";return}
 const d=new DOMParser().parseFromString(await r.text(),"text/html");const n=d.querySelector(".wrap");if(!n)throw 0;if(r.ok&&w.querySelector(".sk-nav")&&!n.querySelector(".sk-nav")){location.reload();return}
 if(!r.ok)throw 0;const open=[...w.querySelectorAll("details")].map(x=>x.open),on=[...w.querySelectorAll("input[type=radio]:checked")].map(x=>x.id);w.replaceWith(n);on.forEach(id=>{const x=document.getElementById(id);if(x)x.checked=true});
 n.querySelectorAll("details").forEach((x,i)=>{if(open[i])x.open=true});document.title=d.title;document.dispatchEvent(new Event("level5:swap"))}catch(e){w.dataset.loading="";w.dataset.failed="1"}finally{busy=0}};
-window.level5Pull=pull;if(document.body.dataset.stale)pull();setInterval(()=>{if(!document.hidden)pull()},120e3);
+window.level5Pull=pull;if(document.body.dataset.stale)pull();
+document.addEventListener("click",ev=>{if(ev.target.closest&&ev.target.closest("[data-refresh]"))pull(true)});setInterval(()=>{if(!document.hidden)pull()},120e3);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()})})()</script>`;
 // The "Actions" panel: polls /r/<repo>/live every 8 s while something runs, 30 s otherwise,
 // ticks the elapsed timers every second, and re-renders into the new .wrap after a swap.
@@ -3088,7 +3089,7 @@ function statusPage(s, user, origin, repoRow, { stale = false, tz = "" } = {}) {
     <header class="topbar">
       <a class="logo" href="/">${MARK()}<span>Level 5</span></a>
       <nav class="crumbs" aria-label="Breadcrumb">${user ? `<a href="/">Repositories</a><span>/</span>` : ""}<b>${esc(s.repo)}</b></nav>
-      <span class="tb-right"><span class="tb-actsw"><button type="button" class="tb-acts" data-acts-toggle aria-haspopup="true" aria-label="GitHub Actions"><span class="tb-ai"></span><span>Actions</span><span class="tb-n"></span></button><div class="acts-pop"><div class="ci-live" data-pop="1" aria-live="polite"></div></div></span><button type="button" class="tb-ask" data-ask-toggle aria-controls="chat" title="Ask about this repo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg><span>Ask</span></button>${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button>` : ""}</span>
+      <span class="tb-right"><button type="button" class="tb-refresh" data-refresh title="Read everything again now" aria-label="Refresh"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button><span class="tb-actsw"><button type="button" class="tb-acts" data-acts-toggle aria-haspopup="true" aria-label="GitHub Actions"><span class="tb-ai"></span><span>Actions</span><span class="tb-n"></span></button><div class="acts-pop"><div class="ci-live" data-pop="1" aria-live="polite"></div></div></span><button type="button" class="tb-ask" data-ask-toggle aria-controls="chat" title="Ask about this repo"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/><path d="M5.5 7h.01M8 7h.01M10.5 7h.01"/></svg><span>Ask</span></button>${user ? `<button type="button" class="tb-bell" id="tb-bell" aria-label="Notifications" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5a4 4 0 0 1 8 0c0 3 1.2 4.3 1.5 4.5h-11C2.8 10.8 4 9.5 4 6.5zM6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg><span class="tb-count" hidden></span></button>` : ""}</span>
     </header>
     <aside class="side">
       <div class="repo-box">
@@ -3951,6 +3952,11 @@ createServer(async (req, res) => {
       // ?partial=1 is the page's own background fetch: always a fresh read (deduped, and
       // the readers keep their own short caches).
       const tz = await userTz(user?.login);
+      // the Refresh button: drop this repo's short caches and read everything again
+      if (url.searchParams.has("partial") && url.searchParams.has("force")) {
+        for (const k of cache.keys()) if (k.endsWith(`:${row.full_name}`) || k.includes(`:${row.full_name}:`)) cache.delete(k);
+        return send(res, 200, statusPage(await refresh(row), user, origin, row, { tz }));
+      }
       if (url.searchParams.has("partial")) return send(res, 200, statusPage(fresh ? JSON.parse(saved.body) : await refresh(row), user, origin, row, { tz }));
       if (saved) return send(res, 200, statusPage(JSON.parse(saved.body), user, origin, row, { stale: !fresh, tz }));
       refresh(row).catch((e) => console.error(e));

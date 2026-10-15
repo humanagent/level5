@@ -6,6 +6,8 @@
 #   level5.sh cost <source> <usd> ['{"day":"2026-10-10","breakdown":{"ECS":4.1,"S3":0.3}}']
 #       One provider's spend for one day (default today). Posting the same source and day again
 #       replaces it, so a daily job can resend the last few days safely.
+#   level5.sh body <report> <file.html> [title]
+#       The report as it was sent (its email's HTML), so Level 5 shows the last one on Reports.
 #   level5.sh session-end
 #       The SessionEnd hook. In a Claude Code cloud session (a routine) it posts the session's
 #       token usage by model, and one heartbeat named after the slash command the session ran.
@@ -49,6 +51,12 @@ case "${1:-}" in
       *) body="{\"source\":\"$source\",\"usd\":$usd}" ;;
     esac
     post "$body" /api/cost
+    ;;
+  body)
+    report="${2:?report}"; file="${3:?file}"; [ -f "$file" ] && command -v node >/dev/null 2>&1 || exit 0
+    # node builds the JSON: the HTML has quotes and newlines a shell would mangle
+    ( node -e 'const [f, m, t] = process.argv.slice(1); process.stdout.write(JSON.stringify({ monitor: m, title: t || "", html: require("fs").readFileSync(f, "utf8") }))' "$file" "$report" "${4:-}" 2>/dev/null \
+        | curl -sS -m 10 -X POST "$URL/api/report-body" -H "authorization: Bearer $KEY" -H "content-type: application/json" --data-binary @- >/dev/null 2>&1 & ) >/dev/null 2>&1 || true
     ;;
   session-end)
     [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || exit 0

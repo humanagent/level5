@@ -52,6 +52,13 @@ const SCHEMA = (pg) => `
   CREATE TABLE IF NOT EXISTS snapshots (
     repo_id BIGINT PRIMARY KEY, at BIGINT NOT NULL, body TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS marketing (
+    repo_id BIGINT NOT NULL, source TEXT NOT NULL, day TEXT NOT NULL, campaign TEXT NOT NULL,
+    spend DOUBLE PRECISION NOT NULL, impressions BIGINT NOT NULL, clicks BIGINT NOT NULL, leads BIGINT NOT NULL, at TEXT NOT NULL,
+    PRIMARY KEY (repo_id, source, day, campaign));
+  CREATE TABLE IF NOT EXISTS report_bodies (
+    repo_id BIGINT NOT NULL, monitor TEXT NOT NULL, at TEXT NOT NULL, title TEXT NOT NULL, html TEXT NOT NULL,
+    PRIMARY KEY (repo_id, monitor));
   CREATE TABLE IF NOT EXISTS price_rules (
     id ${pg ? "BIGSERIAL" : "INTEGER"} PRIMARY KEY, repo_id BIGINT NOT NULL, name TEXT NOT NULL, config TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, created_at TEXT NOT NULL, last_fired_at TEXT);

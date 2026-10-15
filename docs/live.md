@@ -16,10 +16,23 @@ OTEL_LOGS_EXPORTER=otlp
 OTEL_METRICS_EXPORTER=none
 OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 OTEL_EXPORTER_OTLP_ENDPOINT=https://factory-status.fly.dev
-OTEL_EXPORTER_OTLP_HEADERS=x-level5-key=<ingest key>
 OTEL_LOG_TOOL_DETAILS=1
 OTEL_LOGS_EXPORT_INTERVAL=5000
+CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS=60000
 ```
+
+The key does not go there. The repo hands it over with Claude Code's `otelHeadersHelper`, in
+`.claude/settings.json`:
+
+```json
+{ "otelHeadersHelper": ".claude/hooks/level5.sh otel-headers" }
+```
+
+`level5.sh otel-headers` prints `{"x-level5-key": "<key>"}` from `LEVEL5_KEY` or
+`.claude/level5.json`, waiting up to 15 s for a SessionStart hook that writes it from a vault. When
+it has no key, Claude Code asks again after the debounce above. The path is relative to the repo
+root (`$CLAUDE_PROJECT_DIR` is not expanded there). Without the helper, add
+`OTEL_EXPORTER_OTLP_HEADERS=x-level5-key=<ingest key>` to the variables instead.
 
 A repo's `.claude/settings.json` cannot turn telemetry on (Claude Code ignores OTEL variables
 there), so this goes in the environment, not in the repo. Prompt and response text are not sent.
